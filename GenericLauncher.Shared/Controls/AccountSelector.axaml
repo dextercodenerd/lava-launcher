@@ -1,0 +1,86 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:GenericLauncher.Controls"
+        xmlns:asyncImageLoader="clr-namespace:AsyncImageLoader;assembly=AsyncImageLoader.Avalonia"
+        xmlns:model="clr-namespace:GenericLauncher.Model">
+
+    <Design.PreviewWith>
+        <controls:AccountSelector
+            Width="96"
+            Height="96"
+            Background="Aqua" />
+    </Design.PreviewWith>
+
+    <Styles.Resources>
+        <!-- Normal item template -->
+        <DataTemplate x:Key="NormalItemTemplate" DataType="model:AccountListItem">
+            <TextBlock
+                HorizontalAlignment="Left"
+                FontSize="14"
+                Text="{Binding Account.Username}" />
+        </DataTemplate>
+
+        <!-- Login item template -->
+        <DataTemplate x:Key="LoginItemTemplate">
+            <TextBlock
+                HorizontalAlignment="Center"
+                FontSize="14"
+                Text="++ Login ++" />
+        </DataTemplate>
+
+        <!-- Template selector -->
+        <controls:AccountItemTemplateSelector
+            x:Key="ItemTemplateSelector"
+            ItemTemplate="{StaticResource NormalItemTemplate}"
+            LoginTemplate="{StaticResource LoginItemTemplate}" />
+    </Styles.Resources>
+
+    <Style Selector="controls|AccountSelector">
+        <!-- Set Defaults -->
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border
+                    Width="{TemplateBinding Width}"
+                    Height="{TemplateBinding Height}"
+                    Background="{TemplateBinding Background}"
+                    CornerRadius="8"
+                    ClipToBounds="True">
+                    <Panel>
+                        <!-- Avatar -->
+                        <Image asyncImageLoader:ImageLoader.Source="{TemplateBinding AvatarUrl}"
+                               Width="{TemplateBinding Width}"
+                               Height="{TemplateBinding Width}"
+                               Stretch="UniformToFill" />
+
+                        <!-- Accounts combobox -->
+                        <Border Background="#44000000"
+                                VerticalAlignment="Bottom"
+                                Padding="8,4">
+                            <ComboBox Name="AccountComboBox"
+                                      ItemsSource="{TemplateBinding Accounts}"
+                                      SelectedItem="{TemplateBinding SelectedAccount, Mode=TwoWay}"
+                                      ItemTemplate="{StaticResource ItemTemplateSelector}"
+                                      HorizontalAlignment="Stretch">
+                                <ComboBox.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <!-- disable virtual/recycled cells to preventing scrolling problems -->
+                                        <StackPanel />
+                                    </ItemsPanelTemplate>
+                                </ComboBox.ItemsPanel>
+                                <ComboBox.SelectionBoxItemTemplate>
+                                    <DataTemplate DataType="model:AccountListItem">
+                                        <TextBlock
+                                            HorizontalAlignment="Center"
+                                            FontSize="16"
+                                            FontWeight="DemiBold"
+                                            Text="{Binding Account.Username}" />
+                                    </DataTemplate>
+                                </ComboBox.SelectionBoxItemTemplate>
+                            </ComboBox>
+                        </Border>
+                    </Panel>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+</Styles>

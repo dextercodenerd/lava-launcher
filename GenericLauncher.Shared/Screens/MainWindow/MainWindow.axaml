@@ -1,0 +1,132 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:mainWindow="clr-namespace:GenericLauncher.Screens.MainWindow"
+        xmlns:homeScreen="clr-namespace:GenericLauncher.Screens.HomeScreen"
+        xmlns:controls="clr-namespace:GenericLauncher.Controls"
+        xmlns:dialogHost="clr-namespace:DialogHostAvalonia;assembly=DialogHost.Avalonia"
+        xmlns:newInstanceDialog="clr-namespace:GenericLauncher.Screens.NewInstanceDialog"
+        mc:Ignorable="d"
+        d:DesignWidth="600"
+        d:DesignHeight="450"
+        MinWidth="600"
+        MinHeight="450"
+        Width="800"
+        Height="600"
+        x:Class="GenericLauncher.Screens.MainWindow.MainWindow"
+        x:DataType="mainWindow:MainWindowViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="{Binding AppTitle}"
+        ClipToBounds="True"
+        Focusable="True">
+
+    <Design.DataContext>
+        <!-- This only sets the DataContext for the previewer in an IDE,
+         to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
+        <mainWindow:MainWindowViewModel />
+    </Design.DataContext>
+
+    <dialogHost:DialogHost
+        CloseOnClickAway="{Binding NewInstanceDialogViewModel.CanCloseOnClickAway}"
+        Background="Transparent"
+        DialogOpenedCallback="{Binding NewInstanceDialogViewModel.DialogOpenedHandler}"
+        DialogClosingCallback="{Binding NewInstanceDialogViewModel.DialogClosingHandler}"
+        OverlayBackground="Black"
+        dialogHost:DialogHostStyle.CornerRadius="0"
+        dialogHost:DialogHostStyle.ClipToBounds="True"
+        IsOpen="{Binding NewInstanceDialogViewModel.ShowNewMinecraftInstanceDialog}">
+
+        <!-- Override the default dimmed overlay opacity, because the hard-coded value 0.56 is too transparent -->
+        <dialogHost:DialogHost.Styles>
+            <Style Selector="dialogHost|DialogHost[IsOpen=True] /template/ Rectangle#PART_ContentCover">
+                <Setter Property="Opacity" Value="0.8" />
+            </Style>
+        </dialogHost:DialogHost.Styles>
+
+        <!-- dialog content -->
+        <dialogHost:DialogHost.DialogContent>
+            <newInstanceDialog:NewInstanceDialog
+                DataContext="{Binding NewInstanceDialogViewModel}"
+                Width="400" />
+        </dialogHost:DialogHost.DialogContent>
+
+        <!-- main content over which the dialog is shown -->
+        <Panel>
+            <!--
+            The top panel that overlaps the main content a bit. Layout optimized for performance,
+            so it is a StackPanel with manually vertically-offset items that are around the big
+            center item. The center item is overlapping the main content below it for design.
+            -->
+            <Panel
+                Height="128"
+                Background="Transparent"
+                VerticalAlignment="Top"
+                ZIndex="1">
+                <StackPanel
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Spacing="16">
+                    <!-- Left small items, manually offset with bottom margin -->
+                    <Border Width="60" Height="60" Background="Gray" CornerRadius="30" Margin="0 0 0 16" />
+                    <Border Width="60" Height="60" Background="Gray" CornerRadius="30" Margin="0 0 0 16">
+                        <Button
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Command="{Binding ClickNewInstanceCommand}">
+                            +
+                        </Button>
+                    </Border>
+
+                    <!-- Avater/login item in the center that overlaps the main content below -->
+                    <controls:AccountSelector
+                        Width="128" Height="128"
+                        Background="Aqua"
+                        Accounts="{Binding Accounts}"
+                        SelectedAccount="{Binding SelectedAccount, Mode=TwoWay}" />
+
+                    <!-- Right small item, manually offset with bottom margin -->
+                    <Border Width="60" Height="60" Background="Gray" CornerRadius="30" Margin="0 0 0 16" />
+                    <!-- Fake right item for balance i.e., the center item stays in the center of the window -->
+                    <Border Width="60" Height="60" Opacity="0" IsHitTestVisible="False" Margin="0 0 0 16" />
+                </StackPanel>
+            </Panel>
+
+            <!--
+            The main content that is partially overlapped by the center item of the top bar above.
+            This is achieved with top-margin that is smaller than the top bar's height.
+            -->
+            <Panel
+                Margin="16 112 16 0"
+                Background="Transparent">
+
+                <!-- collapsible quick-play bar -->
+                <Border
+                    VerticalAlignment="Top"
+                    Background="LightGray"
+                    CornerRadius="16,16,0,0"
+                    ClipToBounds="True"
+                    Height="100"
+                    IsVisible="{Binding QuickPlayVisible}" />
+
+                <!-- main content -->
+                <Border
+                    Margin="{Binding MainContentBottomMargin}"
+                    CornerRadius="16 16 0 0"
+                    Background="Gray"
+                    ClipToBounds="True">
+                    <Border.Transitions>
+                        <Transitions>
+                            <ThicknessTransition Property="Margin" Duration="0:0:0.25" Easing="CircularEaseOut" />
+                        </Transitions>
+                    </Border.Transitions>
+
+                    <homeScreen:HomeView DataContext="{Binding HomeViewModel}" />
+
+                </Border>
+            </Panel>
+        </Panel>
+
+    </dialogHost:DialogHost>
+</Window>

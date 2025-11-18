@@ -1,0 +1,101 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:GenericLauncher.Screens.NewInstanceDialog"
+        xmlns:json="clr-namespace:GenericLauncher.Minecraft.Json">
+
+    <Design.PreviewWith>
+        <controls:NewInstanceDialog
+            Width="400" />
+    </Design.PreviewWith>
+
+    <Style Selector="controls|NewInstanceDialog"
+           x:DataType="controls:NewInstanceDialogViewModel">
+
+        <!-- Set Defaults -->
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Panel
+                    Background="Transparent"
+                    Width="{TemplateBinding Width}">
+                    <!-- Dialog title overlapping the dialog content -->
+                    <Border
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Top"
+                        Background="Aquamarine"
+                        CornerRadius="10"
+                        Height="32"
+                        Padding="16 0"
+                        ZIndex="1">
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            FontSize="24"
+                            FontWeight="DemiBold"
+                            Text="New Minecraft" />
+                    </Border>
+
+                    <!-- Dialog content -->
+                    <Border
+                        Background="IndianRed"
+                        Margin="0 16 0 0"
+                        CornerRadius="16"
+                        Padding="16">
+                        <StackPanel Orientation="Vertical" Spacing="5">
+                            <TextBlock Text="Name" />
+                            <TextBox
+                                Text="{Binding NewInstanceName, Mode=TwoWay}"
+                                Watermark="{Binding InstanceNameWatermark}" />
+                            <TextBlock Text="Version" />
+                            <ComboBox
+                                ItemsSource="{Binding AvailableMinecraftVersions}"
+                                SelectedItem="{Binding SelectedMinecraftVersion, Mode=TwoWay}"
+                                HorizontalAlignment="Stretch">
+                                <ComboBox.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <!-- disable virtual/recycled cells to preventing scrolling problems -->
+                                        <StackPanel />
+                                    </ItemsPanelTemplate>
+                                </ComboBox.ItemsPanel>
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate DataType="json:VersionInfo">
+                                        <TextBlock
+                                            HorizontalAlignment="Center"
+                                            FontSize="16"
+                                            FontWeight="DemiBold"
+                                            Text="{Binding Id}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                                <ComboBox.SelectionBoxItemTemplate>
+                                    <DataTemplate DataType="json:VersionInfo">
+                                        <TextBlock
+                                            HorizontalAlignment="Center"
+                                            FontSize="16"
+                                            FontWeight="DemiBold"
+                                            Text="{Binding Id}" />
+                                    </DataTemplate>
+                                </ComboBox.SelectionBoxItemTemplate>
+                            </ComboBox>
+                            <Separator Margin="0 16"></Separator>
+                            <StackPanel
+                                Orientation="Horizontal"
+                                Spacing="16"
+                                HorizontalAlignment="Right">
+                                <Button HorizontalAlignment="Center"
+                                        Padding="16 8"
+                                        IsEnabled="{Binding !PreparingInstance}"
+                                        Command="{Binding ClickCloseCommand}">
+                                    Cancel
+                                </Button>
+                                <Button HorizontalAlignment="Center"
+                                        Padding="16 8"
+                                        IsEnabled="{Binding !PreparingInstance}"
+                                        Command="{Binding ClickInstallCommand}">
+                                    Install
+                                </Button>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </Panel>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+</Styles>

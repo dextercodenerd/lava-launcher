@@ -1,0 +1,10 @@
+<Project>
+    <PropertyGroup>
+        <AppName>Yet Another Minecrafy Launcher</AppName>
+        <AppAssemblyName>YamLauncher</AppAssemblyName>
+    </PropertyGroup>
+    <PropertyGroup>
+        <AzureClientId>YOUR_ACTUAL_CLIENT_ID_HERE</AzureClientId>
+        <AzureRedirectUrl>http://localhost:your_port</AzureRedirectUrl>
+    </PropertyGroup>
+</Project>

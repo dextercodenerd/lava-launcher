@@ -1,0 +1,33 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:GenericLauncher.Controls"
+        xmlns:database="clr-namespace:GenericLauncher.Database">
+    <Design.PreviewWith>
+        <controls:MinecraftInstanceListItem />
+    </Design.PreviewWith>
+
+    <Style Selector="controls|MinecraftInstanceListItem">
+        <!-- Set Defaults -->
+        <Setter Property="Template">
+            <ControlTemplate
+                x:DataType="database:MinecraftInstance">
+                <Border BorderBrush="Gray"
+                        BorderThickness="1"
+                        Background="LightBlue"
+                        CornerRadius="5"
+                        Padding="10">
+                    <StackPanel>
+                        <TextBlock Text="{Binding Id}"
+                                   FontWeight="Bold" />
+                        <TextBlock Text="{Binding VersionId}"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding State}"></TextBlock>
+                        <Button Content="Play"
+                                Command="{TemplateBinding ClickPlayCommand}"
+                                CommandParameter="{Binding}" />
+                    </StackPanel>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+</Styles>

@@ -1,0 +1,82 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <LangVersion>14</LangVersion>
+        <IsTrimmable>True</IsTrimmable>
+        <IsAotCompatible>True</IsAotCompatible>
+        <AvaloniaUseCompiledBindingsByDefault>True</AvaloniaUseCompiledBindingsByDefault>
+        <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+        <InvariantGlobalization Condition="'$(PublishAot)' == 'True'">True</InvariantGlobalization>
+
+        <RootNamespace>GenericLauncher</RootNamespace>
+    </PropertyGroup>
+    
+    <ItemGroup>
+        <AvaloniaResource Include=" Assets\**"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Avalonia" Version="$(AvaloniaVersion)"/>
+        <PackageReference Include="Avalonia.Themes.Fluent" Version="$(AvaloniaVersion)"/>
+        <PackageReference Include="Avalonia.Fonts.Inter" Version="$(AvaloniaVersion)"/>
+        <PackageReference Include="DialogHost.Avalonia" Version="0.9.3"/>
+        <PackageReference Include="AsyncImageLoader.Avalonia" Version="3.4.3"/>
+        <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0"/>
+        <PackageReference Include="Microsoft.Extensions.Http.Polly" Version="$(MsLibsVersion)"/>
+        <PackageReference Include="Polly.Contrib.WaitAndRetry" Version="1.1.1"/>
+        <PackageReference Include="CliWrap" Version="3.9.0"/>
+
+        <PackageReference Include="Microsoft.Data.Sqlite" Version="$(MsLibsVersion)"/>
+
+        <!--Condition below is needed to remove Avalonia.Diagnostics package from build output in Release configuration.-->
+        <PackageReference Condition="'$(Configuration)' == 'Debug'" Include="Avalonia.Diagnostics" Version="$(AvaloniaVersion)"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Compile Update="Screens\MainWindow\MainWindow.axaml.cs">
+            <DependentUpon>MainWindow.axaml</DependentUpon>
+            <SubType>Code</SubType>
+        </Compile>
+        <Compile Update="Screens\HomeScreen\HomeView.axaml.cs">
+            <DependentUpon>MainView.axaml</DependentUpon>
+            <SubType>Code</SubType>
+        </Compile>
+    </ItemGroup>
+
+    <!-- Inject Azure client id and redirect URL into a generated source code file -->
+    <Target Name="GenerateAzureConfig" BeforeTargets="BeforeCompile">
+        <PropertyGroup>
+            <_TemplatePath>$(MSBuildThisFileDirectory)..\Data\AzureConfig.template.cs</_TemplatePath>
+            <_OutputPath>$(IntermediateOutputPath)AzureConfig.generated.cs</_OutputPath>
+        </PropertyGroup>
+
+        <!-- Delete the old file to ensure clean generation -->
+        <Delete Files="$(_OutputPath)" Condition="Exists('$(_OutputPath)')"/>
+
+        <ReadLinesFromFile File="$(_TemplatePath)">
+            <Output TaskParameter="Lines" ItemName="_TemplateLines"/>
+        </ReadLinesFromFile>
+
+        <ItemGroup>
+            <_TransformedLines Include="@(_TemplateLines->Replace('${CLIENT_ID}', '$(AzureClientId)')->Replace('${REDIRECT_URL}', '$(AzureRedirectUrl)'))"/>
+        </ItemGroup>
+
+        <WriteLinesToFile File="$(_OutputPath)" Lines="@(_TransformedLines)" Overwrite="true"/>
+
+        <ItemGroup>
+            <Compile Include="$(_OutputPath)"/>
+            <FileWrites Include="$(_OutputPath)"/>
+        </ItemGroup>
+    </Target>
+
+    <!-- Make internal methods visible to our unit testing project so we can test internal methods
+         like RemoveFuzzyPrefix(). This is the easiest workaround for testing "private" methods
+         without complicated hacks. We just make the methods, that we want to test, internal and
+         make all internal methods visible to the testing project. -->
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>GenericLauncher.Tests</_Parameter1>
+        </AssemblyAttribute>
+    </ItemGroup>
+</Project>

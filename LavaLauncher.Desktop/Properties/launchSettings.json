@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "LavaLauncher": {
+      "commandName": "Project",
+      "workingDirectory": "$(SolutionDir)\\"
+    }
+  }
+}

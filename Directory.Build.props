@@ -1,0 +1,53 @@
+<Project>
+    <PropertyGroup>
+        <AppVersion>0.0.1</AppVersion>
+        <Nullable>enable</Nullable>
+
+        <AvaloniaVersion>11.3.8</AvaloniaVersion>
+        <MsLibsVersion>10.0.0</MsLibsVersion>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <Version>$(AppVersion)</Version>
+        <FileVersion>$(AppVersion)</FileVersion>
+        <AssemblyVersion>$(AppVersion)</AssemblyVersion>
+        <AssemblyInformationalVersion>$(AppVersion)</AssemblyInformationalVersion>
+    </PropertyGroup>
+
+    <!-- Import user-specific props if exists -->
+    <Import Project="user.props" Condition="Exists('user.props')"/>
+    <!-- inject Azure Entra ID App client id -->
+    <PropertyGroup>
+        <!-- Priority: Command line/user.props -> Environment -> Default -->
+        <AzureClientId Condition="'$(AzureClientId)' != ''">$(AzureClientId)</AzureClientId>
+        <AzureClientId Condition="'$(AzureClientId)' == ''">$(AZURE_CLIENT_ID)</AzureClientId>
+        <AzureClientId Condition="'$(AzureClientId)' == ''">NOT_CONFIGURED</AzureClientId>
+
+        <AzureRedirectUrl Condition="'$(AzureRedirectUrl)' != ''">$(AzureRedirectUrl)</AzureRedirectUrl>
+        <AzureRedirectUrl Condition="'$(AzureRedirectUrl)' == ''">$(AZURE_REDIREC_URL)</AzureRedirectUrl>
+        <AzureRedirectUrl Condition="'$(AzureRedirectUrl)' == ''">NOT_CONFIGURED</AzureRedirectUrl>
+    </PropertyGroup>
+
+    <!-- Native AOT compilation -->
+    <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+        <PublishAot>False</PublishAot>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+        <PublishAot>True</PublishAot>
+    </PropertyGroup>
+    <!-- Define PUBLISHAOT symbol for all projects when PublishAot is enabled -->
+    <PropertyGroup Condition="'$(PublishAot)' == 'True'">
+        <DefineConstants>$(DefineConstants);PUBLISHAOT</DefineConstants>
+        <!-- disable IL2104 trimming warning - Sqlite library produces one, but it is safe -->
+        <NoWarn>$(NoWarn);IL2104</NoWarn>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <!--
+            * CA1873 is the "expensive logging warning"
+            * CA2263 is the "use the generic ILogger<T> warning"
+         -->
+        <NoWarn>$(NoWarn);CA1873;CA2263</NoWarn>
+    </PropertyGroup>
+
+</Project>

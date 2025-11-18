@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+
+        <IsPackable>false</IsPackable>
+
+        <TargetFramework>net10.0</TargetFramework>
+
+        <LangVersion>14</LangVersion>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="JetBrains.Annotations" Version="2025.2.2"/>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1"/>
+        <PackageReference Include="xunit.v3" Version="3.2.0"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\GenericLauncher.Shared\GenericLauncher.Shared.csproj"/>
+    </ItemGroup>
+
+</Project>
