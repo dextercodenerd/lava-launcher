@@ -1,0 +1,17 @@
+name: Bug Report
+description: File a bug report.
+title: "BUG: "
+labels: ["bug", "triage"]
+projects: ["dextercodenerd/1"]
+assignees:
+  - dextercodenerd
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for filling out this bug report!
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug description
+      description: Describe the the incorrect and expected behaviour.

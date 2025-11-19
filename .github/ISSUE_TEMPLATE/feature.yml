@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest a new idea.
+#title: "FEAT: "
+labels: ["enhancement", "triage"]
+projects: ["dextercodenerd/1"]
+assignees:
+  - dextercodenerd
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Feature description
+      description: Describe the feature you would like to have.
+  - type: dropdown
+    id: milestone
+    attributes:
+      label: Which milestone would you like to see this feature in?
+      multiple: false
+      options:
+        - Core
+        - MVP
+        - MLP
+        - "3.0"
