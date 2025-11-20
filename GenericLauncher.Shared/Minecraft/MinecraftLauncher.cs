@@ -91,10 +91,15 @@ public sealed class MinecraftLauncher : IDisposable
             (await _minecraftManager.GetStableVersionsAsync(reload)).Where(v => v.ReleaseTime > releaseThreshold)
             .ToImmutableList();
 
-        // TODO: Swap the list & notify only if there is a difference
         await _lock.WaitAsync();
         try
         {
+            if (AvailableVersions == versions
+                || (AvailableVersions.Count == versions.Count && AvailableVersions.SequenceEqual(versions)))
+            {
+                return;
+            }
+
             AvailableVersions = versions;
             AvailableVersionsChanged?.Invoke(this, EventArgs.Empty);
         }

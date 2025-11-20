@@ -63,9 +63,11 @@ public partial class HomeViewModel : ViewModelBase
         _dbInstances = instances;
 
         Instances.Clear();
-        // TODO: Move this merging off the UI thread
+        // TODO: Move this merging off the UI thread -- then update also OnInstallProgressUpdated()
+        //  because that is enumerating Instances and will crash.
         instances.Select(i => new MinecraftInstanceItem(i, null))
             .ToList()
+            // TODO: update only the changed instances, and add only the new ones, and remove the deleted i.e., diff
             .ForEach(i => Instances.Add(i));
     }
 
@@ -121,14 +123,16 @@ public partial class HomeViewModel : ViewModelBase
 
     private void OnInstallProgressUpdated(object? sender, ThreadSafeInstallProgressReporter.InstallProgress p)
     {
-        var found = Instances.Select((item, index) => new { Item = item, Index = index })
-            .FirstOrDefault(x => x.Item.Instance.Id == p.InstanceId);
-        if (found is null)
+        Dispatcher.UIThread.Post(() =>
         {
-            return;
-        }
-
-        var updatedItem = found.Item with { Progress = p };
-        Instances[found.Index] = updatedItem;
+            // TODO: We are doing this on the UI thread, because Instances can replaced on the UI
+            //  thread too, at the moment, and that will crash when an enumeration is happening
+            //  elsewhere.
+            // WARN: Such crash is rare, but can be reproduced when creating a new instance, where
+            //  everything is already downloaded and we insert the installing state and quickly
+            //  update to the ready states, and in parallel we enumerate the "100%" progress here.
+            var found = Instances.FirstOrDefault(i => i.Instance.Id == p.InstanceId);
+            found?.Progress = p;
+        });
     }
 }
