@@ -119,8 +119,10 @@ public sealed class MinecraftLauncher : IDisposable
         }
     }
 
-
-    public async Task CreateInstance(VersionInfo version, string name, Action canCloseDialog)
+    public async Task CreateInstance(
+        VersionInfo version,
+        string name,
+        IProgress<ThreadSafeInstallProgressReporter.InstallProgress> progress)
     {
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -128,7 +130,7 @@ public sealed class MinecraftLauncher : IDisposable
         }
 
         // WARN: This is a race condition, because we insert new record after a while, when we have the MC version info
-        //  required to launch it. We will block UI until then, so it will be "safe".
+        //  required to launch it. But we are blocking the app UI so it is "safe". Not the best UX, but good for now.
         var exist = await _repository.MinecraftInstanceExists(name);
         if (exist)
         {
@@ -136,6 +138,10 @@ public sealed class MinecraftLauncher : IDisposable
             throw new ArgumentException($"Instance '{name}' already exists");
         }
 
+
+        ////////////////////////////////////////////////////////////////////////////////////////////
+        // Prepare instance folder
+        Directory.CreateDirectory(_instancesFolder);
         var existingFolders = Directory.GetDirectories(_instancesFolder)
             .Select(Path.GetFileName)
             .OfType<string>()
@@ -152,41 +158,113 @@ public sealed class MinecraftLauncher : IDisposable
 
         Directory.CreateDirectory(instanceFolder);
 
-        MinecraftVersionManager.Version? minecraft = null;
-
-        await _minecraftManager.DownloadVersionAsync(
+        ////////////////////////////////////////////////////////////////////////////////////////////
+        // Download basic information about specific Minecraft version i.e., its client.json file
+        var (versionDetails, minecraft) = await _minecraftManager.DownloadVersionAsync(
             version,
+            _currentOs
+        );
+
+        _logger?.LogInformation("Inserting Minecraft instance into DB");
+
+        // TODO: Create a DB record as soon as possible, sooner then we have here...
+        // Now we now, that such MC version exists, and we can save an "installing" state instance into DB
+        await _repository.AddInstallingMinecraftInstanceAsync(
+            name,
+            minecraft,
+            sanitizedAndNumberedInstanceFolderName);
+        await RefreshInstancesAsync();
+
+        // Now create a complex thread-safe progress reporter, that handles parallelism and
+        // combining of different progress sources.
+        var progressReporter = new ThreadSafeInstallProgressReporter(progress);
+
+        // Report, that we have a validated the Minecraft version and proceed with its files download
+        progressReporter.ReportStart();
+
+        ////////////////////////////////////////////////////////////////////////////////////////////
+        // Download Minecraft, its assets & libraries
+        var lastMinecraftDownloadProgress = (uint)0;
+        var lastAssetsDownloadProgress = (uint)0;
+        var lastLibrariesDownloadProgress = (uint)0;
+
+        var downloadMinecraftTask = _minecraftManager.DownloadAssetsAndLibraries(
+            versionDetails,
             _currentOs,
-            async void (v) =>
+            new Progress<double>(mcProgress =>
             {
-                _logger?.LogInformation("inserting Minecraft instance into DB");
-                // TODO: Create a DB record as soon as possible, sooner then we have here...
-                // Now we now, that such MC version exists, and we can save an "installing" state instance into DB
-                await _repository.AddInstallingMinecraftInstanceAsync(
-                    name,
-                    v,
-                    sanitizedAndNumberedInstanceFolderName);
-                await RefreshInstancesAsync();
-                minecraft = v;
-                canCloseDialog();
-            },
-            p => { _logger?.LogInformation("downloading Minecraft {VersionId}: {D}%", version.Id, p); });
+                var pp = mcProgress < 1.0
+                    ? Math.Min((uint)(100.0 * mcProgress), 99)
+                    : 100;
 
-        if (minecraft is null)
-        {
-            throw new InvalidOperationException("problem downloading Minecraft");
-        }
+                // Downloading the Minecraft jar file is single-threaded, so no need for atomic
+                // progress update.
+                if (lastMinecraftDownloadProgress == pp)
+                {
+                    return;
+                }
 
+                lastMinecraftDownloadProgress = pp;
+                progressReporter.ReportMinecraftDownloadProgress(pp);
+            }),
+            new Progress<double>(assetsProgress =>
+            {
+                var pp = assetsProgress < 1.0
+                    ? Math.Min((uint)(100.0 * assetsProgress), 99)
+                    : 100;
+
+                // Downloading assets is a parallel task i.e., every asset is downloaded on a
+                // different thread. Thus, we need atomic operations to update the progress in a
+                // thread-safe way.
+                var v = Interlocked.Exchange(ref lastAssetsDownloadProgress, pp);
+                if (v != pp)
+                {
+                    progressReporter.ReportAssetsDownloadProgress(pp);
+                }
+            }),
+            new Progress<double>(libsProgress =>
+            {
+                var pp = libsProgress < 1.0
+                    ? Math.Min((uint)(100.0 * libsProgress), 99)
+                    : 100;
+
+                // Downloading libraries is a parallel task i.e., every lib is downloaded on a
+                // different thread. Thus, we need atomic operations to update the progress in a
+                // thread-safe way.
+                var v = Interlocked.Exchange(ref lastLibrariesDownloadProgress, pp);
+                if (v != pp)
+                {
+                    progressReporter.ReportLibrariesDownloadProgress(pp);
+                }
+            })
+        );
+
+        ////////////////////////////////////////////////////////////////////////
+        // Download Java
         var javaVersion = minecraft.RequiredJavaVersion;
-        var javaPath = await _javaManager.InstallJavaAsync(javaVersion,
-            p => { _logger?.LogInformation("downloading Java {JavaVersion}: {D}%", javaVersion, p); });
+        var lastJavaDownloadProgress = (uint)0;
+        var downloadJavaTask = _javaManager.InstallJavaAsync(javaVersion,
+            new Progress<double>(p =>
+            {
+                // Jave reports 95% after downloaded, 98% when extracted and 100% after clean up, so
+                // we don't have to cap to 99% here.
+                var pp = (uint)(100.0 * p);
+                if (lastJavaDownloadProgress == pp)
+                {
+                    return;
+                }
 
-        _logger?.LogInformation("successfully downloaded Java {JavaVersion}: '{JavaPath}'",
-            javaVersion,
-            javaPath);
+                lastJavaDownloadProgress = pp;
+                progressReporter.ReportJavaDownloadProgress(pp);
+            }));
+
+        await Task.WhenAll(downloadMinecraftTask, downloadJavaTask);
+
+        _logger?.LogInformation("Successfully download Minecraft instance '{InstanceId}'", name);
+        progressReporter.ReportFinished();
 
         await _repository.SetMinecraftInstanceAsReadyAsync(name);
-        _logger?.LogInformation("successfully created Minecraft instance '{InstanceId}'", name);
+        _logger?.LogInformation("Minecraft instance '{InstanceId}' is ready to play", name);
 
         await RefreshInstancesAsync();
     }

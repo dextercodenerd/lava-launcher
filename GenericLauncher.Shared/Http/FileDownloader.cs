@@ -28,7 +28,7 @@ public class FileDownloader
         string url,
         string destinationPath,
         string? expectedHash = null,
-        Action<double>? progressCallback = null,
+        IProgress<double>? progressCallback = null,
         CancellationToken cancellationToken = default)
     {
         await _concurrencySemaphore.WaitAsync(cancellationToken);
@@ -46,7 +46,7 @@ public class FileDownloader
         string url,
         string destinationDirectory,
         string? expectedHash = null,
-        Action<double>? progressCallback = null,
+        IProgress<double>? progressCallback = null,
         CancellationToken cancellationToken = default)
     {
         var fileName = ExtractFileNameFromUrl(url);
@@ -60,7 +60,7 @@ public class FileDownloader
         string url,
         string destinationPath,
         string? expectedHash,
-        Action<double>? progressCallback,
+        IProgress<double>? progressCallback,
         CancellationToken cancellationToken)
     {
         _logger?.LogDebug("Downloading {Url} to {Destination}", url, destinationPath);
@@ -70,7 +70,7 @@ public class FileDownloader
             if (expectedHash is not null && await VerifyFileHashAsync(destinationPath, expectedHash))
             {
                 _logger?.LogDebug("File already exists and is valid: {Destination}", destinationPath);
-                progressCallback?.Invoke(1.0);
+                progressCallback?.Report(1.0);
                 return;
             }
 
@@ -89,7 +89,9 @@ public class FileDownloader
         try
         {
             using var response = await _httpClient.GetAsync(
-                url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                url,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken);
 
             response.EnsureSuccessStatusCode();
 
@@ -108,13 +110,13 @@ public class FileDownloader
 
                 if (totalBytes > 0)
                 {
-                    progressCallback?.Invoke((double)totalRead / totalBytes);
+                    progressCallback?.Report((double)totalRead / totalBytes);
                 }
             }
 
             if (totalBytes <= 0)
             {
-                progressCallback?.Invoke(1.0);
+                progressCallback?.Report(1.0);
             }
         }
         catch (Exception ex)

@@ -105,14 +105,26 @@ public partial class NewInstanceDialogViewModel : ViewModelBase
             {
                 await _minecraftLauncher.CreateInstance(versionInfo,
                     name,
-                    () =>
+                    new Progress<ThreadSafeInstallProgressReporter.InstallProgress>(p =>
                     {
+                        _logger?.LogInformation("Minecraft instance download progress: {Progress}", p);
+
+                        if (!p.IsValidMinecraftVersion)
+                        {
+                            return;
+                        }
+
                         Dispatcher.UIThread.Post(() =>
                         {
+                            if (CanCloseOnClickAway)
+                            {
+                                return;
+                            }
+
                             CanCloseOnClickAway = true;
                             ShowNewMinecraftInstanceDialog = false;
                         });
-                    });
+                    }));
 
                 _logger?.LogInformation("Installed");
             })
