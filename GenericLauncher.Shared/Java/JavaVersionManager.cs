@@ -13,24 +13,6 @@ using Microsoft.Extensions.Logging;
 
 namespace GenericLauncher.Java;
 
-public record JavaInstallation(
-    int Version,
-    string Distribution,
-    string InstallationPath
-)
-{
-    public string JavaExecutable
-    {
-        get => Path.Combine(InstallationPath, "bin",
-            OperatingSystem.IsWindows() ? "java.exe" : "java");
-    }
-
-    public bool IsValid
-    {
-        get => File.Exists(JavaExecutable);
-    }
-}
-
 public sealed class JavaVersionManager : IDisposable
 {
     private readonly HttpClient _httpClient;
@@ -50,9 +32,8 @@ public sealed class JavaVersionManager : IDisposable
         _logger = logger;
     }
 
-    public async Task<string> InstallJavaAsync(
-        int javaVersion,
-        Action<double>? progressCallback = null,
+    public async Task InstallJavaAsync(int javaVersion,
+        IProgress<double>? progressCallback = null,
         CancellationToken cancellationToken = default)
     {
         const int minJavaVersion = 8;
@@ -69,8 +50,8 @@ public sealed class JavaVersionManager : IDisposable
         if (Directory.Exists(installationPath) && IsJavaInstallationValid(installationPath))
         {
             _logger?.LogInformation("Java {Version} already installed at {Path}", javaVersion, installationPath);
-            progressCallback?.Invoke(1.0);
-            return installationPath;
+            progressCallback?.Report(1.0);
+            return;
         }
 
         // Get platform-specific download URL
@@ -82,25 +63,31 @@ public sealed class JavaVersionManager : IDisposable
             downloadUrl,
             tempDir,
             expectedHash,
-            progressCallback,
+            new Progress<double>(p =>
+            {
+                // Report just 95% here and report 100% after extracting it
+                progressCallback?.Report(p * 0.95);
+            }),
             cancellationToken);
 
-        // Extract and install
+        // extract and install
         await ExtractAndInstallJavaAsync(downloadPath, installationPath, cancellationToken);
+        progressCallback?.Report(0.98);
 
-        // Cleanup
+        // cleanup
         try
         {
             Directory.Delete(tempDir, true);
         }
-        catch
+        catch (Exception ex)
         {
-            /* Ignore */
+            // TODO: In the future, when we will check integrity of everything on app start, delete
+            //  also the leftover temp folder of Java installation.
+            _logger?.LogWarning(ex, "Problem deleting temporary Java folder '{Folder}'", tempDir);
         }
 
         _logger?.LogInformation("Successfully installed Java {Version} to {Path}", javaVersion, installationPath);
-
-        return installationPath;
+        progressCallback?.Report(1.0);
     }
 
     private async Task<(string downloadUrl, string expectedHash)> GetTemurinDownloadInfoAsync(int javaVersion,
@@ -111,7 +98,7 @@ public sealed class JavaVersionManager : IDisposable
         var apiUrl = $"https://api.adoptium.net/v3/assets/latest/{javaVersion}/hotspot?" +
                      $"architecture={arch}&image_type=jdk&os={os}&vendor=eclipse";
 
-        _logger?.LogDebug("Fetching Temurin download info from: {Url}", apiUrl);
+        _logger?.LogDebug("Fetching Temurin JDK download info from: {Url}", apiUrl);
 
         try
         {
@@ -135,9 +122,6 @@ public sealed class JavaVersionManager : IDisposable
             var expectedHash = package.GetProperty("checksum").GetString()
                                ?? throw new InvalidOperationException("No checksum found for Eclipse Temurin package");
 
-            _logger?.LogDebug("Resolved download URL: {Url}", downloadUrl);
-            _logger?.LogDebug("Expected SHA256: {Hash}", expectedHash);
-
             return (downloadUrl, expectedHash);
         }
         catch (HttpRequestException ex) when (ex.Message.Contains("404"))
@@ -152,7 +136,7 @@ public sealed class JavaVersionManager : IDisposable
         }
     }
 
-    private (string os, string arch, string extension) GetPlatformDetails()
+    private static (string os, string arch, string extension) GetPlatformDetails()
     {
         if (OperatingSystem.IsWindows())
         {
@@ -161,7 +145,7 @@ public sealed class JavaVersionManager : IDisposable
                 Architecture.X64 => "x64",
                 Architecture.Arm64 => "aarch64",
                 Architecture.Arm => "arm",
-                _ => "x64"
+                _ => "x64",
             };
             return ("windows", arch, "zip");
         }
@@ -172,7 +156,7 @@ public sealed class JavaVersionManager : IDisposable
                 Architecture.X64 => "x64",
                 Architecture.Arm64 => "aarch64",
                 Architecture.Arm => "arm",
-                _ => "x64"
+                _ => "x64",
             };
             return ("linux", arch, "tar.gz");
         }
@@ -182,7 +166,7 @@ public sealed class JavaVersionManager : IDisposable
             {
                 Architecture.X64 => "x64",
                 Architecture.Arm64 => "aarch64",
-                _ => "x64"
+                _ => "x64",
             };
             return ("mac", arch, "tar.gz");
         }
@@ -192,7 +176,7 @@ public sealed class JavaVersionManager : IDisposable
         }
     }
 
-    private async Task ExtractAndInstallJavaAsync(string archivePath,
+    private static async Task ExtractAndInstallJavaAsync(string archivePath,
         string installationPath,
         CancellationToken cancellationToken)
     {
@@ -253,7 +237,10 @@ public sealed class JavaVersionManager : IDisposable
         }
     }
 
-    private async Task ExtractTarGzAsync(string archivePath, string extractionPath, CancellationToken cancellationToken)
+    private static async Task ExtractTarGzAsync(
+        string archivePath,
+        string extractionPath,
+        CancellationToken cancellationToken)
     {
         // For .NET 9, we can use the new TarFile class
         if (OperatingSystem.IsWindows())
@@ -274,8 +261,8 @@ public sealed class JavaVersionManager : IDisposable
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
-                CreateNoWindow = true
-            }
+                CreateNoWindow = true,
+            },
         };
 
         process.Start();
@@ -295,13 +282,13 @@ public sealed class JavaVersionManager : IDisposable
         return Path.Combine(_javaInstallationsDirectory, $"{javaVersion}-{os}-{arch}");
     }
 
-    private bool IsJavaInstallationValid(string installationPath)
+    private static bool IsJavaInstallationValid(string installationPath)
     {
         var javaExe = GetJavaExecutablePath(installationPath);
         return File.Exists(javaExe);
     }
 
-    private string GetJavaExecutablePath(string installationPath)
+    private static string GetJavaExecutablePath(string installationPath)
     {
         var executableName = OperatingSystem.IsWindows() ? "java.exe" : "java";
         return Path.Combine(installationPath, "bin", executableName);
@@ -312,19 +299,6 @@ public sealed class JavaVersionManager : IDisposable
         var installationPath = GetJavaInstallationPath(javaVersion);
         var javaExe = GetJavaExecutablePath(installationPath);
         return File.Exists(javaExe) ? javaExe : null;
-    }
-
-    public IEnumerable<JavaInstallation> GetInstalledJavaVersions()
-    {
-        foreach (var dir in Directory.EnumerateDirectories(_javaInstallationsDirectory))
-        {
-            var dirName = Path.GetFileName(dir);
-            if (int.TryParse(dirName.Split('-')[0], out var version) &&
-                IsJavaInstallationValid(dir))
-            {
-                yield return new JavaInstallation(version, "temurin", dir);
-            }
-        }
     }
 
     public void Dispose()

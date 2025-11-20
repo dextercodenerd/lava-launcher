@@ -27,16 +27,14 @@ public sealed class MinecraftVersionManager : IDisposable
         string AssetsFolder,
         string AssetIndex,
         List<string> ClassPath,
-        string? LoggingConfigPath,
         List<string> GameArguments,
-        List<string> JvmArguments,
-        string? LoggingArgument);
+        List<string> JvmArguments);
 
-    private static string SharedAssetsFolder = "assets";
-    private static string SharedLibrariesFolder = "libraries";
-    private static string NativeLibrariesFolder = "natives";
-    private static string MinecraftVersionsFolder = "versions";
-    private static string ManifestFilename = "version_manifest_v2.json";
+    private const string SharedAssetsFolder = "assets";
+    private const string SharedLibrariesFolder = "libraries";
+    private const string NativeLibrariesFolder = "natives";
+    private const string MinecraftVersionsFolder = "versions";
+    private const string ManifestFilename = "version_manifest_v2.json";
 
     private readonly HttpClient _httpClient;
     private readonly FileDownloader _fileDownloader;
@@ -46,7 +44,7 @@ public sealed class MinecraftVersionManager : IDisposable
     private readonly string[] _manifestUrls =
     [
         "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json",
-        "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json"
+        "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json",
     ];
 
     private readonly string _minecraftVersionsFolder;
@@ -147,10 +145,8 @@ public sealed class MinecraftVersionManager : IDisposable
             _sharedAssetsFolder,
             versionDetails.AssetIndex.Id,
             CreateClassPath(versionDetails.Libraries, currentOs),
-            null,
             ArgumentsParser.FlattenArguments(versionDetails.Arguments?.Game, currentOs),
-            ArgumentsParser.FlattenArguments(versionDetails.Arguments?.Jvm, currentOs),
-            versionDetails.Logging?.Client?.Argument
+            ArgumentsParser.FlattenArguments(versionDetails.Arguments?.Jvm, currentOs)
         );
     }
 
@@ -165,11 +161,9 @@ public sealed class MinecraftVersionManager : IDisposable
     private string GetNativeLibrariesFolder(string versionId) =>
         Path.Combine(GetInstallationFolder(versionId), NativeLibrariesFolder);
 
-    public async Task DownloadVersionAsync(
+    public async Task<(VersionDetails, Version)> DownloadVersionAsync(
         VersionInfo versionInfo,
         string currentOs,
-        Action<Version> versionInfoAvailable,
-        Action<double>? progress = null,
         CancellationToken cancellationToken = default)
     {
         // We use the official Minecraft launcher's folder structure.
@@ -191,57 +185,49 @@ public sealed class MinecraftVersionManager : IDisposable
             JsonSerializer.Deserialize(versionDetailsJson, MinecraftJsonContext.Default.VersionDetails)
             ?? throw new InvalidOperationException($"Failed to get details for version '{versionInfo.Id}'");
 
-
-        // TODO: Do we really need the logging jar, when we are not using formatted logs?
-        // Download client JAR
-        string? loggingConfigPath;
-        Task downloadLoggingJarTask;
-        if (versionDetails.Logging?.Client is { } loggingClient)
-        {
-            var loggingConfigName = loggingClient.File.Id;
-            // Also official MC launcher sub-folders path
-            loggingConfigPath = Path.Combine(_sharedAssetsFolder, "log_configs", loggingConfigName);
-            downloadLoggingJarTask =
-                _fileDownloader.DownloadFileAsync(loggingClient.File.Url,
-                    loggingConfigPath,
-                    loggingClient.File.Sha1,
-                    null,
-                    cancellationToken);
-        }
-        else
-        {
-            loggingConfigPath = null;
-            downloadLoggingJarTask = Task.CompletedTask;
-        }
+        // WARN: We are not downloading the logging jar at all, because it will format the logs as
+        //  XML and we do not need that. If we will need this in the future, look at the initial
+        //  commit.
 
         var clientJarPath = GetClientJarPath(versionInfo.Id);
         var nativeLibrariesFolder = GetNativeLibrariesFolder(versionInfo.Id);
 
-        var version = new Version(
-            versionInfo.Id,
-            versionDetails.Type,
-            versionDetails.JavaVersion?.MajorVersion ?? 8,
-            clientJarPath,
-            versionDetails.MainClass,
-            installationFolder,
-            _sharedLibrariesFolder,
-            nativeLibrariesFolder,
-            _sharedAssetsFolder,
-            versionDetails.AssetIndex.Id,
-            CreateClassPath(versionDetails.Libraries, currentOs),
-            loggingConfigPath,
-            ArgumentsParser.FlattenArguments(versionDetails.Arguments?.Game, currentOs),
-            ArgumentsParser.FlattenArguments(versionDetails.Arguments?.Jvm, currentOs),
-            versionDetails.Logging?.Client?.Argument
-        );
+        return (
+            versionDetails,
+            new Version(
+                versionInfo.Id,
+                versionDetails.Type,
+                versionDetails.JavaVersion?.MajorVersion ?? 8,
+                clientJarPath,
+                versionDetails.MainClass,
+                installationFolder,
+                _sharedLibrariesFolder,
+                nativeLibrariesFolder,
+                _sharedAssetsFolder,
+                versionDetails.AssetIndex.Id,
+                CreateClassPath(versionDetails.Libraries, currentOs),
+                ArgumentsParser.FlattenArguments(versionDetails.Arguments?.Game, currentOs),
+                ArgumentsParser.FlattenArguments(versionDetails.Arguments?.Jvm, currentOs)
+            ));
+    }
 
-        versionInfoAvailable(version);
+    public async Task DownloadAssetsAndLibraries(
+        VersionDetails versionDetails,
+        string currentOs,
+        IProgress<double> minecraftDownloadProgress,
+        IProgress<double> assetsDownloadProgress,
+        IProgress<double> librariesDownloadProgress,
+        CancellationToken cancellationToken = default)
+    {
+        var clientJarPath = GetClientJarPath(versionDetails.Id);
+        var nativeLibrariesFolder = GetNativeLibrariesFolder(versionDetails.Id);
 
         var downloadLibrariesTask = DownloadLibrariesAsync(
             versionDetails.Libraries,
             currentOs,
             _sharedLibrariesFolder,
             nativeLibrariesFolder,
+            librariesDownloadProgress,
             cancellationToken);
 
         await Task.WhenAll(
@@ -249,11 +235,13 @@ public sealed class MinecraftVersionManager : IDisposable
             _fileDownloader.DownloadFileAsync(versionDetails.Downloads.Client.Url,
                 clientJarPath,
                 versionDetails.Downloads.Client.Sha1,
-                progress,
+                minecraftDownloadProgress,
+                cancellationToken),
+            DownloadAssetsAsync(versionDetails.AssetIndex,
+                _sharedAssetsFolder,
+                assetsDownloadProgress,
                 cancellationToken),
             downloadLibrariesTask,
-            DownloadAssetsAsync(versionDetails.AssetIndex, _sharedAssetsFolder, null, cancellationToken),
-            downloadLoggingJarTask
         ]);
     }
 
@@ -278,10 +266,12 @@ public sealed class MinecraftVersionManager : IDisposable
         string currentOs,
         string librariesFolder,
         string nativeLibrariesFolder,
+        IProgress<double>? progress,
         CancellationToken cancellationToken)
     {
         if (libraries is null || libraries.Count == 0)
         {
+            progress?.Report(100);
             return;
         }
 
@@ -292,10 +282,17 @@ public sealed class MinecraftVersionManager : IDisposable
         var parallelOptions = new ParallelOptions
         {
             MaxDegreeOfParallelism = 10,
-            CancellationToken = cancellationToken
+            CancellationToken = cancellationToken,
         };
-        // TODO: Double check if every library has the (Maven) Name property, so we can filter-out duplicates
-        var librariesToDownload = libraries.Where(l => IsLibraryAllowed(l, currentOs)).DistinctBy(l => l.Name);
+
+        // Every library has the (Maven) Name property, so we can filter-out duplicates
+        var librariesToDownload = libraries
+            .Where(l => IsLibraryAllowed(l, currentOs))
+            .DistinctBy(l => l.Name)
+            .ToList();
+        var count = (double)librariesToDownload.Count;
+        var downloaded = 0;
+
         await Parallel.ForEachAsync(librariesToDownload,
             parallelOptions,
             async (library, token) =>
@@ -318,12 +315,16 @@ public sealed class MinecraftVersionManager : IDisposable
                 // Platform-specific libraries
                 if (library.Natives == null || library.Downloads?.Classifiers == null)
                 {
+                    var d1 = Interlocked.Increment(ref downloaded);
+                    progress?.Report(d1 / count);
                     return;
                 }
 
                 if (!library.Natives.TryGetValue(currentOs, out var nativeKey) ||
                     !library.Downloads.Classifiers.TryGetValue(nativeKey, out var nativeArtifact))
                 {
+                    var d2 = Interlocked.Increment(ref downloaded);
+                    progress?.Report(d2 / count);
                     return;
                 }
 
@@ -336,7 +337,7 @@ public sealed class MinecraftVersionManager : IDisposable
 
                 try
                 {
-                    using var archive = ZipFile.OpenRead(nativeLibraryPath);
+                    await using var archive = await ZipFile.OpenReadAsync(nativeLibraryPath, token);
                     foreach (var entry in archive.Entries)
                     {
                         if (entry.Name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
@@ -344,7 +345,7 @@ public sealed class MinecraftVersionManager : IDisposable
                             entry.Name.EndsWith(".dylib", StringComparison.OrdinalIgnoreCase))
                         {
                             var extractPath = Path.Combine(nativeLibrariesFolder, entry.Name);
-                            entry.ExtractToFile(extractPath, true);
+                            await entry.ExtractToFileAsync(extractPath, true, token);
                         }
                     }
                 }
@@ -353,14 +354,19 @@ public sealed class MinecraftVersionManager : IDisposable
                     // TODO
                 }
 
+                var d3 = Interlocked.Increment(ref downloaded);
+                progress?.Report(d3 / count);
+
                 File.Delete(nativeLibraryPath);
             });
+
+        progress?.Report(1.0);
     }
 
     private async Task DownloadAssetsAsync(
         AssetIndex assetIndex,
         string assetsFolder,
-        IProgress<double>? progress,
+        IProgress<double> progress,
         CancellationToken cancellationToken)
     {
         _logger?.LogInformation("downloading assets index: {AssetIndexUrl}", assetIndex.Url);
@@ -384,7 +390,8 @@ public sealed class MinecraftVersionManager : IDisposable
 
         // Minecraft assets can contain duplicate file URLs/hashes e.g., in 1.18, so we take just the unique values.
         var assets = assetsManifest.Objects.Values
-            .DistinctBy(a => a.Hash);
+            .DistinctBy(a => a.Hash)
+            .ToList();
 
         // Download the objects/assets now
         var objectFolder = Path.Combine(assetsFolder, "objects");
@@ -392,8 +399,12 @@ public sealed class MinecraftVersionManager : IDisposable
         var parallelOptions = new ParallelOptions
         {
             MaxDegreeOfParallelism = 10,
-            CancellationToken = cancellationToken
+            CancellationToken = cancellationToken,
         };
+
+        var count = (double)assets.Count;
+        var downloaded = 0;
+
         await Parallel.ForEachAsync(assets,
             parallelOptions,
             async (asset, token) =>
@@ -401,6 +412,8 @@ public sealed class MinecraftVersionManager : IDisposable
                 var assetPath = Path.Combine(objectFolder, asset.Hash[..2], asset.Hash);
                 if (File.Exists(assetPath))
                 {
+                    var d1 = Interlocked.Increment(ref downloaded);
+                    progress.Report(d1 / count);
                     return;
                 }
 
@@ -408,9 +421,12 @@ public sealed class MinecraftVersionManager : IDisposable
 
                 var assetUrl = $"https://resources.download.minecraft.net/{asset.Hash[..2]}/{asset.Hash}";
                 await _fileDownloader.DownloadFileAsync(assetUrl, assetPath, asset.Hash, null, token);
+
+                var d = Interlocked.Increment(ref downloaded);
+                progress.Report(d / count);
             });
 
-        progress?.Report(1.0);
+        progress.Report(1.0);
     }
 
     private bool IsLibraryAllowed(Library library, string currentOs)
@@ -435,14 +451,14 @@ public sealed class MinecraftVersionManager : IDisposable
                 "windows" => currentOs == "windows",
                 "linux" => currentOs == "linux",
                 "osx" => currentOs == "osx",
-                _ => true
+                _ => true,
             };
 
             allowed = rule.Action switch
             {
                 "allow" => matchesOs,
                 "disallow" => !matchesOs,
-                _ => allowed
+                _ => allowed,
             };
         }
 
@@ -469,14 +485,14 @@ public sealed class MinecraftVersionManager : IDisposable
                 "windows" => currentOs == "windows",
                 "linux" => currentOs == "linux",
                 "osx" => currentOs == "osx",
-                _ => true
+                _ => true,
             };
 
             allowed = rule.Action switch
             {
                 "allow" => matchesOs,
                 "disallow" => !matchesOs,
-                _ => allowed
+                _ => allowed,
             };
         }
 

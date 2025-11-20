@@ -132,8 +132,8 @@ public class StretchingWrapPanel : Panel
             Children[0].Measure(new Size(itemWidth, contentHeight));
             itemHeight = Children[0].DesiredSize.Height;
 
-            // We still have to measure the remaining children, otherwise they will have invalid
-            // size during arranging
+            // We still should measure the remaining children, otherwise they will have invalid
+            // size during arranging, and they will be measured then. So we warm up them now.
             for (var i = 1; i < childCount; i++)
             {
                 Children[i].Measure(new Size(itemWidth, contentHeight));
