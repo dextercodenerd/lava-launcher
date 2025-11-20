@@ -107,8 +107,6 @@ public partial class NewInstanceDialogViewModel : ViewModelBase
                     name,
                     new Progress<ThreadSafeInstallProgressReporter.InstallProgress>(p =>
                     {
-                        _logger?.LogInformation("Minecraft instance download progress: {Progress}", p);
-
                         if (!p.IsValidMinecraftVersion)
                         {
                             return;

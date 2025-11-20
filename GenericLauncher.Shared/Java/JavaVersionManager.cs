@@ -98,7 +98,7 @@ public sealed class JavaVersionManager : IDisposable
         var apiUrl = $"https://api.adoptium.net/v3/assets/latest/{javaVersion}/hotspot?" +
                      $"architecture={arch}&image_type=jdk&os={os}&vendor=eclipse";
 
-        _logger?.LogDebug("Fetching Temurin download info from: {Url}", apiUrl);
+        _logger?.LogDebug("Fetching Temurin JDK download info from: {Url}", apiUrl);
 
         try
         {
@@ -121,9 +121,6 @@ public sealed class JavaVersionManager : IDisposable
             // Get the SHA256 hash from the package info
             var expectedHash = package.GetProperty("checksum").GetString()
                                ?? throw new InvalidOperationException("No checksum found for Eclipse Temurin package");
-
-            _logger?.LogDebug("Resolved download URL: {Url}", downloadUrl);
-            _logger?.LogDebug("Expected SHA256: {Hash}", expectedHash);
 
             return (downloadUrl, expectedHash);
         }

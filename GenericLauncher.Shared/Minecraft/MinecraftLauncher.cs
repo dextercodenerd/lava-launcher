@@ -45,6 +45,8 @@ public sealed class MinecraftLauncher : IDisposable
     public event EventHandler? InstancesChanged;
     public event EventHandler? LaunchedInstancesChanged;
 
+    public event EventHandler<ThreadSafeInstallProgressReporter.InstallProgress>? InstallProgressUpdated;
+
     public MinecraftLauncher(
         string currentOs,
         string launcherName,
@@ -177,7 +179,12 @@ public sealed class MinecraftLauncher : IDisposable
 
         // Now create a complex thread-safe progress reporter, that handles parallelism and
         // combining of different progress sources.
-        var progressReporter = new ThreadSafeInstallProgressReporter(progress);
+        await using var progressReporter = new ThreadSafeInstallProgressReporter(name,
+            new Progress<ThreadSafeInstallProgressReporter.InstallProgress>(p =>
+            {
+                InstallProgressUpdated?.Invoke(this, p);
+                progress.Report(p);
+            }));
 
         // Report, that we have a validated the Minecraft version and proceed with its files download
         progressReporter.ReportStart();
@@ -261,7 +268,6 @@ public sealed class MinecraftLauncher : IDisposable
         await Task.WhenAll(downloadMinecraftTask, downloadJavaTask);
 
         _logger?.LogInformation("Successfully download Minecraft instance '{InstanceId}'", name);
-        progressReporter.ReportFinished();
 
         await _repository.SetMinecraftInstanceAsReadyAsync(name);
         _logger?.LogInformation("Minecraft instance '{InstanceId}' is ready to play", name);

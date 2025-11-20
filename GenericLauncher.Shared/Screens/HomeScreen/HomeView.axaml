@@ -3,9 +3,9 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:homeScreen="clr-namespace:GenericLauncher.Screens.HomeScreen"
-             xmlns:database="clr-namespace:GenericLauncher.Database"
              xmlns:avalonia="clr-namespace:GenericLauncher.Avalonia"
              xmlns:controls="clr-namespace:GenericLauncher.Controls"
+             xmlns:model="clr-namespace:GenericLauncher.Model"
              mc:Ignorable="d"
              d:DesignWidth="800"
              d:DesignHeight="450"
@@ -37,7 +37,7 @@
             </ItemsControl.ItemsPanel>
 
             <ItemsControl.ItemTemplate>
-                <DataTemplate DataType="database:MinecraftInstance">
+                <DataTemplate DataType="model:MinecraftInstanceItem">
                     <controls:MinecraftInstanceListItem
                         ClickPlayCommand="{Binding $parent[ItemsControl].((homeScreen:HomeViewModel)DataContext).ClickInstanceCommand}" />
                 </DataTemplate>

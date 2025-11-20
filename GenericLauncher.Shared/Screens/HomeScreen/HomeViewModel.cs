@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Collections.ObjectModel;
+using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -8,6 +10,7 @@ using CommunityToolkit.Mvvm.Input;
 using GenericLauncher.Auth;
 using GenericLauncher.Database;
 using GenericLauncher.Minecraft;
+using GenericLauncher.Model;
 using Microsoft.Extensions.Logging;
 
 namespace GenericLauncher.Screens.HomeScreen;
@@ -20,7 +23,8 @@ public partial class HomeViewModel : ViewModelBase
     private readonly AuthService? _auth;
     private readonly MinecraftLauncher? _minecraftLauncher;
 
-    [ObservableProperty] private ImmutableList<MinecraftInstance> _instances = [];
+    private ImmutableList<MinecraftInstance> _dbInstances = [];
+    [ObservableProperty] private ObservableCollection<MinecraftInstanceItem> _instances = [];
 
     public HomeViewModel() : this(null)
     {
@@ -43,13 +47,26 @@ public partial class HomeViewModel : ViewModelBase
         UpdateInstancesUi(_minecraftLauncher.Instances);
         _minecraftLauncher.InstancesChanged += OnInstancesChanged;
         _minecraftLauncher.LaunchedInstancesChanged += OnLaunchedInstancesChanged;
+        _minecraftLauncher.InstallProgressUpdated += OnInstallProgressUpdated;
     }
 
     private void UpdateInstancesUi(ImmutableList<MinecraftInstance> instances)
     {
         Dispatcher.UIThread.VerifyAccess();
 
-        Instances = instances;
+        if (_dbInstances == instances
+            || (_dbInstances.Count == instances.Count && _dbInstances.SequenceEqual(instances)))
+        {
+            return;
+        }
+
+        _dbInstances = instances;
+
+        Instances.Clear();
+        // TODO: Move this merging off the UI thread
+        instances.Select(i => new MinecraftInstanceItem(i, null))
+            .ToList()
+            .ForEach(i => Instances.Add(i));
     }
 
     private void UpdateLaunchedInstancesUi(
@@ -61,9 +78,9 @@ public partial class HomeViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private async Task ClickInstance(MinecraftInstance instance)
+    private async Task ClickInstance(MinecraftInstanceItem item)
     {
-        if (_auth is null || _minecraftLauncher is null || instance.State != MinecraftInstanceState.Ready)
+        if (_auth is null || _minecraftLauncher is null || item.Instance.State != MinecraftInstanceState.Ready)
         {
             return;
         }
@@ -76,7 +93,7 @@ public partial class HomeViewModel : ViewModelBase
 
         var newAcc = await _auth.AuthenticateAccountAsync(acc);
 
-        await _minecraftLauncher.LaunchInstance(instance, newAcc);
+        await _minecraftLauncher.LaunchInstance(item.Instance, newAcc);
     }
 
     private void OnInstancesChanged(object? sender, EventArgs e)
@@ -100,5 +117,18 @@ public partial class HomeViewModel : ViewModelBase
         }
 
         Dispatcher.UIThread.Post(() => { UpdateLaunchedInstancesUi(copy); });
+    }
+
+    private void OnInstallProgressUpdated(object? sender, ThreadSafeInstallProgressReporter.InstallProgress p)
+    {
+        var found = Instances.Select((item, index) => new { Item = item, Index = index })
+            .FirstOrDefault(x => x.Item.Instance.Id == p.InstanceId);
+        if (found is null)
+        {
+            return;
+        }
+
+        var updatedItem = found.Item with { Progress = p };
+        Instances[found.Index] = updatedItem;
     }
 }
