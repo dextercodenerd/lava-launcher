@@ -1,5 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
@@ -12,6 +12,7 @@ using GenericLauncher.Database;
 using GenericLauncher.Minecraft;
 using GenericLauncher.Misc;
 using GenericLauncher.Model;
+using GenericLauncher.Screens.EmptyStateScreen;
 using GenericLauncher.Screens.HomeScreen;
 using GenericLauncher.Screens.NewInstanceDialog;
 using Microsoft.Extensions.Logging;
@@ -35,6 +36,8 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private ObservableCollection<AccountListItem> _accounts = [];
     [ObservableProperty] private AccountListItem? _selectedAccount;
 
+    [ObservableProperty] private ViewModelBase _currentViewModel;
+
     public HomeViewModel HomeViewModel { get; }
     public NewInstanceDialogViewModel NewInstanceDialogViewModel { get; }
 
@@ -51,6 +54,9 @@ public partial class MainWindowViewModel : ViewModelBase
         _logger = logger;
         _auth = authService;
         _minecraftLauncher = minecraftLauncher;
+
+        CurrentViewModel =
+            new EmptyStateViewModel(authService, App.LoggerFactory?.CreateLogger(nameof(EmptyStateViewModel)));
 
         HomeViewModel = new HomeViewModel(authService,
             minecraftLauncher,
@@ -71,18 +77,15 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private void OnAuthAccountChanged(object? sender, EventArgs e)
     {
-        Dispatcher.UIThread.Post(() =>
+        if (_auth is null)
         {
-            if (_auth is null)
-            {
-                return;
-            }
+            return;
+        }
 
-            UpdateAccountsUi(_auth.Accounts, _auth.ActiveAccount);
-        });
+        Dispatcher.UIThread.Post(() => { UpdateAccountsUi(_auth.Accounts, _auth.ActiveAccount); });
     }
 
-    private void UpdateAccountsUi(IList<Account> accounts, Account? selectedAccount)
+    private void UpdateAccountsUi(ImmutableList<Account> accounts, Account? selectedAccount)
     {
         Dispatcher.UIThread.VerifyAccess();
 
@@ -94,6 +97,16 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         Accounts.Add(new AccountListItem(null, true));
+
+        if (accounts.Count > 0)
+        {
+            CurrentViewModel = HomeViewModel;
+        }
+        else if (CurrentViewModel is not EmptyStateViewModel)
+        {
+            CurrentViewModel =
+                new EmptyStateViewModel(_auth, App.LoggerFactory?.CreateLogger(nameof(EmptyStateViewModel)));
+        }
 
         if (selectedAccount is null)
         {

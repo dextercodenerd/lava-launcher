@@ -2,6 +2,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Svg;
 using GenericLauncher;
 using GenericLauncher.Logger;
 using Microsoft.Extensions.Logging;
@@ -55,6 +56,9 @@ internal class Program
     // Avalonia configuration, don't remove; also used by visual designer.
     public static AppBuilder BuildAvaloniaApp()
     {
+        // This is needed for the live previews to work
+        GC.KeepAlive(typeof(SvgImageExtension).Assembly);
+
         return AppBuilder.Configure(() => new App())
             .UsePlatformDetect()
             .WithInterFont()
@@ -62,7 +66,7 @@ internal class Program
             {
                 // Some computers crash with the default ANGLE based HW acceleration, so we must
                 // just OpenGL or even software rendering.
-                RenderingMode = [Win32RenderingMode.Wgl, Win32RenderingMode.Software]
+                RenderingMode = [Win32RenderingMode.Wgl, Win32RenderingMode.Software],
             })
             .With(new SkiaOptions { UseOpacitySaveLayer = true })
             .LogToTrace();

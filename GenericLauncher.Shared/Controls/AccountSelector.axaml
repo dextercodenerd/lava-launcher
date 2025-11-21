@@ -22,10 +22,13 @@
 
         <!-- Login item template -->
         <DataTemplate x:Key="LoginItemTemplate">
-            <TextBlock
-                HorizontalAlignment="Center"
-                FontSize="14"
-                Text="++ Login ++" />
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <Image Width="16" Source="{DynamicResource IconAddAccount}" />
+                <TextBlock
+                    HorizontalAlignment="Center"
+                    FontSize="14"
+                    Text="Login" />
+            </StackPanel>
         </DataTemplate>
 
         <!-- Template selector -->
@@ -47,10 +50,15 @@
                     ClipToBounds="True">
                     <Panel>
                         <!-- Avatar -->
+                        <Image Width="{TemplateBinding Width}"
+                               Height="{TemplateBinding Width}"
+                               Source="{DynamicResource IconAddAccount}"
+                               IsVisible="{TemplateBinding SelectedAccount, Converter={x:Static ObjectConverters.IsNull}}" />
                         <Image asyncImageLoader:ImageLoader.Source="{TemplateBinding AvatarUrl}"
                                Width="{TemplateBinding Width}"
                                Height="{TemplateBinding Width}"
-                               Stretch="UniformToFill" />
+                               Stretch="UniformToFill"
+                               IsVisible="{TemplateBinding SelectedAccount, Converter={x:Static ObjectConverters.IsNotNull}}" />
 
                         <!-- Accounts combobox -->
                         <Border Background="#44000000"
