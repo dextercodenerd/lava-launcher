@@ -69,7 +69,7 @@ public sealed class Authenticator : IDisposable
         var (verifier, challenge) = GeneratePkceCodes();
         var authCode = await GetAuthorizationCodeAsync(_clientId, challenge);
         var msTokenResponse = await GetMicrosoftTokenAsync(_clientId, authCode, verifier)
-                              ?? throw new InvalidOperationException("couldn't obtain access MS token");
+                              ?? throw new InvalidOperationException("Couldn't obtain access MS token");
 
         return await GetMinecraftAccountAsync(msTokenResponse);
     }
@@ -77,7 +77,7 @@ public sealed class Authenticator : IDisposable
     public async Task<MicrosoftAccount> AuthenticateWithMsRefreshTokenAsync(string refreshToken)
     {
         var msTokenResponse = await RefreshMicrosoftTokenAsync(_clientId, refreshToken)
-                              ?? throw new InvalidOperationException("couldn't refresh MS token");
+                              ?? throw new InvalidOperationException("Couldn't refresh MS token");
 
         return await GetMinecraftAccountAsync(msTokenResponse);
     }
@@ -99,7 +99,7 @@ public sealed class Authenticator : IDisposable
 
         // Minecraft token
         var minecraftToken = await GetMinecraftTokenAsync(xstsToken, userHash)
-                             ?? throw new InvalidOperationException("no Minecraft token obtained");
+                             ?? throw new InvalidOperationException("No Minecraft token obtained");
         _logger?.LogInformation("Successfully retrieved Minecraft access token!");
 
         // Now we can get the player's Minecraft profile
@@ -150,7 +150,7 @@ public sealed class Authenticator : IDisposable
 
         var responseData =
             await response.Content.ReadFromJsonAsync(XboxLiveJsonContext.Default.XboxLiveAuthResponse) ??
-            throw new InvalidOperationException("xbox live auth error");
+            throw new InvalidOperationException("Xbox Live auth error");
 
         return responseData.Token;
     }
@@ -184,7 +184,7 @@ public sealed class Authenticator : IDisposable
             // 2148916262: TBD, happens rarely without any additional information.
             var responseErr =
                 await response.Content.ReadFromJsonAsync(XboxLiveJsonContext.Default.XstsAuthErrorResponse)
-                ?? throw new InvalidOperationException("xsts error parsing problem");
+                ?? throw new InvalidOperationException("XSTS error parsing problem");
 
             switch (responseErr.XErr)
             {
@@ -199,9 +199,9 @@ public sealed class Authenticator : IDisposable
 
         var responseData =
             await response.Content.ReadFromJsonAsync(XboxLiveJsonContext.Default.XstsAuthResponse) ??
-            throw new InvalidOperationException("xsts auth parsing problem");
+            throw new InvalidOperationException("XSTS auth parsing problem");
         var userHash = responseData.DisplayClaims.Xui.FirstOrDefault()?.Uhs ??
-                       throw new InvalidOperationException("xsts user hash error");
+                       throw new InvalidOperationException("XSTS user hash error");
 
         return (responseData.Token, userHash);
     }
@@ -217,14 +217,14 @@ public sealed class Authenticator : IDisposable
         if (!response.IsSuccessStatusCode)
         {
             var body = await response.Content.ReadAsStringAsync();
-            _logger?.LogError("minecraft login error:\n{Body}", body);
+            _logger?.LogError("Minecraft login error:\n{Body}", body);
         }
 
         response.EnsureSuccessStatusCode();
 
         var responseData =
             await response.Content.ReadFromJsonAsync(MicrosoftJsonContext.Default.MinecraftAuthResponse) ??
-            throw new InvalidOperationException("minecraft auth error");
+            throw new AuthenticationException("Minecraft auth error");
 
         return responseData.AccessToken;
     }
@@ -243,7 +243,7 @@ public sealed class Authenticator : IDisposable
         response.EnsureSuccessStatusCode();
 
         return await response.Content.ReadFromJsonAsync(MicrosoftJsonContext.Default.MinecraftProfile) ??
-               throw new InvalidOperationException("profile parse problem");
+               throw new InvalidOperationException("Problem parsing Minecraft profile");
     }
 
     /// <summary>
@@ -262,7 +262,7 @@ public sealed class Authenticator : IDisposable
 
         var entitlements =
             await response.Content.ReadFromJsonAsync(MicrosoftJsonContext.Default.EntitlementsResponse) ??
-            throw new InvalidOperationException("profile error");
+            throw new InvalidOperationException("Problem parsing Minecraft entitlements");
 
         // It should be enough that the items array is not empty.
         // https://minecraft.wiki/w/Microsoft_authentication
@@ -272,7 +272,7 @@ public sealed class Authenticator : IDisposable
         return (hasMinecraft, entitlements.SignerId);
     }
 
-    private (string CodeVerifier, string CodeChallenge) GeneratePkceCodes()
+    private static (string CodeVerifier, string CodeChallenge) GeneratePkceCodes()
     {
         // Generate a random 32-byte verifier and Base64 encode them with URL-safe alphabet/encoding
         // without padding. C# doesn't have bult-in URL-safe Base64 encoder and padding options.
@@ -302,27 +302,46 @@ public sealed class Authenticator : IDisposable
                       "response_mode=query&" +
                       $"scope={Uri.EscapeDataString(scope)}&" +
                       $"code_challenge={codeChallenge}&" +
-                      "code_challenge_method=S256";
+                      "code_challenge_method=S256&" +
+                      "prompt=select_account"; // force account selection i.e., no automatic login
 
-        // TODO: Add time-out, like 5 minutes?, to cancel the flow. And listen for closing the webpage.
         // Start an HTTP listener to catch the redirect
         using var listener = new HttpListener();
         listener.Prefixes.Add($"{_redirectUrl}/");
         listener.Start();
 
-        // Open the default system browser with the auth URL
-        Process.Start(new ProcessStartInfo(authUrl) { UseShellExecute = true });
-        _logger?.LogInformation("Your browser has been opened to sign in.");
 
-        // Wait for the OAuth2 redirect and extract the code
-        var context = await listener.GetContextAsync();
-        var code = context.Request.QueryString.Get("code")!;
+        // Open the default system browser with the auth URL
+        // WARN: There is no way of detecting if th webpage/tab/browser was closed, when opening
+        //  a URL with Process.Start(). For reliable detection we have to embed a WebView in our
+        //  app, or use the NativeWebDialog, but those are paid features of Avalonia.
+        Process.Start(new ProcessStartInfo(authUrl) { UseShellExecute = true });
+
+        // Wait for the OAuth2 redirect and extract the code.
+        // Automatically cancel after 5 minutes, so the app is not stuck forever.
+        var getContextTask = listener.GetContextAsync();
+        var timeoutTask = Task.Delay(TimeSpan.FromMinutes(5));
+        var completedTask = await Task.WhenAny(getContextTask, timeoutTask);
+        if (completedTask == timeoutTask)
+        {
+            listener.Stop();
+            throw new TimeoutException("Authentication cancelled after 5 minutes. Please try again.");
+        }
+
+        var context = await getContextTask;
+        var code = context.Request.QueryString.Get("code");
+
+        if (string.IsNullOrEmpty(code))
+        {
+            listener.Stop();
+            throw new InvalidOperationException("Authorization code not found in the response.");
+        }
 
         // TODO: send a nicer webpage instead of the simple text
         // Send a response to the browser to show a "success" message
         var responseBytes = Encoding.UTF8.GetBytes("<html><body>You can close this window now.</body></html>");
         context.Response.ContentLength64 = responseBytes.Length;
-        await context.Response.OutputStream.WriteAsync(responseBytes, 0, responseBytes.Length);
+        await context.Response.OutputStream.WriteAsync(responseBytes);
         context.Response.OutputStream.Close();
         listener.Stop();
 
@@ -341,13 +360,13 @@ public sealed class Authenticator : IDisposable
             { "code", authCode },
             { "redirect_uri", _redirectUrl },
             { "grant_type", "authorization_code" },
-            { "code_verifier", codeVerifier }
+            { "code_verifier", codeVerifier },
         };
 
         var request =
             new HttpRequestMessage(HttpMethod.Post, "https://login.microsoftonline.com/consumers/oauth2/v2.0/token")
             {
-                Content = new FormUrlEncodedContent(parameters)
+                Content = new FormUrlEncodedContent(parameters),
             };
 
         var response = await _httpClient.SendAsync(request);
@@ -362,13 +381,13 @@ public sealed class Authenticator : IDisposable
         {
             { "client_id", clientId },
             { "refresh_token", refreshToken },
-            { "grant_type", "refresh_token" }
+            { "grant_type", "refresh_token" },
         };
 
         var request =
             new HttpRequestMessage(HttpMethod.Post, "https://login.microsoftonline.com/consumers/oauth2/v2.0/token")
             {
-                Content = new FormUrlEncodedContent(parameters)
+                Content = new FormUrlEncodedContent(parameters),
             };
 
         var response = await _httpClient.SendAsync(request);
