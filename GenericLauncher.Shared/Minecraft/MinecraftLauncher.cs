@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CliWrap;
 using GenericLauncher.Database;
+using GenericLauncher.Database.Model;
 using GenericLauncher.Java;
 using GenericLauncher.Minecraft.Json;
 using GenericLauncher.Misc;

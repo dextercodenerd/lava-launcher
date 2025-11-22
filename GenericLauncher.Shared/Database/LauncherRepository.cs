@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
+using GenericLauncher.Database.Model;
 using GenericLauncher.Minecraft;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;

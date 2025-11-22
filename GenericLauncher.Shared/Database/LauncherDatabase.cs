@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using GenericLauncher.Database.Model;
 using GenericLauncher.Database.Orm;
 using GenericLauncher.Database.TypeHandlers;
 using GenericLauncher.Misc;
@@ -83,9 +84,10 @@ public sealed class LauncherDatabase
     {
         return _rwLock.ExecuteWriteAsync(() => _conn.ExecuteAsync(
             $@"
-            INSERT INTO {Account.Table} (Id, XboxUserId, Username, HasMinecraftLicense, SkinUrl, CapeUrl, AccessToken, RefreshToken, ExpiresAt)
-            VALUES (@Id, @XboxUserId, @Username, @HasMinecraftLicense, @SkinUrl, @CapeUrl, @AccessToken, @RefreshToken, @ExpiresAt)
+            INSERT INTO {Account.Table} (Id, XboxAccountState, XboxUserId, Username, HasMinecraftLicense, SkinUrl, CapeUrl, AccessToken, RefreshToken, ExpiresAt)
+            VALUES (@Id, @XboxAccountState, @XboxUserId, @Username, @HasMinecraftLicense, @SkinUrl, @CapeUrl, @AccessToken, @RefreshToken, @ExpiresAt)
             ON CONFLICT(Id) DO UPDATE SET
+                XboxAccountState=excluded.XboxAccountState,
                 XboxUserId=excluded.XboxUserId,
                 Username=excluded.Username,
                 HasMinecraftLicense=excluded.HasMinecraftLicense,

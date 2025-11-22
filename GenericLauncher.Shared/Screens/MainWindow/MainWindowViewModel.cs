@@ -8,7 +8,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GenericLauncher.Auth;
-using GenericLauncher.Database;
+using GenericLauncher.Database.Model;
 using GenericLauncher.Minecraft;
 using GenericLauncher.Misc;
 using GenericLauncher.Model;

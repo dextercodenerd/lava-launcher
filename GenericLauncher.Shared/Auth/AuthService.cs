@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using GenericLauncher.Database;
+using GenericLauncher.Database.Model;
 using Microsoft.Extensions.Logging;
 
 namespace GenericLauncher.Auth;
@@ -68,21 +69,20 @@ public class AuthService
     public async Task<Account> AuthenticateAsync()
     {
         var acc = await _auth.AuthenticateAsync();
-        if (acc.Profile is null)
-        {
-            // TODO: throw a custom exception?
-            throw new InvalidOperationException("user doesn't have a Minecraft profile");
-        }
+        var accState = XstsFailureToXboxAccountState(acc);
 
+        // TODO: We cannot use the Minecraft profile ID as the primary key in the DB, switch to MS
+        //  account id and add new column for MC id
         var account = new Account(
-            acc.Profile.Id,
+            acc.Profile?.Id ?? "",
+            accState,
             acc.XboxUserId,
-            acc.Profile.Name,
+            acc.Profile?.Name ?? "",
             acc.HasMinecraft,
-            acc.Profile.Skins.FirstOrDefault(s => s.State == "ACTIVE")?.Url,
-            acc.Profile.Capes.FirstOrDefault(s => s.State == "ACTIVE")?.Url,
+            acc.Profile?.Skins.FirstOrDefault(s => s.State == "ACTIVE")?.Url,
+            acc.Profile?.Capes.FirstOrDefault(s => s.State == "ACTIVE")?.Url,
             acc.MinecraftAccessToken,
-            acc.MsRefreshToken,
+            acc.MicrosoftRefreshToken,
             acc.ExpiresAt
         );
 
@@ -92,26 +92,37 @@ public class AuthService
         return account;
     }
 
+    private static XboxAccountState XstsFailureToXboxAccountState(MinecraftAccount acc)
+    {
+        var accState = acc.XboxAccountProblem switch
+        {
+            null => XboxAccountState.Ok,
+            XstsFailureReason.XboxAccountMissing => XboxAccountState.Missing,
+            XstsFailureReason.XboxAccountBanned => XboxAccountState.Banned,
+            XstsFailureReason.XboxAccountNotAvailable => XboxAccountState.NotAvailable,
+            XstsFailureReason.AgeVerificationRequired => XboxAccountState.AgeVerificationMissing,
+            _ => XboxAccountState.Unknown,
+        };
+        return accState;
+    }
+
     public async Task<Account> AuthenticateAccountAsync(Account acc)
     {
-        var refreshedAccount = await _auth.AuthenticateWithMsRefreshTokenAsync(acc.RefreshToken)
-                               ?? throw new InvalidOperationException("problem refreshing MS token");
+        var refreshedAccount = await _auth.AuthenticateWithMsRefreshTokenAsync(acc.RefreshToken);
+        var accState = XstsFailureToXboxAccountState(refreshedAccount);
 
-        if (refreshedAccount.Profile is null)
-        {
-            // TODO: throw a custom exception?
-            throw new InvalidOperationException("user doesn't have a Minecraft profile");
-        }
-
+        // TODO: We cannot use the Minecraft profile ID as the primary key in the DB, switch to MS
+        //  account id and add new column for MC id
         var newAcc = new Account(
-            refreshedAccount.Profile.Id,
+            refreshedAccount.Profile?.Id ?? "",
+            accState,
             refreshedAccount.XboxUserId,
-            refreshedAccount.Profile.Name,
+            refreshedAccount.Profile?.Name ?? "",
             refreshedAccount.HasMinecraft,
-            refreshedAccount.Profile.Skins.FirstOrDefault(s => s.State == "ACTIVE")?.Url,
-            refreshedAccount.Profile.Capes.FirstOrDefault(s => s.State == "ACTIVE")?.Url,
+            refreshedAccount.Profile?.Skins.FirstOrDefault(s => s.State == "ACTIVE")?.Url,
+            refreshedAccount.Profile?.Capes.FirstOrDefault(s => s.State == "ACTIVE")?.Url,
             refreshedAccount.MinecraftAccessToken,
-            refreshedAccount.MsRefreshToken,
+            refreshedAccount.MicrosoftRefreshToken,
             refreshedAccount.ExpiresAt
         );
 
