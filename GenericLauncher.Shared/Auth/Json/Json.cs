@@ -7,12 +7,16 @@ using GenericLauncher.Misc;
 namespace GenericLauncher.Auth.Json;
 
 public record MicrosoftTokenResponse(
+    string IdToken,
     string AccessToken,
     string TokenType,
     long ExpiresIn, // How long the access token is valid, in seconds.
     string Scope,
     string RefreshToken
 );
+
+public record MicrosoftUserResponse(
+    [property: JsonPropertyName("id")] string Id);
 
 public record XboxLiveAuthRequest(XboxLiveAuthProperties Properties, string RelyingParty, string TokenType);
 

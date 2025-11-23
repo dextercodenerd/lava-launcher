@@ -8,12 +8,15 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using GenericLauncher.Auth.Json;
-using GenericLauncher.Microsoft.Json;
+using Microsoft.Extensions.Logging;
+using MicrosoftJsonContext = GenericLauncher.Auth.Json.MicrosoftJsonContext;
 
 namespace GenericLauncher.Auth;
 
 public sealed partial class Authenticator
 {
+    private const string MsScope = "openid XboxLive.signin offline_access";
+
     private static (string CodeVerifier, string CodeChallenge) GeneratePkceCodes()
     {
         // Generate a random 32-byte verifier and Base64 encode them with URL-safe alphabet/encoding
@@ -36,13 +39,12 @@ public sealed partial class Authenticator
 
     private async Task<string> GetAuthorizationCodeAsync(string clientId, string codeChallenge)
     {
-        const string scope = "XboxLive.signin offline_access";
         var authUrl = "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize?" +
                       $"client_id={clientId}&" +
                       "response_type=code&" +
                       $"redirect_uri={Uri.EscapeDataString(_redirectUrl)}&" +
                       "response_mode=query&" +
-                      $"scope={Uri.EscapeDataString(scope)}&" +
+                      $"scope={Uri.EscapeDataString(MsScope)}&" +
                       $"code_challenge={codeChallenge}&" +
                       "code_challenge_method=S256&" +
                       "prompt=select_account"; // force account selection i.e., no automatic login
@@ -98,7 +100,7 @@ public sealed partial class Authenticator
         var parameters = new Dictionary<string, string>
         {
             { "client_id", clientId },
-            { "scope", "XboxLive.signin offline_access" },
+            { "scope", MsScope },
             { "code", authCode },
             { "redirect_uri", _redirectUrl },
             { "grant_type", "authorization_code" },
@@ -112,6 +114,13 @@ public sealed partial class Authenticator
             };
 
         var response = await _httpClient.SendAsync(request);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorBody = await response.Content.ReadAsStringAsync();
+            _logger?.LogWarning("Problem obtaining Microsoft token from code:\n{ErrorBody}", errorBody);
+        }
+
         response.EnsureSuccessStatusCode();
 
         return await response.Content.ReadFromJsonAsync(MicrosoftJsonContext.Default.MicrosoftTokenResponse)

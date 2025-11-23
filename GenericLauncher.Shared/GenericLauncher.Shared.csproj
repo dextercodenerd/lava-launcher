@@ -29,6 +29,7 @@
         <PackageReference Include="CliWrap" Version="3.9.0"/>
 
         <PackageReference Include="Microsoft.Data.Sqlite" Version="$(MsLibsVersion)"/>
+        <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.15.0"/>
 
         <!--Condition below is needed to remove Avalonia.Diagnostics package from build output in Release configuration.-->
         <PackageReference Condition="'$(Configuration)' == 'Debug'" Include="Avalonia.Diagnostics" Version="$(AvaloniaVersion)"/>

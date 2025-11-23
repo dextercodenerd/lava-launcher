@@ -1,7 +1,10 @@
 ﻿using System;
 using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using GenericLauncher.Auth.Json;
+using GenericLauncher.Auth.Jwt;
 using GenericLauncher.Misc;
 using Microsoft.Extensions.Logging;
 
@@ -14,6 +17,8 @@ public sealed partial class Authenticator : IDisposable
     private readonly string _redirectUrl; // OAuth redirect URL for the client ID
     private readonly HttpClient _httpClient;
 
+    private readonly MicrosoftJwtVerifier _jwtVerifier;
+
     public Authenticator(string azureAppClientId,
         string oauthRedirectUrl,
         HttpClient httpClient,
@@ -23,6 +28,7 @@ public sealed partial class Authenticator : IDisposable
         _clientId = azureAppClientId;
         _redirectUrl = oauthRedirectUrl;
         _httpClient = httpClient;
+        _jwtVerifier = new MicrosoftJwtVerifier(azureAppClientId, httpClient);
     }
 
     public async Task<MinecraftAccount> AuthenticateAsync()
@@ -49,6 +55,10 @@ public sealed partial class Authenticator : IDisposable
         var microsoftAccessToken = msTokenResponse.AccessToken;
         var expiresAt = UtcInstant.Now.Add(TimeSpan.FromSeconds(msTokenResponse.ExpiresIn));
 
+        var (tid, sub) = await _jwtVerifier.VerifyMicrosoftTokenAsync(msTokenResponse.IdToken);
+        // Hash 'tid' and 'sub' to create a privacy-focused unique id
+        var uniqueUserId = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{tid}_{sub}")));
+
         // Xbox Live token
         var xblToken = await GetXboxLiveTokenAsync(microsoftAccessToken);
 
@@ -64,6 +74,7 @@ public sealed partial class Authenticator : IDisposable
             _logger?.LogWarning(ex, "Problem with Xbox account");
 
             return new MinecraftAccount(
+                uniqueUserId,
                 false,
                 ex.Reason,
                 null,
@@ -117,6 +128,7 @@ public sealed partial class Authenticator : IDisposable
         // username.
 
         return new MinecraftAccount(
+            uniqueUserId,
             hasMinecraft || profile is not null,
             null,
             profile,

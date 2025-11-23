@@ -218,6 +218,8 @@ public sealed class MinecraftLauncher : IDisposable
                 }
 
                 lastMinecraftDownloadProgress = pp;
+
+                // ReSharper disable once AccessToDisposedClosure
                 progressReporter.ReportMinecraftDownloadProgress(pp);
             }),
             new Progress<double>(assetsProgress =>
@@ -232,6 +234,7 @@ public sealed class MinecraftLauncher : IDisposable
                 var v = Interlocked.Exchange(ref lastAssetsDownloadProgress, pp);
                 if (v != pp)
                 {
+                    // ReSharper disable once AccessToDisposedClosure
                     progressReporter.ReportAssetsDownloadProgress(pp);
                 }
             }),
@@ -247,6 +250,7 @@ public sealed class MinecraftLauncher : IDisposable
                 var v = Interlocked.Exchange(ref lastLibrariesDownloadProgress, pp);
                 if (v != pp)
                 {
+                    // ReSharper disable once AccessToDisposedClosure
                     progressReporter.ReportLibrariesDownloadProgress(pp);
                 }
             })
@@ -268,6 +272,8 @@ public sealed class MinecraftLauncher : IDisposable
                 }
 
                 lastJavaDownloadProgress = pp;
+
+                // ReSharper disable once AccessToDisposedClosure
                 progressReporter.ReportJavaDownloadProgress(pp);
             }));
 
@@ -283,6 +289,10 @@ public sealed class MinecraftLauncher : IDisposable
 
     public Task<ImmutableList<string>> LaunchInstance(MinecraftInstance instance, Account account)
     {
+        // TODO: Is there a better way to handle this? We will test this before calling this method
+        //  in the future, so it shouldn't happen then, shouldn't...
+        var username = account.Username ?? throw new ArgumentException("Username cannot be null");
+
         LaunchedInstances.TryAdd(instance.Id, RunningState.Launching);
         LaunchedInstancesChanged?.Invoke(this, EventArgs.Empty);
 
@@ -296,7 +306,7 @@ public sealed class MinecraftLauncher : IDisposable
                 var allArguments = BuildLaunchArguments(
                     mc,
                     workdir,
-                    account.Username,
+                    username,
                     account.Id,
                     account.XboxUserId ?? "0", // "0" is just a fallback value
                     account.AccessToken);

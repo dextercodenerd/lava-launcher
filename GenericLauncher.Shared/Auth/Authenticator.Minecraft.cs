@@ -5,8 +5,8 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Threading.Tasks;
 using GenericLauncher.Auth.Json;
-using GenericLauncher.Microsoft.Json;
 using Microsoft.Extensions.Logging;
+using MicrosoftJsonContext = GenericLauncher.Auth.Json.MicrosoftJsonContext;
 
 namespace GenericLauncher.Auth;
 

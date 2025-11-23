@@ -3,7 +3,7 @@ using System.Linq;
 using System.Net.Http.Json;
 using System.Threading.Tasks;
 using GenericLauncher.Auth.Json;
-using GenericLauncher.Microsoft.Json;
+using XboxLiveJsonContext = GenericLauncher.Auth.Json.XboxLiveJsonContext;
 
 namespace GenericLauncher.Auth;
 

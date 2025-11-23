@@ -84,10 +84,11 @@ public sealed class LauncherDatabase
     {
         return _rwLock.ExecuteWriteAsync(() => _conn.ExecuteAsync(
             $@"
-            INSERT INTO {Account.Table} (Id, XboxAccountState, XboxUserId, Username, HasMinecraftLicense, SkinUrl, CapeUrl, AccessToken, RefreshToken, ExpiresAt)
-            VALUES (@Id, @XboxAccountState, @XboxUserId, @Username, @HasMinecraftLicense, @SkinUrl, @CapeUrl, @AccessToken, @RefreshToken, @ExpiresAt)
+            INSERT INTO {Account.Table} (Id, XboxAccountState, MinecraftUserId, XboxUserId, Username, HasMinecraftLicense, SkinUrl, CapeUrl, AccessToken, RefreshToken, ExpiresAt)
+            VALUES (@Id, @XboxAccountState, @MinecraftUserId, @XboxUserId, @Username, @HasMinecraftLicense, @SkinUrl, @CapeUrl, @AccessToken, @RefreshToken, @ExpiresAt)
             ON CONFLICT(Id) DO UPDATE SET
                 XboxAccountState=excluded.XboxAccountState,
+                MinecraftUserId=excluded.MinecraftUserId,
                 XboxUserId=excluded.XboxUserId,
                 Username=excluded.Username,
                 HasMinecraftLicense=excluded.HasMinecraftLicense,

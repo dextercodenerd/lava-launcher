@@ -17,11 +17,13 @@ public enum XboxAccountState
 }
 
 public record Account(
-    // The user's UUID
+    // Microsoft account user id, this is obtained always
     string Id,
     XboxAccountState XboxAccountState,
+    // The user's Minecraft UUID, that is not set, when the account doesn't have Minecraft
+    string? MinecraftUserId,
     string? XboxUserId,
-    string Username,
+    string? Username,
     bool HasMinecraftLicense,
     string? SkinUrl,
     string? CapeUrl,
@@ -39,9 +41,10 @@ public record Account(
         conn.ExecuteAsync($@"
             CREATE TABLE IF NOT EXISTS {Table} (
                 Id TEXT PRIMARY KEY,
-                XboxAccountState TEXT,
+                XboxAccountState TEXT NOT NULL,
+                MinecraftUserId TEXT,
                 XboxUserId TEXT,
-                Username TEXT NOT NULL,
+                Username TEXT,
                 HasMinecraftLicense INTEGER NOT NULL CHECK (HasMinecraftLicense IN (0, 1)),
                 SkinUrl TEXT,
                 CapeUrl TEXT,
@@ -54,8 +57,9 @@ public record Account(
     {
         var id = row.Get<string>(row.Ord("Id"));
         var xboxAccountState = row.Get<string>(row.Ord("XboxAccountState"));
+        var minecraftUserId = row.Get<string?>(row.Ord("MinecraftUserId"));
         var xboxUserId = row.Get<string?>(row.Ord("XboxUserId"));
-        var username = row.Get<string>(row.Ord("Username"));
+        var username = row.Get<string?>(row.Ord("Username"));
         var hasMc = row.Get<bool>(row.Ord("HasMinecraftLicense"));
         var skinUrl = row.Get<string?>(row.Ord("SkinUrl"));
         var capeUrl = row.Get<string?>(row.Ord("CapeUrl"));
@@ -65,6 +69,7 @@ public record Account(
 
         return new Account(id,
             XboxAccountStateFromString(xboxAccountState),
+            minecraftUserId,
             xboxUserId,
             username,
             hasMc,
@@ -80,6 +85,7 @@ public record Account(
         cmd.Parameters.Clear();
         cmd.AddParam("@Id", v.Id, handlers, DbType.String);
         cmd.AddParam("@XboxAccountState", XboxAccountStateToString(v.XboxAccountState), handlers, DbType.String);
+        cmd.AddParam("@MinecraftUserId", v.MinecraftUserId, handlers, DbType.String);
         cmd.AddParam("@XboxUserId", v.XboxUserId, handlers, DbType.String);
         cmd.AddParam("@Username", v.Username, handlers, DbType.String);
         cmd.AddParam("@HasMinecraftLicense", v.HasMinecraftLicense, handlers, DbType.Int64);

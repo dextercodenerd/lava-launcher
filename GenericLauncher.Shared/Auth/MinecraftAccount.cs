@@ -5,6 +5,7 @@ using GenericLauncher.Misc;
 namespace GenericLauncher.Auth;
 
 public record MinecraftAccount(
+    string UniqueUserId, // based on Microsoft accounts tenant id and ID token's 'sub' claim
     bool HasMinecraft,
     XstsFailureReason? XboxAccountProblem,
     MinecraftProfile? Profile,

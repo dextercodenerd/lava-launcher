@@ -71,13 +71,12 @@ public class AuthService
         var acc = await _auth.AuthenticateAsync();
         var accState = XstsFailureToXboxAccountState(acc);
 
-        // TODO: We cannot use the Minecraft profile ID as the primary key in the DB, switch to MS
-        //  account id and add new column for MC id
         var account = new Account(
-            acc.Profile?.Id ?? "",
+            acc.UniqueUserId,
             accState,
+            acc.Profile?.Id,
             acc.XboxUserId,
-            acc.Profile?.Name ?? "",
+            acc.Profile?.Name,
             acc.HasMinecraft,
             acc.Profile?.Skins.FirstOrDefault(s => s.State == "ACTIVE")?.Url,
             acc.Profile?.Capes.FirstOrDefault(s => s.State == "ACTIVE")?.Url,
@@ -111,13 +110,12 @@ public class AuthService
         var refreshedAccount = await _auth.AuthenticateWithMsRefreshTokenAsync(acc.RefreshToken);
         var accState = XstsFailureToXboxAccountState(refreshedAccount);
 
-        // TODO: We cannot use the Minecraft profile ID as the primary key in the DB, switch to MS
-        //  account id and add new column for MC id
         var newAcc = new Account(
-            refreshedAccount.Profile?.Id ?? "",
+            refreshedAccount.UniqueUserId,
             accState,
+            refreshedAccount.Profile?.Id,
             refreshedAccount.XboxUserId,
-            refreshedAccount.Profile?.Name ?? "",
+            refreshedAccount.Profile?.Name,
             refreshedAccount.HasMinecraft,
             refreshedAccount.Profile?.Skins.FirstOrDefault(s => s.State == "ACTIVE")?.Url,
             refreshedAccount.Profile?.Capes.FirstOrDefault(s => s.State == "ACTIVE")?.Url,
