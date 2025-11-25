@@ -43,21 +43,25 @@
         <Setter Property="Template">
             <ControlTemplate>
                 <Border
+                    x:Name="PART_AvatarContainer"
                     Width="{TemplateBinding Width}"
                     Height="{TemplateBinding Height}"
                     Background="{TemplateBinding Background}"
                     CornerRadius="8"
                     ClipToBounds="True">
+
                     <Panel>
                         <!-- Avatar -->
                         <Image Width="{TemplateBinding Width}"
                                Height="{TemplateBinding Width}"
                                Source="{DynamicResource IconAddAccount}"
+                               IsHitTestVisible="False"
                                IsVisible="{TemplateBinding SelectedAccount, Converter={x:Static ObjectConverters.IsNull}}" />
                         <Image asyncImageLoader:ImageLoader.Source="{TemplateBinding AvatarUrl}"
                                Width="{TemplateBinding Width}"
                                Height="{TemplateBinding Width}"
                                Stretch="UniformToFill"
+                               IsHitTestVisible="False"
                                IsVisible="{TemplateBinding SelectedAccount, Converter={x:Static ObjectConverters.IsNotNull}}" />
 
                         <!-- Accounts combobox -->

@@ -2,6 +2,7 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key='Light'>
+            <SolidColorBrush x:Key='TintColor'>#f76806</SolidColorBrush>
 
             <!-- SVG icons tinting via CSS classes -->
             <!-- We are using separate SVG files per-theme because the Svg.Skia library does not
@@ -15,13 +16,17 @@
             <SolidColorBrush x:Key='IconColor'>#1a1a1a</SolidColorBrush>
             <SvgImage x:Key="IconAddAccount">/Assets/Icons/Lucide/user-round-plus-gray.svg</SvgImage>
             <SvgImage x:Key="IconDownload">/Assets/Icons/Lucide/download-gray.svg</SvgImage>
+            <SvgImage x:Key="IconLibrary">/Assets/Icons/Lucide/library-big-gray.svg</SvgImage>
         </ResourceDictionary>
 
         <ResourceDictionary x:Key='Dark'>
+            <SolidColorBrush x:Key='TintColor'>#f76806</SolidColorBrush>
+
             <!-- SVG icons tinting via CSS classes -->
             <SolidColorBrush x:Key='IconColor'>#ffffff</SolidColorBrush>
             <SvgImage x:Key="IconAddAccount">/Assets/Icons/Lucide/user-round-plus-white.svg</SvgImage>
             <SvgImage x:Key="IconDownload">/Assets/Icons/Lucide/download-white.svg</SvgImage>
+            <SvgImage x:Key="IconLibrary">/Assets/Icons/Lucide/library-big-white.svg</SvgImage>
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 </ResourceDictionary>

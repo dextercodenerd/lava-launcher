@@ -15,6 +15,7 @@ using GenericLauncher.Model;
 using GenericLauncher.Screens.EmptyStateScreen;
 using GenericLauncher.Screens.HomeScreen;
 using GenericLauncher.Screens.NewInstanceDialog;
+using GenericLauncher.Screens.ProfileScreen;
 using Microsoft.Extensions.Logging;
 
 namespace GenericLauncher.Screens.MainWindow;
@@ -39,6 +40,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private ViewModelBase _currentViewModel;
 
     public HomeViewModel HomeViewModel { get; }
+    public ProfileViewModel ProfileViewModel { get; }
     public NewInstanceDialogViewModel NewInstanceDialogViewModel { get; }
 
     // Design preview constructor
@@ -55,12 +57,18 @@ public partial class MainWindowViewModel : ViewModelBase
         _auth = authService;
         _minecraftLauncher = minecraftLauncher;
 
-        CurrentViewModel =
-            new EmptyStateViewModel(authService, App.LoggerFactory?.CreateLogger(nameof(EmptyStateViewModel)));
+        CurrentViewModel = new EmptyStateViewModel(
+            authService,
+            App.LoggerFactory?.CreateLogger(nameof(EmptyStateViewModel)));
 
-        HomeViewModel = new HomeViewModel(authService,
+        HomeViewModel = new HomeViewModel(
+            authService,
             minecraftLauncher,
             App.LoggerFactory?.CreateLogger(nameof(HomeViewModel)));
+
+        ProfileViewModel = new ProfileViewModel(
+            authService,
+            App.LoggerFactory?.CreateLogger(nameof(ProfileViewModel)));
 
         NewInstanceDialogViewModel = new NewInstanceDialogViewModel(
             minecraftLauncher,
@@ -108,19 +116,29 @@ public partial class MainWindowViewModel : ViewModelBase
                 new EmptyStateViewModel(_auth, App.LoggerFactory?.CreateLogger(nameof(EmptyStateViewModel)));
         }
 
-        if (selectedAccount is null)
-        {
-            SelectedAccount = null;
-            return;
-        }
+        SelectedAccount = selectedAccount is null
+            ? null
+            : Accounts.FirstOrDefault(a => a.Account?.Id == selectedAccount.Id);
 
-        SelectedAccount = Accounts.FirstOrDefault(a => a.Account?.Id == selectedAccount.Id);
+        ProfileViewModel.Account = SelectedAccount?.Account;
+    }
+
+    [RelayCommand]
+    private void OnClickLibrary()
+    {
+        CurrentViewModel = HomeViewModel;
     }
 
     [RelayCommand]
     private void OnClickNewInstance()
     {
         NewInstanceDialogViewModel.ShowNewMinecraftInstanceDialog = true;
+    }
+
+    [RelayCommand]
+    private void OnClickAccount()
+    {
+        CurrentViewModel = ProfileViewModel;
     }
 
     private async Task Login()

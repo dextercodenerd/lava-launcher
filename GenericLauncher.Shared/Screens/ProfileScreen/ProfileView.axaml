@@ -1,0 +1,120 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:profileScreen="clr-namespace:GenericLauncher.Screens.ProfileScreen"
+             mc:Ignorable="d"
+             d:DesignWidth="800"
+             d:DesignHeight="450"
+             x:DataType="profileScreen:ProfileViewModel"
+             x:Class="GenericLauncher.Screens.ProfileScreen.ProfileView">
+
+    <UserControl.DataContext>
+        <profileScreen:ProfileViewModel />
+    </UserControl.DataContext>
+
+    <!-- Just for designer preview; inherited from Window in runtime -->
+    <UserControl.Styles>
+        <StyleInclude Source="/Styles.axaml" />
+    </UserControl.Styles>
+
+    <StackPanel Margin="16" Spacing="16">
+
+        <!-- Top Center Section -->
+        <StackPanel HorizontalAlignment="Center" Spacing="16">
+
+            <!-- Minecraft Username or Fallback -->
+            <TextBlock Text="{Binding Account.Username, FallbackValue='No Minecraft Account'}"
+                       Classes="h1"
+                       HorizontalAlignment="Center" />
+
+            <!-- Skin and cape -->
+            <StackPanel HorizontalAlignment="Center"
+                        Spacing="16"
+                        IsVisible="{Binding HasMinecraftLicense}">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="20">
+
+                    <!-- Skin Image -->
+                    <Border BorderBrush="#CCCCCC" BorderThickness="1" CornerRadius="5"
+                            IsVisible="{Binding Account.SkinUrl, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                        <Image Source="{Binding Account.SkinUrl}"
+                               Width="64" Height="128"
+                               Stretch="Uniform" />
+                    </Border>
+
+                    <!-- Cape Image -->
+                    <Border BorderBrush="#CCCCCC" BorderThickness="1" CornerRadius="5"
+                            IsVisible="{Binding Account.CapeUrl, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                        <Image Source="{Binding Account.CapeUrl}"
+                               Width="64" Height="32"
+                               Stretch="Uniform" />
+                    </Border>
+                </StackPanel>
+
+                <TextBlock HorizontalAlignment="Center" Text="Player Appearance" />
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Account Information -->
+        <Border Background="#F5F5F5"
+                CornerRadius="8"
+                Padding="16"
+                IsVisible="{Binding !ShowXboxStateMessage}">
+            <StackPanel Spacing="10">
+                <TextBlock Text="Account Information" FontSize="16" FontWeight="SemiBold" />
+
+                <Grid ColumnDefinitions="150,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                    <TextBlock Text="Microsoft ID:" Grid.Row="0" Grid.Column="0" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Account.Id}" Grid.Row="0" Grid.Column="1" TextWrapping="Wrap" />
+
+                    <TextBlock Text="Xbox User ID:" Grid.Row="1" Grid.Column="0" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Account.XboxUserId, FallbackValue='Not available'}"
+                               Grid.Row="1" Grid.Column="1" />
+
+                    <TextBlock Text="Minecraft UUID:" Grid.Row="2" Grid.Column="0" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Account.MinecraftUserId, FallbackValue='Not available'}"
+                               Grid.Row="2" Grid.Column="1" />
+
+                    <TextBlock Text="Token Expires:" Grid.Row="3" Grid.Column="0" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Account.ExpiresAt}" Grid.Row="3" Grid.Column="1" />
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- Xbox Account State Messages -->
+        <Border Background="{Binding XboxStateBackground}" CornerRadius="8" Padding="15"
+                IsVisible="{Binding ShowXboxStateMessage}">
+            <StackPanel Spacing="10">
+                <TextBlock Text="{Binding XboxStateTitle}"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           Foreground="{Binding XboxStateTitleColor}" />
+
+                <TextBlock Text="{Binding XboxStateMessage}"
+                           TextWrapping="Wrap" />
+
+                <Button Content="Check/Refresh Account"
+                        Command="{Binding ClickRefreshAccountCommand}"
+                        HorizontalAlignment="Left"
+                        IsVisible="{Binding ShowRefreshButton}" />
+            </StackPanel>
+        </Border>
+
+        <!-- No Minecraft License Message -->
+        <Border Background="#FFF3CD" CornerRadius="8" Padding="15"
+                IsVisible="{Binding !HasMinecraftLicense}">
+            <StackPanel Spacing="10">
+                <TextBlock Text="No Minecraft License"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           Foreground="#856404" />
+
+                <TextBlock
+                    Text="This account does not have a Minecraft license. You need to purchase Minecraft to play the game."
+                    TextWrapping="Wrap"
+                    Foreground="#856404" />
+            </StackPanel>
+        </Border>
+
+    </StackPanel>
+</UserControl>
