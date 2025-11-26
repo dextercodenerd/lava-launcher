@@ -9,9 +9,9 @@
              x:DataType="profileScreen:ProfileViewModel"
              x:Class="GenericLauncher.Screens.ProfileScreen.ProfileView">
 
-    <UserControl.DataContext>
+    <Design.DataContext>
         <profileScreen:ProfileViewModel />
-    </UserControl.DataContext>
+    </Design.DataContext>
 
     <!-- Just for designer preview; inherited from Window in runtime -->
     <UserControl.Styles>
@@ -24,17 +24,17 @@
         <StackPanel HorizontalAlignment="Center" Spacing="16">
 
             <!-- Minecraft Username or Fallback -->
-            <TextBlock Text="{Binding Account.Username, FallbackValue='No Minecraft Account'}"
-                       Classes="h1"
-                       HorizontalAlignment="Center" />
+            <TextBlock
+                Classes="h1"
+                HorizontalAlignment="Center"
+                Text="{Binding Account.Username, FallbackValue='No Minecraft Account'}" />
 
             <!-- Skin and cape -->
             <StackPanel HorizontalAlignment="Center"
                         Spacing="16"
                         IsVisible="{Binding HasMinecraftLicense}">
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="20">
 
-                    <!-- Skin Image -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="20">
                     <Border BorderBrush="#CCCCCC" BorderThickness="1" CornerRadius="5"
                             IsVisible="{Binding Account.SkinUrl, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                         <Image Source="{Binding Account.SkinUrl}"
@@ -42,7 +42,6 @@
                                Stretch="Uniform" />
                     </Border>
 
-                    <!-- Cape Image -->
                     <Border BorderBrush="#CCCCCC" BorderThickness="1" CornerRadius="5"
                             IsVisible="{Binding Account.CapeUrl, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                         <Image Source="{Binding Account.CapeUrl}"
@@ -51,23 +50,23 @@
                     </Border>
                 </StackPanel>
 
-                <TextBlock HorizontalAlignment="Center" Text="Player Appearance" />
+                <TextBlock HorizontalAlignment="Center" Text="Player appearance" />
             </StackPanel>
         </StackPanel>
 
         <!-- Account Information -->
-        <Border Background="#F5F5F5"
+        <Border Background="#010101"
                 CornerRadius="8"
                 Padding="16"
-                IsVisible="{Binding !ShowXboxStateMessage}">
+                IsVisible="{Binding HasValidAccount}">
             <StackPanel Spacing="10">
                 <TextBlock Text="Account Information" FontSize="16" FontWeight="SemiBold" />
 
                 <Grid ColumnDefinitions="150,*" RowDefinitions="Auto,Auto,Auto,Auto">
-                    <TextBlock Text="Microsoft ID:" Grid.Row="0" Grid.Column="0" FontWeight="SemiBold" />
+                    <TextBlock Text="Global account ID:" Grid.Row="0" Grid.Column="0" FontWeight="SemiBold" />
                     <TextBlock Text="{Binding Account.Id}" Grid.Row="0" Grid.Column="1" TextWrapping="Wrap" />
 
-                    <TextBlock Text="Xbox User ID:" Grid.Row="1" Grid.Column="0" FontWeight="SemiBold" />
+                    <TextBlock Text="Xbox user ID:" Grid.Row="1" Grid.Column="0" FontWeight="SemiBold" />
                     <TextBlock Text="{Binding Account.XboxUserId, FallbackValue='Not available'}"
                                Grid.Row="1" Grid.Column="1" />
 
@@ -75,7 +74,7 @@
                     <TextBlock Text="{Binding Account.MinecraftUserId, FallbackValue='Not available'}"
                                Grid.Row="2" Grid.Column="1" />
 
-                    <TextBlock Text="Token Expires:" Grid.Row="3" Grid.Column="0" FontWeight="SemiBold" />
+                    <TextBlock Text="Token expires:" Grid.Row="3" Grid.Column="0" FontWeight="SemiBold" />
                     <TextBlock Text="{Binding Account.ExpiresAt}" Grid.Row="3" Grid.Column="1" />
                 </Grid>
             </StackPanel>

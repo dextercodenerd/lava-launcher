@@ -15,6 +15,8 @@ public partial class ProfileViewModel : ViewModelBase
 
     [ObservableProperty] private Account? _account = null;
 
+    public bool HasValidAccount => Account is not null;
+
     public bool HasMinecraftLicense => Account?.HasMinecraftLicense == true;
 
     public bool ShowXboxStateMessage => Account?.XboxAccountState != XboxAccountState.Ok;
@@ -85,6 +87,7 @@ public partial class ProfileViewModel : ViewModelBase
     partial void OnAccountChanged(Account? value)
     {
         // Manually report computed properties' changes
+        OnPropertyChanged(nameof(HasValidAccount));
         OnPropertyChanged(nameof(HasMinecraftLicense));
         OnPropertyChanged(nameof(ShowXboxStateMessage));
         OnPropertyChanged(nameof(XboxStateTitle));

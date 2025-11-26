@@ -3,7 +3,7 @@
         <AppVersion>0.0.1</AppVersion>
         <Nullable>enable</Nullable>
 
-        <AvaloniaVersion>11.3.8</AvaloniaVersion>
+        <AvaloniaVersion>11.3.9</AvaloniaVersion>
         <AvaloniaSvgControlsVersion>11.3.6.2</AvaloniaSvgControlsVersion>
         <MsLibsVersion>10.0.0</MsLibsVersion>
     </PropertyGroup>

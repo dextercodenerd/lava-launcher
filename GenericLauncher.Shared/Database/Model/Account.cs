@@ -17,10 +17,10 @@ public enum XboxAccountState
 }
 
 public record Account(
-    // Microsoft account user id, this is obtained always
+    // Global account id -- hash of Microsoft 'tid' (tenant id) and 'sub' JWT claims
     string Id,
     XboxAccountState XboxAccountState,
-    // The user's Minecraft UUID, that is not set, when the account doesn't have Minecraft
+    // The user's Minecraft UUID -- null, when the account doesn't have Minecraft
     string? MinecraftUserId,
     string? XboxUserId,
     string? Username,

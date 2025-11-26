@@ -156,10 +156,8 @@
                         </Transitions>
                     </Border.Transitions>
 
+                    <!-- Screens that are swapped via the CurrentViewModel property and DataTemplates -->
                     <ContentControl Content="{Binding CurrentViewModel}" />
-                    <!--
-                    <homeScreen:HomeView DataContext="{Binding HomeViewModel}" />
-                    -->
                 </Border>
             </Panel>
         </Panel>
