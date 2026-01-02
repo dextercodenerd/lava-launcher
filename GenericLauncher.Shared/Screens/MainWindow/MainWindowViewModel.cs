@@ -57,6 +57,7 @@ public partial class MainWindowViewModel : ViewModelBase
         _auth = authService;
         _minecraftLauncher = minecraftLauncher;
 
+        // TODO: start with loading state
         CurrentViewModel = new EmptyStateViewModel(
             authService,
             App.LoggerFactory?.CreateLogger(nameof(EmptyStateViewModel)));
@@ -81,6 +82,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         UpdateAccountsUi(_auth.Accounts, _auth.ActiveAccount);
         _auth.AccountsChanged += OnAuthAccountChanged;
+        // We don't listen to _auth.ActiveAccount changes here, because here we ara making the changes themselves.
     }
 
     private void OnAuthAccountChanged(object? sender, EventArgs e)
@@ -106,12 +108,15 @@ public partial class MainWindowViewModel : ViewModelBase
 
         Accounts.Add(new AccountListItem(null, true));
 
-        if (accounts.Count > 0)
+        // TODO: Update once we have initial loading state/screen
+        if (accounts.Count > 0 && CurrentViewModel is EmptyStateViewModel)
         {
+            // Switch to home only from Empty state and loading state
             CurrentViewModel = HomeViewModel;
         }
-        else if (CurrentViewModel is not EmptyStateViewModel)
+        else if (accounts.Count == 00 && CurrentViewModel is not EmptyStateViewModel)
         {
+            // Switch to empty state, when there are no accounts
             CurrentViewModel =
                 new EmptyStateViewModel(_auth, App.LoggerFactory?.CreateLogger(nameof(EmptyStateViewModel)));
         }
@@ -119,8 +124,6 @@ public partial class MainWindowViewModel : ViewModelBase
         SelectedAccount = selectedAccount is null
             ? null
             : Accounts.FirstOrDefault(a => a.Account?.Id == selectedAccount.Id);
-
-        ProfileViewModel.Account = SelectedAccount?.Account;
     }
 
     [RelayCommand]
@@ -187,6 +190,7 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (value?.IsLogin != true)
         {
+            _auth?.ActiveAccount = value?.Account;
             return;
         }
 
