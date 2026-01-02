@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
+using GenericLauncher.Database.Model;
 using GenericLauncher.Minecraft;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
@@ -48,6 +49,12 @@ public class LauncherRepository
     {
         await _initTask;
         await _db.UpsertAccountAsync(account);
+    }
+
+    public async Task<bool> RemoveAccountAsync(Account account)
+    {
+        await _initTask;
+        return await _db.RemoveAccountAsync(account.Id);
     }
 
     public async Task<IEnumerable<MinecraftInstance>> GetAllMinecraftInstancesAsync()

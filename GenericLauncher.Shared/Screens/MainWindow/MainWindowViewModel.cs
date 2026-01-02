@@ -1,5 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
@@ -8,12 +8,14 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GenericLauncher.Auth;
-using GenericLauncher.Database;
+using GenericLauncher.Database.Model;
 using GenericLauncher.Minecraft;
 using GenericLauncher.Misc;
 using GenericLauncher.Model;
+using GenericLauncher.Screens.EmptyStateScreen;
 using GenericLauncher.Screens.HomeScreen;
 using GenericLauncher.Screens.NewInstanceDialog;
+using GenericLauncher.Screens.ProfileScreen;
 using Microsoft.Extensions.Logging;
 
 namespace GenericLauncher.Screens.MainWindow;
@@ -35,7 +37,10 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private ObservableCollection<AccountListItem> _accounts = [];
     [ObservableProperty] private AccountListItem? _selectedAccount;
 
+    [ObservableProperty] private ViewModelBase _currentViewModel;
+
     public HomeViewModel HomeViewModel { get; }
+    public ProfileViewModel ProfileViewModel { get; }
     public NewInstanceDialogViewModel NewInstanceDialogViewModel { get; }
 
     // Design preview constructor
@@ -52,9 +57,18 @@ public partial class MainWindowViewModel : ViewModelBase
         _auth = authService;
         _minecraftLauncher = minecraftLauncher;
 
-        HomeViewModel = new HomeViewModel(authService,
+        CurrentViewModel = new EmptyStateViewModel(
+            authService,
+            App.LoggerFactory?.CreateLogger(nameof(EmptyStateViewModel)));
+
+        HomeViewModel = new HomeViewModel(
+            authService,
             minecraftLauncher,
             App.LoggerFactory?.CreateLogger(nameof(HomeViewModel)));
+
+        ProfileViewModel = new ProfileViewModel(
+            authService,
+            App.LoggerFactory?.CreateLogger(nameof(ProfileViewModel)));
 
         NewInstanceDialogViewModel = new NewInstanceDialogViewModel(
             minecraftLauncher,
@@ -71,18 +85,15 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private void OnAuthAccountChanged(object? sender, EventArgs e)
     {
-        Dispatcher.UIThread.Post(() =>
+        if (_auth is null)
         {
-            if (_auth is null)
-            {
-                return;
-            }
+            return;
+        }
 
-            UpdateAccountsUi(_auth.Accounts, _auth.ActiveAccount);
-        });
+        Dispatcher.UIThread.Post(() => { UpdateAccountsUi(_auth.Accounts, _auth.ActiveAccount); });
     }
 
-    private void UpdateAccountsUi(IList<Account> accounts, Account? selectedAccount)
+    private void UpdateAccountsUi(ImmutableList<Account> accounts, Account? selectedAccount)
     {
         Dispatcher.UIThread.VerifyAccess();
 
@@ -95,19 +106,39 @@ public partial class MainWindowViewModel : ViewModelBase
 
         Accounts.Add(new AccountListItem(null, true));
 
-        if (selectedAccount is null)
+        if (accounts.Count > 0)
         {
-            SelectedAccount = null;
-            return;
+            CurrentViewModel = HomeViewModel;
+        }
+        else if (CurrentViewModel is not EmptyStateViewModel)
+        {
+            CurrentViewModel =
+                new EmptyStateViewModel(_auth, App.LoggerFactory?.CreateLogger(nameof(EmptyStateViewModel)));
         }
 
-        SelectedAccount = Accounts.FirstOrDefault(a => a.Account?.Id == selectedAccount.Id);
+        SelectedAccount = selectedAccount is null
+            ? null
+            : Accounts.FirstOrDefault(a => a.Account?.Id == selectedAccount.Id);
+
+        ProfileViewModel.Account = SelectedAccount?.Account;
+    }
+
+    [RelayCommand]
+    private void OnClickLibrary()
+    {
+        CurrentViewModel = HomeViewModel;
     }
 
     [RelayCommand]
     private void OnClickNewInstance()
     {
         NewInstanceDialogViewModel.ShowNewMinecraftInstanceDialog = true;
+    }
+
+    [RelayCommand]
+    private void OnClickAccount()
+    {
+        CurrentViewModel = ProfileViewModel;
     }
 
     private async Task Login()

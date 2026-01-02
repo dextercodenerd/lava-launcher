@@ -1,5 +1,5 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
-using GenericLauncher.Database;
+using GenericLauncher.Database.Model;
 using GenericLauncher.Minecraft;
 
 namespace GenericLauncher.Model;

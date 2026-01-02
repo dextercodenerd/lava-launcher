@@ -1,0 +1,34 @@
+﻿<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key='Light'>
+            <SolidColorBrush x:Key='TintColor'>#f76806</SolidColorBrush>
+
+            <!-- SVG icons tinting via CSS classes -->
+            <!-- We are using separate SVG files per-theme because the Svg.Skia library does not
+                 support icon's tinting. We could use Svg.Skia CSS styling, but we would need
+                 separate values when tinting stroke, fill and stroke & fill at the same time.
+                 BUT this does not solve and edge case where there are multiple paths which use
+                 stroke and fill independently e.g. one path with fill and another with stroke.
+                 That would need separate class names for every case and manually assign them
+                 per-path. Assigning just one class is already error-prone, so we settled on
+                 multiple SVG files for simplicity for everyone.  -->
+            <SolidColorBrush x:Key='IconColor'>#1a1a1a</SolidColorBrush>
+            <SvgImage x:Key="IconAddAccount">/Assets/Icons/Lucide/user-round-plus-gray.svg</SvgImage>
+            <SvgImage x:Key="IconLogout">/Assets/Icons/Lucide/log-out-gray.svg</SvgImage>
+            <SvgImage x:Key="IconDownload">/Assets/Icons/Lucide/download-gray.svg</SvgImage>
+            <SvgImage x:Key="IconLibrary">/Assets/Icons/Lucide/library-big-gray.svg</SvgImage>
+        </ResourceDictionary>
+
+        <ResourceDictionary x:Key='Dark'>
+            <SolidColorBrush x:Key='TintColor'>#f76806</SolidColorBrush>
+
+            <!-- SVG icons tinting via CSS classes -->
+            <SolidColorBrush x:Key='IconColor'>#ffffff</SolidColorBrush>
+            <SvgImage x:Key="IconAddAccount">/Assets/Icons/Lucide/user-round-plus-white.svg</SvgImage>
+            <SvgImage x:Key="IconLogout">/Assets/Icons/Lucide/log-out-white.svg</SvgImage>
+            <SvgImage x:Key="IconDownload">/Assets/Icons/Lucide/download-white.svg</SvgImage>
+            <SvgImage x:Key="IconLibrary">/Assets/Icons/Lucide/library-big-white.svg</SvgImage>
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

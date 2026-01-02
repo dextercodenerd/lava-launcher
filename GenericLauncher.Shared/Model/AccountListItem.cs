@@ -1,4 +1,4 @@
-﻿using GenericLauncher.Database;
+﻿using GenericLauncher.Database.Model;
 
 namespace GenericLauncher.Model;
 

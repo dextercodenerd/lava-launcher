@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using GenericLauncher.Database.Model;
 using GenericLauncher.Database.Orm;
 using GenericLauncher.Database.TypeHandlers;
 using GenericLauncher.Misc;
@@ -83,9 +84,11 @@ public sealed class LauncherDatabase
     {
         return _rwLock.ExecuteWriteAsync(() => _conn.ExecuteAsync(
             $@"
-            INSERT INTO {Account.Table} (Id, XboxUserId, Username, HasMinecraftLicense, SkinUrl, CapeUrl, AccessToken, RefreshToken, ExpiresAt)
-            VALUES (@Id, @XboxUserId, @Username, @HasMinecraftLicense, @SkinUrl, @CapeUrl, @AccessToken, @RefreshToken, @ExpiresAt)
+            INSERT INTO {Account.Table} (Id, XboxAccountState, MinecraftUserId, XboxUserId, Username, HasMinecraftLicense, SkinUrl, CapeUrl, AccessToken, RefreshToken, ExpiresAt)
+            VALUES (@Id, @XboxAccountState, @MinecraftUserId, @XboxUserId, @Username, @HasMinecraftLicense, @SkinUrl, @CapeUrl, @AccessToken, @RefreshToken, @ExpiresAt)
             ON CONFLICT(Id) DO UPDATE SET
+                XboxAccountState=excluded.XboxAccountState,
+                MinecraftUserId=excluded.MinecraftUserId,
                 XboxUserId=excluded.XboxUserId,
                 Username=excluded.Username,
                 HasMinecraftLicense=excluded.HasMinecraftLicense,
@@ -96,6 +99,14 @@ public sealed class LauncherDatabase
                 ExpiresAt=excluded.ExpiresAt
             ",
             account));
+    }
+
+    public async Task<bool> RemoveAccountAsync(string accountId)
+    {
+        var count = await _rwLock.ExecuteWriteAsync(() =>
+            _conn.ExecuteScalarAsync<long>($"DELETE FROM {Account.Table} WHERE Id = @Id;",
+                bind: cmd => { cmd.Parameters.AddWithValue("@Id", accountId); }));
+        return count == 1;
     }
 
     public Task<IEnumerable<MinecraftInstance>> GetAllMinecraftInstancesAsync()

@@ -22,10 +22,13 @@
 
         <!-- Login item template -->
         <DataTemplate x:Key="LoginItemTemplate">
-            <TextBlock
-                HorizontalAlignment="Center"
-                FontSize="14"
-                Text="++ Login ++" />
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <Image Width="16" Source="{DynamicResource IconAddAccount}" />
+                <TextBlock
+                    HorizontalAlignment="Center"
+                    FontSize="14"
+                    Text="Log In" />
+            </StackPanel>
         </DataTemplate>
 
         <!-- Template selector -->
@@ -40,17 +43,26 @@
         <Setter Property="Template">
             <ControlTemplate>
                 <Border
+                    x:Name="PART_AvatarContainer"
                     Width="{TemplateBinding Width}"
                     Height="{TemplateBinding Height}"
                     Background="{TemplateBinding Background}"
                     CornerRadius="8"
                     ClipToBounds="True">
+
                     <Panel>
                         <!-- Avatar -->
+                        <Image Width="{TemplateBinding Width}"
+                               Height="{TemplateBinding Width}"
+                               Source="{DynamicResource IconAddAccount}"
+                               IsHitTestVisible="False"
+                               IsVisible="{TemplateBinding SelectedAccount, Converter={x:Static ObjectConverters.IsNull}}" />
                         <Image asyncImageLoader:ImageLoader.Source="{TemplateBinding AvatarUrl}"
                                Width="{TemplateBinding Width}"
                                Height="{TemplateBinding Width}"
-                               Stretch="UniformToFill" />
+                               Stretch="UniformToFill"
+                               IsHitTestVisible="False"
+                               IsVisible="{TemplateBinding SelectedAccount, Converter={x:Static ObjectConverters.IsNotNull}}" />
 
                         <!-- Accounts combobox -->
                         <Border Background="#44000000"

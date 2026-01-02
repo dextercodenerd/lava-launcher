@@ -1,9 +1,9 @@
 ﻿using System.Text.Json.Serialization;
-using GenericLauncher.Auth.Json;
 
-namespace GenericLauncher.Microsoft.Json;
+namespace GenericLauncher.Auth.Json;
 
 [JsonSerializable(typeof(MicrosoftTokenResponse))]
+[JsonSerializable(typeof(MicrosoftUserResponse))]
 [JsonSerializable(typeof(MinecraftAuthRequest))]
 [JsonSerializable(typeof(MinecraftAuthResponse))]
 [JsonSerializable(typeof(EntitlementsResponse))]

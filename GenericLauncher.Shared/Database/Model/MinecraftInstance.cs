@@ -2,83 +2,14 @@
 using System.Data;
 using System.Threading.Tasks;
 using GenericLauncher.Database.Orm;
-using GenericLauncher.Misc;
 using Microsoft.Data.Sqlite;
 
-namespace GenericLauncher.Database;
-
-public record Account(
-    // The user's UUID
-    string Id,
-    string? XboxUserId,
-    string Username,
-    bool HasMinecraftLicense,
-    string? SkinUrl,
-    string? CapeUrl,
-    string AccessToken,
-    string RefreshToken,
-    UtcInstant ExpiresAt
-) : IRecord<Account>, IParams<Account>
-{
-    // We settled on C# convention of PascalCase names for tables & columns for easy use of models
-    // and everything. Also, we escape the table name with square brackets [].
-    public const string Table = "[Accounts]";
-
-    // STRICT tables catch a lot of random mistakes ;)
-
-    // TODO: Because of STRICT, and Dapper's broken overriding of default TypeHandlers, we must
-    //  use TEXT type for timestamps. Waiting for Dapper 3
-    //  https://github.com/DapperLib/Dapper/pull/471
-    //  https://github.com/DapperLib/Dapper/issues/206
-    //  https://github.com/DapperLib/Dapper/issues/688
-    public static Task<int> MigrateTable(SqliteConnection conn) =>
-        conn.ExecuteAsync($@"
-            CREATE TABLE IF NOT EXISTS {Table} (
-                Id TEXT PRIMARY KEY,
-                XboxUserId TEXT,
-                Username TEXT NOT NULL,
-                HasMinecraftLicense INTEGER NOT NULL CHECK (HasMinecraftLicense IN (0, 1)),
-                SkinUrl TEXT,
-                CapeUrl TEXT,
-                AccessToken TEXT NOT NULL,
-                RefreshToken TEXT NOT NULL,
-                ExpiresAt INTEGER NOT NULL
-            ) STRICT");
-
-    public static Account Read(Row row)
-    {
-        var id = row.Get<string>(row.Ord("Id"));
-        var xboxUserId = row.Get<string?>(row.Ord("XboxUserId"));
-        var username = row.Get<string>(row.Ord("Username"));
-        var hasMc = row.Get<bool>(row.Ord("HasMinecraftLicense"));
-        var skinUrl = row.Get<string?>(row.Ord("SkinUrl"));
-        var capeUrl = row.Get<string?>(row.Ord("CapeUrl"));
-        var accessToken = row.Get<string>(row.Ord("AccessToken"));
-        var refreshToken = row.Get<string>(row.Ord("RefreshToken"));
-        var expireAt = row.Get<UtcInstant>(row.Ord("ExpiresAt"));
-
-        return new Account(id, xboxUserId, username, hasMc, skinUrl, capeUrl, accessToken, refreshToken, expireAt);
-    }
-
-    public static void Bind(SqliteCommand cmd, Account v, Orm.TypeHandlers handlers)
-    {
-        cmd.Parameters.Clear();
-        cmd.AddParam("@Id", v.Id, handlers, DbType.String);
-        cmd.AddParam("@XboxUserId", v.XboxUserId, handlers, DbType.String);
-        cmd.AddParam("@Username", v.Username, handlers, DbType.String);
-        cmd.AddParam("@HasMinecraftLicense", v.HasMinecraftLicense, handlers, DbType.Int64);
-        cmd.AddParam("@SkinUrl", v.SkinUrl, handlers, DbType.String);
-        cmd.AddParam("@CapeUrl", v.CapeUrl, handlers, DbType.String);
-        cmd.AddParam("@AccessToken", v.AccessToken, handlers, DbType.String);
-        cmd.AddParam("@RefreshToken", v.RefreshToken, handlers, DbType.String);
-        cmd.AddParam("@ExpiresAt", v.ExpiresAt, handlers, DbType.Int64);
-    }
-}
+namespace GenericLauncher.Database.Model;
 
 // TODO: Dapper.AOT has many problems e.g.,
 //  1) there is no annotation to ignore property, so it maps everything
 //  2) it ignores List<string> TypeHandler
-//  3) a + 2 together forces us to do a dance via a method, if we want List<string> data in the DB
+//  3) 1 + 2 together forces us to do a dance via a method, if we want List<string> data in the DB
 //  follow:
 //  https://github.com/DapperLib/DapperAOT/pull/162
 //  https://github.com/DapperLib/DapperAOT/pull/151
@@ -218,7 +149,7 @@ public record MinecraftInstance(
         cmd.Parameters.Clear();
         cmd.AddParam("@Id", v.Id, handlers, DbType.String);
         cmd.AddParam("@VersionId", v.VersionId, handlers, DbType.String);
-        cmd.AddParam("State", StateToString(v.State), handlers, DbType.String);
+        cmd.AddParam("@State", StateToString(v.State), handlers, DbType.String);
         cmd.AddParam("@Type", v.Type, handlers, DbType.String);
         cmd.AddParam("@Folder", v.Folder, handlers, DbType.String);
         cmd.AddParam("@RequiredJavaVersion", v.RequiredJavaVersion, handlers, DbType.Int64);

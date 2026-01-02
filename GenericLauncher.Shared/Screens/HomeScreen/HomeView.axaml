@@ -6,6 +6,7 @@
              xmlns:avalonia="clr-namespace:GenericLauncher.Avalonia"
              xmlns:controls="clr-namespace:GenericLauncher.Controls"
              xmlns:model="clr-namespace:GenericLauncher.Model"
+             xmlns:mainWindow="clr-namespace:GenericLauncher.Screens.MainWindow"
              mc:Ignorable="d"
              d:DesignWidth="800"
              d:DesignHeight="450"
@@ -18,30 +19,45 @@
         <homeScreen:HomeViewModel />
     </Design.DataContext>
 
-    <ScrollViewer
-        Background="AntiqueWhite"
-        AllowAutoHide="False"
-        VerticalContentAlignment="Top"
-        HorizontalScrollBarVisibility="Disabled"
-        VerticalScrollBarVisibility="Visible">
-        <ItemsControl ItemsSource="{Binding Instances}">
-            <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <avalonia:StretchingWrapPanel
-                        Background="Aquamarine"
-                        Padding="16"
-                        Spacing="16"
-                        MinItemWidth="200"
-                        MaxItemWidth="450" />
-                </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
+    <Panel>
+        <!-- Empty state - no Minecraft instances are installed yet -->
+        <Panel IsVisible="{Binding !Instances.Count}"
+               HorizontalAlignment="Center"
+               VerticalAlignment="Center">
+            <Button Padding="10,5"
+                    Command="{Binding $parent[mainWindow:MainWindow].((mainWindow:MainWindowViewModel)DataContext).ClickNewInstanceCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Image Width="16" Source="{DynamicResource IconDownload}" />
+                    <TextBlock Text="Download Minecraft" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+        </Panel>
 
-            <ItemsControl.ItemTemplate>
-                <DataTemplate DataType="model:MinecraftInstanceItem">
-                    <controls:MinecraftInstanceListItem
-                        ClickPlayCommand="{Binding $parent[ItemsControl].((homeScreen:HomeViewModel)DataContext).ClickInstanceCommand}" />
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
-    </ScrollViewer>
+        <ScrollViewer
+            IsVisible="{Binding Instances.Count}"
+            AllowAutoHide="False"
+            VerticalContentAlignment="Top"
+            HorizontalScrollBarVisibility="Disabled"
+            VerticalScrollBarVisibility="Visible">
+            <ItemsControl ItemsSource="{Binding Instances}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <avalonia:StretchingWrapPanel
+                            Background="Aquamarine"
+                            Padding="16"
+                            Spacing="16"
+                            MinItemWidth="200"
+                            MaxItemWidth="450" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="model:MinecraftInstanceItem">
+                        <controls:MinecraftInstanceListItem
+                            ClickPlayCommand="{Binding $parent[ItemsControl].((homeScreen:HomeViewModel)DataContext).ClickInstanceCommand}" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </Panel>
 </UserControl>

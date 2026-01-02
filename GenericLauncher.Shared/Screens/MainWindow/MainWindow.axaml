@@ -7,6 +7,8 @@
         xmlns:controls="clr-namespace:GenericLauncher.Controls"
         xmlns:dialogHost="clr-namespace:DialogHostAvalonia;assembly=DialogHost.Avalonia"
         xmlns:newInstanceDialog="clr-namespace:GenericLauncher.Screens.NewInstanceDialog"
+        xmlns:emptyStateScreen="clr-namespace:GenericLauncher.Screens.EmptyStateScreen"
+        xmlns:profileScreen="clr-namespace:GenericLauncher.Screens.ProfileScreen"
         mc:Ignorable="d"
         d:DesignWidth="600"
         d:DesignHeight="450"
@@ -26,6 +28,30 @@
          to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
         <mainWindow:MainWindowViewModel />
     </Design.DataContext>
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="/Resources.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Window.Styles>
+        <StyleInclude Source="/Styles.axaml" />
+    </Window.Styles>
+
+    <Window.DataTemplates>
+        <DataTemplate DataType="emptyStateScreen:EmptyStateViewModel">
+            <emptyStateScreen:EmptyStateView />
+        </DataTemplate>
+        <DataTemplate DataType="homeScreen:HomeViewModel">
+            <homeScreen:HomeView />
+        </DataTemplate>
+        <DataTemplate DataType="profileScreen:ProfileViewModel">
+            <profileScreen:ProfileView />
+        </DataTemplate>
+    </Window.DataTemplates>
 
     <dialogHost:DialogHost
         CloseOnClickAway="{Binding NewInstanceDialogViewModel.CanCloseOnClickAway}"
@@ -69,7 +95,14 @@
                     VerticalAlignment="Center"
                     Spacing="16">
                     <!-- Left small items, manually offset with bottom margin -->
-                    <Border Width="60" Height="60" Background="Gray" CornerRadius="30" Margin="0 0 0 16" />
+                    <Border Width="60" Height="60" Background="Gray" CornerRadius="30" Margin="0 0 0 16">
+                        <Button
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Command="{Binding ClickLibraryCommand}">
+                            <Image Width="16" Source="{DynamicResource IconLibrary}" />
+                        </Button>
+                    </Border>
                     <Border Width="60" Height="60" Background="Gray" CornerRadius="30" Margin="0 0 0 16">
                         <Button
                             HorizontalAlignment="Center"
@@ -84,7 +117,8 @@
                         Width="128" Height="128"
                         Background="Aqua"
                         Accounts="{Binding Accounts}"
-                        SelectedAccount="{Binding SelectedAccount, Mode=TwoWay}" />
+                        SelectedAccount="{Binding SelectedAccount, Mode=TwoWay}"
+                        ClickAccount="{Binding ClickAccountCommand}" />
 
                     <!-- Right small item, manually offset with bottom margin -->
                     <Border Width="60" Height="60" Background="Gray" CornerRadius="30" Margin="0 0 0 16" />
@@ -122,8 +156,8 @@
                         </Transitions>
                     </Border.Transitions>
 
-                    <homeScreen:HomeView DataContext="{Binding HomeViewModel}" />
-
+                    <!-- Screens that are swapped via the CurrentViewModel property and DataTemplates -->
+                    <ContentControl Content="{Binding CurrentViewModel}" />
                 </Border>
             </Panel>
         </Panel>

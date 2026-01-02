@@ -1,7 +1,10 @@
 ﻿using System.Collections.Generic;
+using System.Windows.Input;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Data;
+using Avalonia.Input;
 using GenericLauncher.Model;
 
 namespace GenericLauncher.Controls;
@@ -49,6 +52,23 @@ public class AccountSelector : TemplatedControl
         set => SetValue(AvatarUrlProperty, value);
     }
 
+    public static readonly StyledProperty<ICommand?> ClickAccountProperty =
+        AvaloniaProperty.Register<AccountSelector, ICommand?>(
+            nameof(ClickAccount));
+
+    public ICommand? ClickAccount
+    {
+        get => GetValue(ClickAccountProperty);
+        set => SetValue(ClickAccountProperty, value);
+    }
+
+    protected override void OnApplyTemplate(TemplateAppliedEventArgs e)
+    {
+        base.OnApplyTemplate(e);
+
+        e.NameScope.Get<Border>("PART_AvatarContainer").PointerPressed += OnClickAvatarHandler;
+    }
+
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
@@ -71,5 +91,15 @@ public class AccountSelector : TemplatedControl
             AccountName = "Select an account";
             AvatarUrl = null;
         }
+    }
+
+    private void OnClickAvatarHandler(object? sender, PointerPressedEventArgs args)
+    {
+        if (!Equals(sender, args.Source))
+        {
+            return;
+        }
+
+        ClickAccount?.Execute(null);
     }
 }
