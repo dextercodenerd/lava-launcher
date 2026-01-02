@@ -15,6 +15,7 @@
                  multiple SVG files for simplicity for everyone.  -->
             <SolidColorBrush x:Key='IconColor'>#1a1a1a</SolidColorBrush>
             <SvgImage x:Key="IconAddAccount">/Assets/Icons/Lucide/user-round-plus-gray.svg</SvgImage>
+            <SvgImage x:Key="IconLogout">/Assets/Icons/Lucide/log-out-gray.svg</SvgImage>
             <SvgImage x:Key="IconDownload">/Assets/Icons/Lucide/download-gray.svg</SvgImage>
             <SvgImage x:Key="IconLibrary">/Assets/Icons/Lucide/library-big-gray.svg</SvgImage>
         </ResourceDictionary>
@@ -25,6 +26,7 @@
             <!-- SVG icons tinting via CSS classes -->
             <SolidColorBrush x:Key='IconColor'>#ffffff</SolidColorBrush>
             <SvgImage x:Key="IconAddAccount">/Assets/Icons/Lucide/user-round-plus-white.svg</SvgImage>
+            <SvgImage x:Key="IconLogout">/Assets/Icons/Lucide/log-out-white.svg</SvgImage>
             <SvgImage x:Key="IconDownload">/Assets/Icons/Lucide/download-white.svg</SvgImage>
             <SvgImage x:Key="IconLibrary">/Assets/Icons/Lucide/library-big-white.svg</SvgImage>
         </ResourceDictionary>

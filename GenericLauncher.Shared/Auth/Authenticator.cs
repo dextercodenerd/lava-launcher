@@ -57,7 +57,7 @@ public sealed partial class Authenticator : IDisposable
 
         var (tid, sub) = await _jwtVerifier.VerifyMicrosoftTokenAsync(msTokenResponse.IdToken);
         // Hash 'tid' and 'sub' to create a privacy-focused unique id
-        var uniqueUserId = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes($"{tid}_{sub}")));
+        var uniqueUserId = Base58.Encode(SHA256.HashData(Encoding.UTF8.GetBytes($"{tid}_{sub}")));
 
         // Xbox Live token
         var xblToken = await GetXboxLiveTokenAsync(microsoftAccessToken);

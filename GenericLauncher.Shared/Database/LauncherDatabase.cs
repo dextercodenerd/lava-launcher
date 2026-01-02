@@ -101,6 +101,14 @@ public sealed class LauncherDatabase
             account));
     }
 
+    public async Task<bool> RemoveAccountAsync(string accountId)
+    {
+        var count = await _rwLock.ExecuteWriteAsync(() =>
+            _conn.ExecuteScalarAsync<long>($"DELETE FROM {Account.Table} WHERE Id = @Id;",
+                bind: cmd => { cmd.Parameters.AddWithValue("@Id", accountId); }));
+        return count == 1;
+    }
+
     public Task<IEnumerable<MinecraftInstance>> GetAllMinecraftInstancesAsync()
     {
         return _rwLock.ExecuteReadAsync(async () =>

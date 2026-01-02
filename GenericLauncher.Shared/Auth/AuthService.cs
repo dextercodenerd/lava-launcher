@@ -129,4 +129,11 @@ public class AuthService
 
         return newAcc;
     }
+
+    public async Task<bool> LogOutAsync(Account account)
+    {
+        var success = await _repository.RemoveAccountAsync(account);
+        await RefreshAccountsAsync(account);
+        return success;
+    }
 }

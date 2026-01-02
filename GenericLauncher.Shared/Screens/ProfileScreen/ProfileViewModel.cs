@@ -19,10 +19,13 @@ public partial class ProfileViewModel : ViewModelBase
 
     public bool HasMinecraftLicense => Account?.HasMinecraftLicense == true;
 
-    public bool ShowXboxStateMessage => Account?.XboxAccountState != XboxAccountState.Ok;
+    public bool ShowMinecraftLicenseProblemMessage => HasValidAccount && HasMinecraftLicense;
+
+    public bool ShowXboxStateMessage => HasValidAccount && Account?.XboxAccountState != XboxAccountState.Ok;
 
     public string XboxStateTitle => Account?.XboxAccountState switch
     {
+        null => "Not logged in",
         XboxAccountState.Ok => "All good",
         XboxAccountState.Missing => "Xbox Account Missing",
         XboxAccountState.Banned => "Xbox Account Banned",
@@ -84,11 +87,37 @@ public partial class ProfileViewModel : ViewModelBase
         await _auth.AuthenticateAccountAsync(Account);
     }
 
+    [RelayCommand]
+    private async Task OnClickLogin()
+    {
+        if (_auth is null)
+        {
+            return;
+        }
+
+        var account = await _auth.AuthenticateAsync();
+    }
+
+    [RelayCommand]
+    private async Task OnClickLogout()
+    {
+        if (_auth is null || Account is null)
+        {
+            return;
+        }
+
+        var loggedOut = await _auth.LogOutAsync(Account);
+
+        // TODO: Handle only when the logging out failed. Success automatically updates the UI
+        //  because the accounts changed.
+    }
+
     partial void OnAccountChanged(Account? value)
     {
         // Manually report computed properties' changes
         OnPropertyChanged(nameof(HasValidAccount));
         OnPropertyChanged(nameof(HasMinecraftLicense));
+        OnPropertyChanged(nameof(ShowMinecraftLicenseProblemMessage));
         OnPropertyChanged(nameof(ShowXboxStateMessage));
         OnPropertyChanged(nameof(XboxStateTitle));
         OnPropertyChanged(nameof(XboxStateMessage));

@@ -27,7 +27,7 @@
                 <TextBlock
                     HorizontalAlignment="Center"
                     FontSize="14"
-                    Text="Login" />
+                    Text="Log In" />
             </StackPanel>
         </DataTemplate>
 

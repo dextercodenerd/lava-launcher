@@ -51,6 +51,12 @@ public class LauncherRepository
         await _db.UpsertAccountAsync(account);
     }
 
+    public async Task<bool> RemoveAccountAsync(Account account)
+    {
+        await _initTask;
+        return await _db.RemoveAccountAsync(account.Id);
+    }
+
     public async Task<IEnumerable<MinecraftInstance>> GetAllMinecraftInstancesAsync()
     {
         await _initTask;
