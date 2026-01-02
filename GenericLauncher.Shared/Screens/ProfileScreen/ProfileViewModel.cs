@@ -15,6 +15,13 @@ public partial class ProfileViewModel : ViewModelBase
 
     [ObservableProperty] private Account? _account = null;
 
+    public bool ShowDebugInfo => HasMicrosoftAccount &&
+#if DEBUG
+                                 true;
+#else
+                                 false;
+#endif
+
     public string ScreenTitle
     {
         get
@@ -34,8 +41,16 @@ public partial class ProfileViewModel : ViewModelBase
 
     public bool HasMinecraftLicense => Account?.HasMinecraftLicense == true;
 
+    // An Xbox account can have a Minecraft license, but no Minecraft profile. The Minecraft user
+    // profile is created after the very first login in the official Minecraft launcher.
+    public bool HasMinecraftProfile => Account?.MinecraftUserId is not null;
+
     public bool HasAccountProblem =>
-        HasMicrosoftAccount && (!HasMinecraftLicense || Account?.XboxAccountState != XboxAccountState.Ok);
+        HasMicrosoftAccount && (
+            !HasMinecraftLicense ||
+            !HasMinecraftProfile ||
+            Account?.XboxAccountState != XboxAccountState.Ok
+        );
 
     public string AccountProblemTitle
     {
@@ -49,6 +64,11 @@ public partial class ProfileViewModel : ViewModelBase
             if (!HasMinecraftLicense)
             {
                 return "No Minecraft license";
+            }
+
+            if (!HasMinecraftProfile)
+            {
+                return "No Minecraft profile";
             }
 
             return "";
@@ -68,6 +88,12 @@ public partial class ProfileViewModel : ViewModelBase
             {
                 return
                     "This account does not have a Minecraft license. You need to purchase Minecraft to play the game.";
+            }
+
+            if (!HasMinecraftProfile)
+            {
+                return
+                    "Log in into the official Minecraft launcher and start at least on game to create a Minecraft profile. It could ask you to set a username and after that, you will be able to use 3rd party Minecraft launchers.";
             }
 
             return "";
@@ -172,11 +198,13 @@ public partial class ProfileViewModel : ViewModelBase
         // Manually report computed properties' changes
         OnPropertyChanged(nameof(ScreenTitle));
         OnPropertyChanged(nameof(HasMicrosoftAccount));
+        OnPropertyChanged(nameof(HasMinecraftLicense));
+        OnPropertyChanged(nameof(HasMinecraftProfile));
         OnPropertyChanged(nameof(HasAccountProblem));
         OnPropertyChanged(nameof(AccountProblemTitle));
         OnPropertyChanged(nameof(AccountProblemMessage));
-        OnPropertyChanged(nameof(HasMinecraftLicense));
         OnPropertyChanged(nameof(XboxStateTitle));
         OnPropertyChanged(nameof(XboxStateMessage));
+        OnPropertyChanged(nameof(ShowDebugInfo));
     }
 }

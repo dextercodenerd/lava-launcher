@@ -110,7 +110,7 @@
             <Border Background="#010101"
                     CornerRadius="8"
                     Padding="16"
-                    IsVisible="{Binding HasMicrosoftAccount}">
+                    IsVisible="{Binding ShowDebugInfo}">
                 <StackPanel Spacing="10">
                     <TextBlock Text="Account Information" FontSize="16" FontWeight="SemiBold" />
 

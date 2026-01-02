@@ -307,7 +307,8 @@ public sealed class MinecraftLauncher : IDisposable
                     mc,
                     workdir,
                     username,
-                    account.Id,
+                    account.MinecraftUserId ??
+                    "demo", // TODO: "demo" is just an offline/demo mode fallback -- properly handle missing MC profile
                     account.XboxUserId ?? "0", // "0" is just a fallback value
                     account.AccessToken);
 
