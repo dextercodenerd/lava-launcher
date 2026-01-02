@@ -122,7 +122,19 @@ public partial class ProfileViewModel : ViewModelBase
             return;
         }
 
-        await _auth.AuthenticateAccountAsync(Account);
+        // TODO: Show some "refreshing" UI
+
+        try
+        {
+            var newAcc = await _auth.AuthenticateAccountAsync(Account);
+            _logger?.LogDebug("Refreshed account: {acc}", newAcc);
+
+            // TODO: Check of the newAcc still has problems
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Problem with MS account");
+        }
     }
 
     [RelayCommand]

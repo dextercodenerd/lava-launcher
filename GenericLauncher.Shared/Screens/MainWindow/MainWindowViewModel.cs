@@ -57,6 +57,7 @@ public partial class MainWindowViewModel : ViewModelBase
         _auth = authService;
         _minecraftLauncher = minecraftLauncher;
 
+        // TODO: start with loading state
         CurrentViewModel = new EmptyStateViewModel(
             authService,
             App.LoggerFactory?.CreateLogger(nameof(EmptyStateViewModel)));
@@ -107,12 +108,15 @@ public partial class MainWindowViewModel : ViewModelBase
 
         Accounts.Add(new AccountListItem(null, true));
 
-        if (accounts.Count > 0)
+        // TODO: Update once we have initial loading state/screen
+        if (accounts.Count > 0 && CurrentViewModel is EmptyStateViewModel)
         {
+            // Switch to home only from Empty state and loading state
             CurrentViewModel = HomeViewModel;
         }
-        else if (CurrentViewModel is not EmptyStateViewModel)
+        else if (accounts.Count == 00 && CurrentViewModel is not EmptyStateViewModel)
         {
+            // Switch to empty state, when there are no accounts
             CurrentViewModel =
                 new EmptyStateViewModel(_auth, App.LoggerFactory?.CreateLogger(nameof(EmptyStateViewModel)));
         }
