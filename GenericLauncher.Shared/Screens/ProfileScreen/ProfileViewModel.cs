@@ -1,5 +1,5 @@
-﻿using System.Threading.Tasks;
-using Avalonia.Media;
+﻿using System;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GenericLauncher.Auth;
@@ -15,22 +15,73 @@ public partial class ProfileViewModel : ViewModelBase
 
     [ObservableProperty] private Account? _account = null;
 
-    public bool HasValidAccount => Account is not null;
+    public string ScreenTitle
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(Account?.Username))
+            {
+                return Account is null
+                    ? "No Minecraft Account"
+                    : XboxStateTitle;
+            }
+
+            return Account.Username;
+        }
+    }
+
+    public bool HasMicrosoftAccount => Account is not null;
 
     public bool HasMinecraftLicense => Account?.HasMinecraftLicense == true;
 
-    public bool ShowMinecraftLicenseProblemMessage => HasValidAccount && HasMinecraftLicense;
+    public bool HasAccountProblem =>
+        HasMicrosoftAccount && (!HasMinecraftLicense || Account?.XboxAccountState != XboxAccountState.Ok);
 
-    public bool ShowXboxStateMessage => HasValidAccount && Account?.XboxAccountState != XboxAccountState.Ok;
+    public string AccountProblemTitle
+    {
+        get
+        {
+            if (Account?.XboxAccountState != XboxAccountState.Ok)
+            {
+                return XboxStateTitle;
+            }
+
+            if (!HasMinecraftLicense)
+            {
+                return "No Minecraft license";
+            }
+
+            return "";
+        }
+    }
+
+    public string AccountProblemMessage
+    {
+        get
+        {
+            if (Account?.XboxAccountState != XboxAccountState.Ok)
+            {
+                return XboxStateMessage;
+            }
+
+            if (!HasMinecraftLicense)
+            {
+                return
+                    "This account does not have a Minecraft license. You need to purchase Minecraft to play the game.";
+            }
+
+            return "";
+        }
+    }
 
     public string XboxStateTitle => Account?.XboxAccountState switch
     {
         null => "Not logged in",
         XboxAccountState.Ok => "All good",
-        XboxAccountState.Missing => "Xbox Account Missing",
-        XboxAccountState.Banned => "Xbox Account Banned",
-        XboxAccountState.NotAvailable => "Xbox Account Not Available",
-        XboxAccountState.AgeVerificationMissing => "Age Verification Required",
+        XboxAccountState.Missing => "Xbox account missing",
+        XboxAccountState.Banned => "Xbox account banned",
+        XboxAccountState.NotAvailable => "Xbox account not available",
+        XboxAccountState.AgeVerificationMissing => "Xbox account age verification required",
         _ => "Xbox Account Issue",
     };
 
@@ -48,22 +99,6 @@ public partial class ProfileViewModel : ViewModelBase
         _ => "There is an issue with your Xbox account.",
     };
 
-    public IBrush XboxStateBackground => Account?.XboxAccountState switch
-    {
-        XboxAccountState.Banned => new SolidColorBrush(Color.Parse("#F8D7DA")),
-        XboxAccountState.AgeVerificationMissing => new SolidColorBrush(Color.Parse("#FFF3CD")),
-        _ => new SolidColorBrush(Color.Parse("#D1ECF1")),
-    };
-
-    public IBrush XboxStateTitleColor => Account?.XboxAccountState switch
-    {
-        XboxAccountState.Banned => new SolidColorBrush(Color.Parse("#721C24")),
-        XboxAccountState.AgeVerificationMissing => new SolidColorBrush(Color.Parse("#856404")),
-        _ => new SolidColorBrush(Color.Parse("#0C5460")),
-    };
-
-    public bool ShowRefreshButton => Account is null || Account?.XboxAccountState != XboxAccountState.Ok;
-
     public ProfileViewModel() : this(null)
     {
     }
@@ -74,6 +109,9 @@ public partial class ProfileViewModel : ViewModelBase
     {
         _logger = logger;
         _auth = authService;
+
+        Account = _auth?.ActiveAccount;
+        _auth?.ActiveAccountChanged += OnActiveAccountChanged;
     }
 
     [RelayCommand]
@@ -112,17 +150,21 @@ public partial class ProfileViewModel : ViewModelBase
         //  because the accounts changed.
     }
 
+    private void OnActiveAccountChanged(object? sender, EventArgs eventArgs)
+    {
+        Account = _auth?.ActiveAccount;
+    }
+
     partial void OnAccountChanged(Account? value)
     {
         // Manually report computed properties' changes
-        OnPropertyChanged(nameof(HasValidAccount));
+        OnPropertyChanged(nameof(ScreenTitle));
+        OnPropertyChanged(nameof(HasMicrosoftAccount));
+        OnPropertyChanged(nameof(HasAccountProblem));
+        OnPropertyChanged(nameof(AccountProblemTitle));
+        OnPropertyChanged(nameof(AccountProblemMessage));
         OnPropertyChanged(nameof(HasMinecraftLicense));
-        OnPropertyChanged(nameof(ShowMinecraftLicenseProblemMessage));
-        OnPropertyChanged(nameof(ShowXboxStateMessage));
         OnPropertyChanged(nameof(XboxStateTitle));
         OnPropertyChanged(nameof(XboxStateMessage));
-        OnPropertyChanged(nameof(XboxStateBackground));
-        OnPropertyChanged(nameof(XboxStateTitleColor));
-        OnPropertyChanged(nameof(ShowRefreshButton));
     }
 }

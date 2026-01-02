@@ -17,9 +17,19 @@ public class AuthService
 
     private readonly SemaphoreSlim _lock = new(1, 1);
     public ImmutableList<Account> Accounts = [];
-    public Account? ActiveAccount;
+
+    public Account? ActiveAccount
+    {
+        get;
+        set
+        {
+            field = value;
+            ActiveAccountChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
 
     public event EventHandler? AccountsChanged;
+    public event EventHandler? ActiveAccountChanged;
 
     public AuthService(Authenticator auth, LauncherRepository repository, ILogger? logger)
     {
@@ -39,7 +49,12 @@ public class AuthService
 
     private async Task RefreshAccountsAsync(Account? active)
     {
-        var accounts = (await _repository.GetAllAccountsAsync()).ToImmutableList();
+        // TODO: Set a better username for UI, when the MS account doesn't have an Xbox account
+        var accounts = (await _repository.GetAllAccountsAsync())
+            .Select(a => a.Username is not null
+                ? a
+                : a with { Username = "New Account", })
+            .ToImmutableList();
 
         await _lock.WaitAsync();
         try
@@ -56,13 +71,14 @@ public class AuthService
                 }
             }
 
-            // TODO: Persist and load last active account
+            // TODO: Persist and load the ActiveAccount
             ActiveAccount = accounts.FirstOrDefault();
         }
         finally
         {
             _lock.Release();
             AccountsChanged?.Invoke(this, EventArgs.Empty);
+            ActiveAccountChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 

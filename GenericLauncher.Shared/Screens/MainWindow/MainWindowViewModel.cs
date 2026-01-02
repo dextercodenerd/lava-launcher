@@ -81,6 +81,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         UpdateAccountsUi(_auth.Accounts, _auth.ActiveAccount);
         _auth.AccountsChanged += OnAuthAccountChanged;
+        // We don't listen to _auth.ActiveAccount changes here, because here we ara making the changes themselves.
     }
 
     private void OnAuthAccountChanged(object? sender, EventArgs e)
@@ -119,8 +120,6 @@ public partial class MainWindowViewModel : ViewModelBase
         SelectedAccount = selectedAccount is null
             ? null
             : Accounts.FirstOrDefault(a => a.Account?.Id == selectedAccount.Id);
-
-        ProfileViewModel.Account = SelectedAccount?.Account;
     }
 
     [RelayCommand]
@@ -187,6 +186,7 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (value?.IsLogin != true)
         {
+            _auth?.ActiveAccount = value?.Account;
             return;
         }
 
