@@ -67,7 +67,8 @@
                         <!-- Accounts combobox -->
                         <Border Background="#44000000"
                                 VerticalAlignment="Bottom"
-                                Padding="8,4">
+                                Padding="8,4"
+                                IsVisible="{TemplateBinding SelectedAccount, Converter={x:Static ObjectConverters.IsNotNull}}">
                             <ComboBox Name="AccountComboBox"
                                       ItemsSource="{TemplateBinding Accounts}"
                                       SelectedItem="{TemplateBinding SelectedAccount, Mode=TwoWay}"

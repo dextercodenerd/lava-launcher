@@ -12,11 +12,11 @@ using GenericLauncher.Database.Model;
 using GenericLauncher.Minecraft;
 using GenericLauncher.Misc;
 using GenericLauncher.Model;
-using GenericLauncher.Screens.EmptyStateScreen;
 using GenericLauncher.Screens.HomeScreen;
 using GenericLauncher.Screens.NewInstanceDialog;
 using GenericLauncher.Screens.ProfileScreen;
 using Microsoft.Extensions.Logging;
+using LoadingViewModel = GenericLauncher.Screens.LoadingScreen.LoadingViewModel;
 
 namespace GenericLauncher.Screens.MainWindow;
 
@@ -37,6 +37,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private ObservableCollection<AccountListItem> _accounts = [];
     [ObservableProperty] private AccountListItem? _selectedAccount;
 
+    // CurrentViewModel is used for navigation between screens
     [ObservableProperty] private ViewModelBase _currentViewModel;
 
     public HomeViewModel HomeViewModel { get; }
@@ -57,10 +58,7 @@ public partial class MainWindowViewModel : ViewModelBase
         _auth = authService;
         _minecraftLauncher = minecraftLauncher;
 
-        // TODO: start with loading state
-        CurrentViewModel = new EmptyStateViewModel(
-            authService,
-            App.LoggerFactory?.CreateLogger(nameof(EmptyStateViewModel)));
+        CurrentViewModel = new LoadingViewModel();
 
         HomeViewModel = new HomeViewModel(
             authService,
@@ -108,17 +106,15 @@ public partial class MainWindowViewModel : ViewModelBase
 
         Accounts.Add(new AccountListItem(null, true));
 
-        // TODO: Update once we have initial loading state/screen
-        if (accounts.Count > 0 && CurrentViewModel is EmptyStateViewModel)
+        if (accounts.Count > 0 && CurrentViewModel is LoadingViewModel)
         {
             // Switch to home only from Empty state and loading state
             CurrentViewModel = HomeViewModel;
         }
-        else if (accounts.Count == 00 && CurrentViewModel is not EmptyStateViewModel)
+        else if (accounts.Count == 0 && CurrentViewModel != ProfileViewModel)
         {
-            // Switch to empty state, when there are no accounts
-            CurrentViewModel =
-                new EmptyStateViewModel(_auth, App.LoggerFactory?.CreateLogger(nameof(EmptyStateViewModel)));
+            // Switch to empty profile screen, when there are no accounts
+            CurrentViewModel = ProfileViewModel;
         }
 
         SelectedAccount = selectedAccount is null
