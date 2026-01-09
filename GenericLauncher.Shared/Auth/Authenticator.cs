@@ -2,6 +2,7 @@
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using GenericLauncher.Auth.Json;
 using GenericLauncher.Auth.Jwt;
@@ -31,11 +32,16 @@ public sealed partial class Authenticator : IDisposable
         _jwtVerifier = new MicrosoftJwtVerifier(azureAppClientId, httpClient);
     }
 
-    public async Task<MinecraftAccount> AuthenticateAsync()
+    public async Task<MinecraftAccount> AuthenticateAsync(CancellationToken ctsToken)
     {
         // Minecraft login is a multistep process. First is the Microsoft account OAuth2 flow with PKCE.
         var (verifier, challenge) = GeneratePkceCodes();
-        var authCode = await GetAuthorizationCodeAsync(_clientId, challenge);
+        var authCode = await GetAuthorizationCodeAsync(_clientId, challenge, ctsToken);
+
+        // TODO: Allow cancellation once we have the MS account? Getting the MS account is the
+        //  longest operation (opens browsers and requires the user to do the login there), that can
+        //  be cancelled by the user via closing the browser, which we cannot detect. That is the
+        //  main reason, we need explicit and time-out cancellation...
         var msTokenResponse = await GetMicrosoftTokenAsync(_clientId, authCode, verifier);
 
         // Now we have the MS access and refresh tokens and can get the Minecraft token

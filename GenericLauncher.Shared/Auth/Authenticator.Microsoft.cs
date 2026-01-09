@@ -6,6 +6,7 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using GenericLauncher.Auth.Json;
 using Microsoft.Extensions.Logging;
@@ -37,7 +38,10 @@ public sealed partial class Authenticator
         return (codeVerifier, codeChallenge);
     }
 
-    private async Task<string> GetAuthorizationCodeAsync(string clientId, string codeChallenge)
+    private async Task<string> GetAuthorizationCodeAsync(
+        string clientId,
+        string codeChallenge,
+        CancellationToken ctsToken)
     {
         var authUrl = "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize?" +
                       $"client_id={clientId}&" +
@@ -54,42 +58,67 @@ public sealed partial class Authenticator
         listener.Prefixes.Add($"{_redirectUrl}/");
         listener.Start();
 
-        // Open the default system browser with the auth URL
-        // WARN: There is no way of detecting if th webpage/tab/browser was closed, when opening
-        //  a URL with Process.Start(). For reliable detection we have to embed a WebView in our
-        //  app, or use the NativeWebDialog, but those are paid features of Avalonia.
-        Process.Start(new ProcessStartInfo(authUrl) { UseShellExecute = true });
-
-        // Wait for the OAuth2 redirect and extract the code.
-        // Automatically cancel after 5 minutes, so the app is not stuck forever.
-        const int minutesTimeout = 5;
-        var getContextTask = listener.GetContextAsync();
-        var timeoutTask = Task.Delay(TimeSpan.FromMinutes(minutesTimeout));
-        var completedTask = await Task.WhenAny(getContextTask, timeoutTask);
-        if (completedTask == timeoutTask)
+        // When the token cancels (timeout or manual), force the listener to stop immediately.
+        using var registration = ctsToken.Register(() =>
         {
-            listener.Stop();
-            throw new TimeoutException($"Authentication cancelled after {minutesTimeout} minutes. Please try again.");
-        }
+            try
+            {
+                listener.Stop();
+            }
+            catch
+            {
+                // ignore
+            }
+        });
 
-        var context = await getContextTask;
-        var code = context.Request.QueryString.Get("code");
-
-        if (string.IsNullOrEmpty(code))
+        try
         {
-            listener.Stop();
-            throw new InvalidOperationException("Authorization code not found in the response.");
+            // Open the default system browser with the auth URL
+            // WARN: There is no way of detecting if the webpage/tab/browser was closed, when opening
+            //  a URL with Process.Start(). For reliable detection we have to embed a WebView in our
+            //  app, or use the NativeWebDialog, but those are paid features of Avalonia.
+            Process.Start(new ProcessStartInfo(authUrl) { UseShellExecute = true, });
+
+            // Wait for the OAuth2 redirect and extract the code.
+            var context = await listener.GetContextAsync().ConfigureAwait(false);
+            var code = context.Request.QueryString.Get("code");
+
+            if (string.IsNullOrEmpty(code))
+            {
+                listener.Stop();
+                throw new InvalidOperationException("Authorization code not found in the response.");
+            }
+
+            // TODO: send a nicer webpage instead of the simple text
+            // Send a response to the browser to show a "success" message
+            var responseBytes = Encoding.UTF8.GetBytes("<html><body>You can close this window now.</body></html>");
+            context.Response.ContentLength64 = responseBytes.Length;
+            // Do not try to cancel when we are sending the response back to the browser, because the auth was success
+            await context.Response.OutputStream.WriteAsync(responseBytes);
+            context.Response.OutputStream.Close();
+
+            return code;
         }
+        catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException)
+        {
+            // If we cancelled via the token, listener.Stop() was called. The GetContextAsync() will
+            // throw one of these exceptions. We want these exceptions to be handled as
+            // OperationCanceledException when the token is cancelled.
+            ctsToken.ThrowIfCancellationRequested();
 
-        // TODO: send a nicer webpage instead of the simple text
-        // Send a response to the browser to show a "success" message
-        var responseBytes = Encoding.UTF8.GetBytes("<html><body>You can close this window now.</body></html>");
-        context.Response.ContentLength64 = responseBytes.Length;
-        await context.Response.OutputStream.WriteAsync(responseBytes);
-        context.Response.OutputStream.Close();
-        listener.Stop();
-
-        return code;
+            throw;
+        }
+        finally
+        {
+            try
+            {
+                listener.Stop();
+            }
+            catch
+            {
+                // ignore
+            }
+        }
     }
 
     private async Task<MicrosoftTokenResponse> GetMicrosoftTokenAsync(

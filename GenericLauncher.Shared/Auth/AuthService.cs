@@ -16,7 +16,21 @@ public class AuthService
     private readonly LauncherRepository _repository;
 
     private readonly SemaphoreSlim _lock = new(1, 1);
-    public ImmutableList<Account> Accounts = [];
+
+    public ImmutableList<Account> Accounts
+    {
+        get;
+        private set
+        {
+            field = value;
+            AccountsChanged?.Invoke(this, EventArgs.Empty);
+        }
+    } = [];
+
+    private readonly SemaphoreSlim _authGate = new(1, 1);
+    private readonly SemaphoreSlim _authCtsGate = new(1, 1);
+    private CancellationTokenSource? _authCts;
+    private const int AuthTimeoutMinutes = 1;
 
     public Account? ActiveAccount
     {
@@ -77,34 +91,113 @@ public class AuthService
         finally
         {
             _lock.Release();
-            AccountsChanged?.Invoke(this, EventArgs.Empty);
-            ActiveAccountChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
     public async Task<Account> AuthenticateAsync()
     {
-        var acc = await _auth.AuthenticateAsync();
-        var accState = XstsFailureToXboxAccountState(acc);
+        await _authGate.WaitAsync().ConfigureAwait(false);
 
-        var account = new Account(
-            acc.UniqueUserId,
-            accState,
-            acc.Profile?.Id,
-            acc.XboxUserId,
-            acc.Profile?.Name,
-            acc.HasMinecraft,
-            acc.Profile?.Skins.FirstOrDefault(s => s.State == "ACTIVE")?.Url,
-            acc.Profile?.Capes.FirstOrDefault(s => s.State == "ACTIVE")?.Url,
-            acc.MinecraftAccessToken,
-            acc.MicrosoftRefreshToken,
-            acc.ExpiresAt
-        );
+        try
+        {
+            // Define cts with `using` so it auto-disposes at end of scope automatically. We use
+            // separate cancellation token sources, so we can distinguish if the cancellation was an
+            // automatic time-out or a manually triggered cancellation.
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMinutes(AuthTimeoutMinutes));
+            using var manualCts = new CancellationTokenSource();
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token, manualCts.Token);
 
-        await _repository.SaveAccountAsync(account);
-        await RefreshAccountsAsync(account);
+            await _authCtsGate.WaitAsync().ConfigureAwait(false);
+            _authCts = manualCts;
+            _authCtsGate.Release();
 
-        return account;
+            try
+            {
+                var acc = await _auth.AuthenticateAsync(linkedCts.Token).ConfigureAwait(false);
+                var accState = XstsFailureToXboxAccountState(acc);
+
+                var account = new Account(
+                    acc.UniqueUserId,
+                    accState,
+                    acc.Profile?.Id,
+                    acc.XboxUserId,
+                    acc.Profile?.Name,
+                    acc.HasMinecraft,
+                    acc.Profile?.Skins.FirstOrDefault(s => s.State == "ACTIVE")?.Url,
+                    acc.Profile?.Capes.FirstOrDefault(s => s.State == "ACTIVE")?.Url,
+                    acc.MinecraftAccessToken,
+                    acc.MicrosoftRefreshToken,
+                    acc.ExpiresAt
+                );
+
+                await _repository.SaveAccountAsync(account);
+                await RefreshAccountsAsync(account);
+
+                return account;
+            }
+            catch (OperationCanceledException)
+            {
+                if (timeoutCts.IsCancellationRequested)
+                {
+                    _logger?.LogWarning("Authentication timed out");
+                    throw new TimeoutException("Authentication timed out");
+                }
+
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Authentication failed");
+                throw;
+            }
+            finally
+            {
+                await _authCtsGate.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    // Only null it out if it's still OUR cts
+                    if (ReferenceEquals(_authCts, manualCts))
+                    {
+                        _authCts = null;
+                    }
+                }
+                finally
+                {
+                    _authCtsGate.Release();
+                }
+            }
+        }
+        finally
+        {
+            _authGate.Release();
+        }
+    }
+
+    public async Task<bool> CancelRunningAuthAsync()
+    {
+        await _authCtsGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (_authCts is null)
+            {
+                _logger?.LogDebug("No authentication in progress to cancel");
+                return false;
+            }
+
+            _logger?.LogInformation("Cancelling authentication flow");
+
+            await _authCts.CancelAsync().ConfigureAwait(false);
+            return true;
+        }
+        catch (ObjectDisposedException)
+        {
+            _logger?.LogDebug("Authentication CTS already disposed during cancellation attempt");
+            return false;
+        }
+        finally
+        {
+            _authCtsGate.Release();
+        }
     }
 
     private static XboxAccountState XstsFailureToXboxAccountState(MinecraftAccount acc)

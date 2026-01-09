@@ -171,7 +171,44 @@ public partial class ProfileViewModel : ViewModelBase
             return;
         }
 
-        var account = await _auth.AuthenticateAsync();
+        try
+        {
+            var account = await _auth.AuthenticateAsync();
+        }
+        catch (TimeoutException ex)
+        {
+            _logger?.LogDebug(ex, "Login automatically timed out");
+        }
+        catch (OperationCanceledException ex)
+        {
+            _logger?.LogDebug(ex, "Login was manually cancelled");
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Login failed");
+        }
+    }
+
+    [RelayCommand]
+    private async Task OnClickLoginCancel()
+    {
+        if (_auth is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var cancelled = await _auth.CancelRunningAuthAsync();
+            if (!cancelled)
+            {
+                // TODO: What now?
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Problem cancelling current login");
+        }
     }
 
     [RelayCommand]

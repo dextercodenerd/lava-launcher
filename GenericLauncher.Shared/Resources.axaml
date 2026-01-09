@@ -18,6 +18,7 @@
             <SvgImage x:Key="IconLogout">/Assets/Icons/Lucide/log-out-gray.svg</SvgImage>
             <SvgImage x:Key="IconDownload">/Assets/Icons/Lucide/download-gray.svg</SvgImage>
             <SvgImage x:Key="IconLibrary">/Assets/Icons/Lucide/library-big-gray.svg</SvgImage>
+            <SvgImage x:Key="IconCancel">/Assets/Icons/Lucide/cancel-gray.svg</SvgImage>
         </ResourceDictionary>
 
         <ResourceDictionary x:Key='Dark'>
@@ -29,6 +30,7 @@
             <SvgImage x:Key="IconLogout">/Assets/Icons/Lucide/log-out-white.svg</SvgImage>
             <SvgImage x:Key="IconDownload">/Assets/Icons/Lucide/download-white.svg</SvgImage>
             <SvgImage x:Key="IconLibrary">/Assets/Icons/Lucide/library-big-white.svg</SvgImage>
+            <SvgImage x:Key="IconCancel">/Assets/Icons/Lucide/cancel-white.svg</SvgImage>
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 </ResourceDictionary>
