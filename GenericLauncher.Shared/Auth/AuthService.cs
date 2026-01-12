@@ -26,30 +26,20 @@ public class AuthService
 
     private readonly SemaphoreSlim _lock = new(1, 1);
 
-    public ImmutableList<Account> Accounts
-    {
-        get;
-        private set
-        {
-            field = value;
-            AccountsChanged?.Invoke(this, EventArgs.Empty);
-        }
-    } = [];
+    // We need manual backing fields to control the exact moment of state update vs event firing.
+    // This allows us to update the state effectively "atomically" from the perspective of the UI thread
+    // which listens to the events. If we used auto-properties, we couldn't update both Accounts and 
+    // ActiveAccount before firing the first event, leading to a glitch states where the UI sees
+    // new Accounts but old ActiveAccount.
+    private ImmutableList<Account> _accounts = [];
+    public ImmutableList<Account> Accounts => _accounts;
+    private Account? _activeAccount;
+    public Account? ActiveAccount => _activeAccount;
 
     private readonly SemaphoreSlim _authGate = new(1, 1);
     private readonly SemaphoreSlim _authCtsGate = new(1, 1);
     private CancellationTokenSource? _authCts;
     private const int AuthTimeoutMinutes = 1;
-
-    public Account? ActiveAccount
-    {
-        get;
-        set
-        {
-            field = value;
-            ActiveAccountChanged?.Invoke(this, EventArgs.Empty);
-        }
-    }
 
     public event EventHandler? AccountsChanged;
     public event EventHandler? ActiveAccountChanged;
@@ -70,6 +60,34 @@ public class AuthService
             });
     }
 
+    // We need an async setter with a lock to prevent race conditions with RefreshAccountsAsync().
+    // RefreshAccountsAsync() runs on a background thread and updates the ActiveAccount.
+    // If the UI tries to set the ActiveAccount at the same time (e.g., user selecting a different
+    // account in the combobox), we need to ensure one update doesn't overwrite the other
+    // inconsistently. Property setters cannot be async, hence the method.
+    public async Task SetActiveAccountAsync(Account? account)
+    {
+        var changed = false;
+        await _lock.WaitAsync();
+        try
+        {
+            if (!Equals(_activeAccount, account))
+            {
+                _activeAccount = account;
+                changed = true;
+            }
+        }
+        finally
+        {
+            _lock.Release();
+        }
+
+        if (changed)
+        {
+            ActiveAccountChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
     private async Task RefreshAccountsAsync(Account? active)
     {
         // TODO: Set a better username for UI, when the MS account doesn't have an Xbox account
@@ -79,27 +97,42 @@ public class AuthService
                 : a with { Username = "New Account", })
             .ToImmutableList();
 
+        var activeChanged = false;
+
         await _lock.WaitAsync();
         try
         {
-            Accounts = accounts;
+            _accounts = accounts;
+
+            Account? newActive = null;
 
             if (active is not null)
             {
-                var found = Accounts.FirstOrDefault(a => a.Id == active.Id);
-                if (found is not null)
-                {
-                    ActiveAccount = found;
-                    return;
-                }
+                newActive = _accounts.FirstOrDefault(a => a.Id == active.Id);
             }
 
-            // TODO: Persist and load the ActiveAccount
-            ActiveAccount = accounts.FirstOrDefault();
+            if (newActive is null)
+            {
+                // TODO: Persist and load the ActiveAccount
+                newActive = _accounts.FirstOrDefault();
+            }
+
+            if (!Equals(_activeAccount, newActive))
+            {
+                _activeAccount = newActive;
+                activeChanged = true;
+            }
         }
         finally
         {
             _lock.Release();
+        }
+
+        AccountsChanged?.Invoke(this, EventArgs.Empty);
+
+        if (activeChanged)
+        {
+            ActiveAccountChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 

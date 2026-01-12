@@ -174,7 +174,14 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (value?.IsLogin != true)
         {
-            _auth?.ActiveAccount = value?.Account;
+            _auth?.SetActiveAccountAsync(value?.Account)
+                .ContinueWith(t =>
+                {
+                    if (t.IsFaulted)
+                    {
+                        _logger?.LogError(t.Exception, "Failed to set active account");
+                    }
+                });
             return;
         }
 
