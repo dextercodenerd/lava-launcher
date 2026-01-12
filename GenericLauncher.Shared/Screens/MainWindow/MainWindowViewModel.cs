@@ -12,11 +12,11 @@ using GenericLauncher.Database.Model;
 using GenericLauncher.Minecraft;
 using GenericLauncher.Misc;
 using GenericLauncher.Model;
-using GenericLauncher.Screens.EmptyStateScreen;
 using GenericLauncher.Screens.HomeScreen;
 using GenericLauncher.Screens.NewInstanceDialog;
 using GenericLauncher.Screens.ProfileScreen;
 using Microsoft.Extensions.Logging;
+using LoadingViewModel = GenericLauncher.Screens.LoadingScreen.LoadingViewModel;
 
 namespace GenericLauncher.Screens.MainWindow;
 
@@ -37,6 +37,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private ObservableCollection<AccountListItem> _accounts = [];
     [ObservableProperty] private AccountListItem? _selectedAccount;
 
+    // CurrentViewModel is used for navigation between screens
     [ObservableProperty] private ViewModelBase _currentViewModel;
 
     public HomeViewModel HomeViewModel { get; }
@@ -57,10 +58,7 @@ public partial class MainWindowViewModel : ViewModelBase
         _auth = authService;
         _minecraftLauncher = minecraftLauncher;
 
-        // TODO: start with loading state
-        CurrentViewModel = new EmptyStateViewModel(
-            authService,
-            App.LoggerFactory?.CreateLogger(nameof(EmptyStateViewModel)));
+        CurrentViewModel = new LoadingViewModel();
 
         HomeViewModel = new HomeViewModel(
             authService,
@@ -108,22 +106,26 @@ public partial class MainWindowViewModel : ViewModelBase
 
         Accounts.Add(new AccountListItem(null, true));
 
-        // TODO: Update once we have initial loading state/screen
-        if (accounts.Count > 0 && CurrentViewModel is EmptyStateViewModel)
+        if (accounts.Count > 0 && CurrentViewModel is LoadingViewModel)
         {
             // Switch to home only from Empty state and loading state
             CurrentViewModel = HomeViewModel;
         }
-        else if (accounts.Count == 00 && CurrentViewModel is not EmptyStateViewModel)
+        else if (accounts.Count == 0 && CurrentViewModel != ProfileViewModel)
         {
-            // Switch to empty state, when there are no accounts
-            CurrentViewModel =
-                new EmptyStateViewModel(_auth, App.LoggerFactory?.CreateLogger(nameof(EmptyStateViewModel)));
+            // Switch to empty profile screen, when there are no accounts
+            CurrentViewModel = ProfileViewModel;
         }
 
-        SelectedAccount = selectedAccount is null
+        var accountToSelect = selectedAccount is null
             ? null
             : Accounts.FirstOrDefault(a => a.Account?.Id == selectedAccount.Id);
+        if (accountToSelect is null && Accounts.Count > 0)
+        {
+            accountToSelect = Accounts.FirstOrDefault(a => !a.IsLogin);
+        }
+
+        SelectedAccount = accountToSelect;
     }
 
     [RelayCommand]
@@ -142,24 +144,6 @@ public partial class MainWindowViewModel : ViewModelBase
     private void OnClickAccount()
     {
         CurrentViewModel = ProfileViewModel;
-    }
-
-    private async Task Login()
-    {
-        if (_auth is null)
-        {
-            // UI designer
-            return;
-        }
-
-        try
-        {
-            await _auth.AuthenticateAsync();
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "problem logging in into Minecraft");
-        }
     }
 
     private async Task ToggleExpand()
@@ -190,17 +174,31 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (value?.IsLogin != true)
         {
-            _auth?.ActiveAccount = value?.Account;
+            _auth?.SetActiveAccountAsync(value?.Account)
+                .ContinueWith(t =>
+                {
+                    if (t.IsFaulted)
+                    {
+                        _logger?.LogError(t.Exception, "Failed to set active account");
+                    }
+                });
             return;
         }
 
-        Login()
-            .ContinueWith(t =>
-            {
-                if (t.IsFaulted)
-                {
-                    _logger?.LogError(t.Exception, "login problem");
-                }
-            });
+        // Switch to profile screen and trigger the login flow
+        CurrentViewModel = ProfileViewModel;
+        if (!ProfileViewModel.ClickLoginCommand.IsRunning)
+        {
+            // We fire and forget the login task, because error handling is in the ViewModel
+            Dispatcher.UIThread.Post(() => ProfileViewModel.ClickLoginCommand.Execute(null));
+        }
+
+        var activeAccountItem = Accounts.FirstOrDefault(a => a.Account?.Id == _auth?.ActiveAccount?.Id);
+        if (activeAccountItem is null && Accounts.Count > 0)
+        {
+            activeAccountItem = Accounts.FirstOrDefault(a => !a.IsLogin);
+        }
+
+        Dispatcher.UIThread.Post(() => SelectedAccount = activeAccountItem);
     }
 }

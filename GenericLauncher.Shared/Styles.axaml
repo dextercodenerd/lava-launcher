@@ -11,6 +11,11 @@
         <Setter Property="FontWeight" Value="Bold" />
     </Style>
 
+    <Style Selector="TextBlock.h2">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
     <Style Selector="TextBlock.statusbar">
         <Setter Property="FontSize" Value="12" />
     </Style>

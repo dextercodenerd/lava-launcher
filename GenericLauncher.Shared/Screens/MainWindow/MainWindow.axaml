@@ -6,8 +6,8 @@
         xmlns:homeScreen="clr-namespace:GenericLauncher.Screens.HomeScreen"
         xmlns:controls="clr-namespace:GenericLauncher.Controls"
         xmlns:dialogHost="clr-namespace:DialogHostAvalonia;assembly=DialogHost.Avalonia"
+        xmlns:loadingScreen="clr-namespace:GenericLauncher.Screens.LoadingScreen"
         xmlns:newInstanceDialog="clr-namespace:GenericLauncher.Screens.NewInstanceDialog"
-        xmlns:emptyStateScreen="clr-namespace:GenericLauncher.Screens.EmptyStateScreen"
         xmlns:profileScreen="clr-namespace:GenericLauncher.Screens.ProfileScreen"
         mc:Ignorable="d"
         d:DesignWidth="600"
@@ -42,8 +42,8 @@
     </Window.Styles>
 
     <Window.DataTemplates>
-        <DataTemplate DataType="emptyStateScreen:EmptyStateViewModel">
-            <emptyStateScreen:EmptyStateView />
+        <DataTemplate DataType="loadingScreen:LoadingViewModel">
+            <loadingScreen:LoadingView />
         </DataTemplate>
         <DataTemplate DataType="homeScreen:HomeViewModel">
             <homeScreen:HomeView />
