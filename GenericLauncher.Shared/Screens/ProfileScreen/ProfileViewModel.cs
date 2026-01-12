@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Net.Http;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -13,7 +14,22 @@ public partial class ProfileViewModel : ViewModelBase
     private readonly ILogger? _logger;
     private readonly AuthService? _auth;
 
-    [ObservableProperty] private Account? _account = null;
+    [ObservableProperty] private Account? _account;
+
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(LoginStatusText))]
+    private LoginStep? _loginProgress;
+
+    [ObservableProperty] private string? _loginError;
+
+    public string LoginStatusText => LoginProgress switch
+    {
+        LoginStep.BrowserLogin => "Waiting for you to login in the browser...",
+        LoginStep.MicrosoftToken => "Acquiring Microsoft token...",
+        LoginStep.XboxLive => "Connecting to Xbox Live...",
+        LoginStep.MinecraftAuth => "Authenticating with Minecraft...",
+        LoginStep.MinecraftProfile => "Fetching Minecraft profile...",
+        _ => "Logging in...",
+    };
 
     public bool ShowDebugInfo => HasMicrosoftAccount &&
 #if DEBUG
@@ -171,21 +187,38 @@ public partial class ProfileViewModel : ViewModelBase
             return;
         }
 
+        LoginError = null;
+        LoginProgress = null;
+
+        var progress = new Progress<LoginStep>(step => LoginProgress = step);
+
         try
         {
-            var account = await _auth.AuthenticateAsync();
+            await _auth.AuthenticateAsync(progress);
         }
         catch (TimeoutException ex)
         {
             _logger?.LogDebug(ex, "Login automatically timed out");
+            LoginError = "Login timed out. Please try again.";
         }
         catch (OperationCanceledException ex)
         {
             _logger?.LogDebug(ex, "Login was manually cancelled");
+            LoginError = "Login cancelled.";
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger?.LogWarning(ex, "Network error during login");
+            LoginError = "Network error. Please check your connection.";
         }
         catch (Exception ex)
         {
             _logger?.LogWarning(ex, "Login failed");
+            LoginError = $"Login failed: {ex.Message}";
+        }
+        finally
+        {
+            LoginProgress = null;
         }
     }
 

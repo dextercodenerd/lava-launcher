@@ -117,9 +117,16 @@ public partial class MainWindowViewModel : ViewModelBase
             CurrentViewModel = ProfileViewModel;
         }
 
-        SelectedAccount = selectedAccount is null
+        var accountToSelect = selectedAccount is null
             ? null
             : Accounts.FirstOrDefault(a => a.Account?.Id == selectedAccount.Id);
+        // The Accounts should have more than 1 item, because there is always at least the one login item
+        if (accountToSelect is null && Accounts.Count > 1)
+        {
+            accountToSelect = Accounts[0];
+        }
+
+        SelectedAccount = accountToSelect;
     }
 
     [RelayCommand]

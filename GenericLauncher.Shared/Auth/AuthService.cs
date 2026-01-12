@@ -9,6 +9,15 @@ using Microsoft.Extensions.Logging;
 
 namespace GenericLauncher.Auth;
 
+public enum LoginStep
+{
+    BrowserLogin,
+    MicrosoftToken,
+    XboxLive,
+    MinecraftAuth,
+    MinecraftProfile,
+}
+
 public class AuthService
 {
     private readonly ILogger? _logger;
@@ -94,7 +103,7 @@ public class AuthService
         }
     }
 
-    public async Task<Account> AuthenticateAsync()
+    public async Task<Account> AuthenticateAsync(IProgress<LoginStep>? progress = null)
     {
         await _authGate.WaitAsync().ConfigureAwait(false);
 
@@ -113,7 +122,7 @@ public class AuthService
 
             try
             {
-                var acc = await _auth.AuthenticateAsync(linkedCts.Token).ConfigureAwait(false);
+                var acc = await _auth.AuthenticateAsync(linkedCts.Token, progress).ConfigureAwait(false);
                 var accState = XstsFailureToXboxAccountState(acc);
 
                 var account = new Account(

@@ -73,11 +73,12 @@
 
                 <!-- login panel -->
                 <StackPanel
-                    Orientation="Horizontal"
+                    Orientation="Vertical"
                     HorizontalAlignment="Center"
                     Spacing="10"
                     IsVisible="{Binding !HasMicrosoftAccount}">
 
+                    <!-- Login Button -->
                     <Button Padding="10,5"
                             HorizontalAlignment="Center"
                             IsVisible="{Binding !ClickLoginCommand.IsRunning}"
@@ -88,15 +89,42 @@
                         </StackPanel>
                     </Button>
 
-                    <Button Padding="10,5"
-                            HorizontalAlignment="Center"
-                            IsVisible="{Binding ClickLoginCommand.IsRunning}"
-                            Command="{Binding ClickLoginCancelCommand}">
-                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                            <Image Width="16" Source="{DynamicResource IconCancel}" />
-                            <TextBlock Text="Cancel Login" VerticalAlignment="Center" />
+                    <!-- Progress Section -->
+                    <StackPanel Orientation="Vertical"
+                                Spacing="10"
+                                HorizontalAlignment="Center"
+                                IsVisible="{Binding ClickLoginCommand.IsRunning}">
+
+                        <ProgressBar IsIndeterminate="True" Width="200" Height="4" />
+
+                        <TextBlock Text="{Binding LoginStatusText}"
+                                   HorizontalAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="300"
+                                   TextAlignment="Center" />
+
+                        <Button Padding="10,5"
+                                HorizontalAlignment="Center"
+                                Command="{Binding ClickLoginCancelCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <Image Width="16" Source="{DynamicResource IconCancel}" />
+                                <TextBlock Text="Cancel Login" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+
+                    <!-- Error Section -->
+                    <Border Background="#FFEEEE" CornerRadius="8" Padding="10"
+                            IsVisible="{Binding LoginError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <TextBlock Text="⚠️" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding LoginError}"
+                                       TextWrapping="Wrap"
+                                       MaxWidth="300"
+                                       Foreground="#CC0000"
+                                       VerticalAlignment="Center" />
                         </StackPanel>
-                    </Button>
+                    </Border>
                 </StackPanel>
 
                 <Button Padding="10,5"

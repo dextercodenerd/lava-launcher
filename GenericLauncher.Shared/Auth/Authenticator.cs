@@ -32,8 +32,10 @@ public sealed partial class Authenticator : IDisposable
         _jwtVerifier = new MicrosoftJwtVerifier(azureAppClientId, httpClient);
     }
 
-    public async Task<MinecraftAccount> AuthenticateAsync(CancellationToken ctsToken)
+    public async Task<MinecraftAccount> AuthenticateAsync(CancellationToken ctsToken, IProgress<LoginStep>? progress)
     {
+        progress?.Report(LoginStep.BrowserLogin);
+
         // Minecraft login is a multistep process. First is the Microsoft account OAuth2 flow with PKCE.
         var (verifier, challenge) = GeneratePkceCodes();
         var authCode = await GetAuthorizationCodeAsync(_clientId, challenge, ctsToken);
@@ -42,20 +44,22 @@ public sealed partial class Authenticator : IDisposable
         //  longest operation (opens browsers and requires the user to do the login there), that can
         //  be cancelled by the user via closing the browser, which we cannot detect. That is the
         //  main reason, we need explicit and time-out cancellation...
+        progress?.Report(LoginStep.MicrosoftToken);
         var msTokenResponse = await GetMicrosoftTokenAsync(_clientId, authCode, verifier);
 
         // Now we have the MS access and refresh tokens and can get the Minecraft token
-        return await GetMinecraftAccountAsync(msTokenResponse);
+        return await GetMinecraftAccountAsync(msTokenResponse, progress);
     }
 
     public async Task<MinecraftAccount> AuthenticateWithMsRefreshTokenAsync(string refreshToken)
     {
         var msTokenResponse = await RefreshMicrosoftTokenAsync(_clientId, refreshToken);
 
-        return await GetMinecraftAccountAsync(msTokenResponse);
+        return await GetMinecraftAccountAsync(msTokenResponse, null);
     }
 
-    private async Task<MinecraftAccount> GetMinecraftAccountAsync(MicrosoftTokenResponse msTokenResponse)
+    private async Task<MinecraftAccount> GetMinecraftAccountAsync(MicrosoftTokenResponse msTokenResponse,
+        IProgress<LoginStep>? progress)
     {
         // With a Microsoft access token we can start the Minecraft authorization dance
         var microsoftAccessToken = msTokenResponse.AccessToken;
@@ -66,6 +70,7 @@ public sealed partial class Authenticator : IDisposable
         var uniqueUserId = Base58.Encode(SHA256.HashData(Encoding.UTF8.GetBytes($"{tid}_{sub}")));
 
         // Xbox Live token
+        progress?.Report(LoginStep.XboxLive);
         var xblToken = await GetXboxLiveTokenAsync(microsoftAccessToken);
 
         // Xbox services security tokens (XSTS token)
@@ -91,9 +96,11 @@ public sealed partial class Authenticator : IDisposable
         }
 
         // Minecraft token
+        progress?.Report(LoginStep.MinecraftAuth);
         var minecraftToken = await GetMinecraftTokenAsync(xstsToken, userHash);
 
         // Now we can get the player's Minecraft profile
+        progress?.Report(LoginStep.MinecraftProfile);
         MinecraftProfile? profile = null;
         try
         {
