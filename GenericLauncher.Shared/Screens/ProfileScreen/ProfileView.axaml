@@ -49,11 +49,12 @@
                     HorizontalAlignment="Center"
                     Text="{Binding ScreenTitle}" />
 
-                <!-- Skin and cape -->
+                <!-- Current Account Section -->
                 <StackPanel HorizontalAlignment="Center"
                             Spacing="16"
-                            IsVisible="{Binding HasMinecraftLicense}">
+                            IsVisible="{Binding HasMicrosoftAccount}">
 
+                    <!-- Skin and cape -->
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="20">
                         <Border BorderBrush="#CCCCCC" BorderThickness="1" CornerRadius="5"
                                 IsVisible="{Binding Account.SkinUrl, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
@@ -69,16 +70,54 @@
                                    Stretch="Uniform" />
                         </Border>
                     </StackPanel>
+
+                    <!-- Logout Button -->
+                    <Button Padding="10,5"
+                            HorizontalAlignment="Center"
+                            Command="{Binding ClickLogoutCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Image Width="16" Source="{DynamicResource IconLogout}" />
+                            <TextBlock Text="Log Out" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+
+                    <!-- Account problem warning -->
+                    <Border Background="#FFF3CD" CornerRadius="8" Padding="15"
+                            IsVisible="{Binding HasAccountProblem}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="{Binding AccountProblemTitle}"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"
+                                       Foreground="#856404" />
+
+                            <TextBlock
+                                Text="{Binding AccountProblemMessage}"
+                                TextWrapping="Wrap"
+                                Foreground="#856404" />
+
+                            <Button Content="Check/Refresh Account"
+                                    Background="DimGray"
+                                    Foreground="White"
+                                    Command="{Binding ClickRefreshAccountCommand}"
+                                    HorizontalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
-                <!-- login panel -->
-                <StackPanel
-                    Orientation="Vertical"
-                    HorizontalAlignment="Center"
-                    Spacing="10"
-                    IsVisible="{Binding !HasMicrosoftAccount}">
+                <!-- Add / Switch Account Section (Always Visible) -->
+                <StackPanel Orientation="Vertical"
+                            HorizontalAlignment="Center"
+                            Spacing="10"
+                            Margin="0,20,0,0">
 
-                    <!-- Login Button -->
+                    <Separator IsVisible="{Binding HasMicrosoftAccount}" Width="200" Margin="0,0,0,10" />
+
+                    <TextBlock Text="Add another account"
+                               HorizontalAlignment="Center"
+                               FontWeight="SemiBold"
+                               IsVisible="{Binding HasMicrosoftAccount}" />
+
+                    <!-- Login Button (Visible when NOT logging in) -->
                     <Button Padding="10,5"
                             HorizontalAlignment="Center"
                             IsVisible="{Binding !ClickLoginCommand.IsRunning}"
@@ -89,7 +128,7 @@
                         </StackPanel>
                     </Button>
 
-                    <!-- Progress Section -->
+                    <!-- Progress Section (Visible when logging in) -->
                     <StackPanel Orientation="Vertical"
                                 Spacing="10"
                                 HorizontalAlignment="Center"
@@ -127,66 +166,32 @@
                     </Border>
                 </StackPanel>
 
-                <Button Padding="10,5"
-                        HorizontalAlignment="Center"
-                        IsVisible="{Binding HasMicrosoftAccount}"
-                        Command="{Binding ClickLogoutCommand}">
-                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                        <Image Width="16" Source="{DynamicResource IconLogout}" />
-                        <TextBlock Text="Log Out" VerticalAlignment="Center" />
+                <!-- Debugging account information (Bottom) -->
+                <Border Background="#010101"
+                        CornerRadius="8"
+                        Padding="16"
+                        IsVisible="{Binding ShowDebugInfo}">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="Account Information" FontSize="16" FontWeight="SemiBold" />
+
+                        <Grid ColumnDefinitions="150,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                            <TextBlock Text="Global account ID:" Grid.Row="0" Grid.Column="0" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding Account.Id}" Grid.Row="0" Grid.Column="1" TextWrapping="Wrap" />
+
+                            <TextBlock Text="Xbox user ID:" Grid.Row="1" Grid.Column="0" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding Account.XboxUserId, FallbackValue='Not available'}"
+                                       Grid.Row="1" Grid.Column="1" />
+
+                            <TextBlock Text="Minecraft UUID:" Grid.Row="2" Grid.Column="0" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding Account.MinecraftUserId, FallbackValue='Not available'}"
+                                       Grid.Row="2" Grid.Column="1" />
+
+                            <TextBlock Text="Token expires:" Grid.Row="3" Grid.Column="0" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding Account.ExpiresAt}" Grid.Row="3" Grid.Column="1" />
+                        </Grid>
                     </StackPanel>
-                </Button>
+                </Border>
             </StackPanel>
-
-
-            <!-- Account problem warning -->
-            <Border Background="#FFF3CD" CornerRadius="8" Padding="15"
-                    IsVisible="{Binding HasAccountProblem}">
-                <StackPanel Spacing="10">
-                    <TextBlock Text="{Binding AccountProblemTitle}"
-                               FontSize="16"
-                               FontWeight="SemiBold"
-                               Foreground="#856404" />
-
-                    <TextBlock
-                        Text="{Binding AccountProblemMessage}"
-                        TextWrapping="Wrap"
-                        Foreground="#856404" />
-
-                    <Button Content="Check/Refresh Account"
-                            Background="DimGray"
-                            Foreground="White"
-                            Command="{Binding ClickRefreshAccountCommand}"
-                            HorizontalAlignment="Center" />
-                </StackPanel>
-            </Border>
-
-            <!-- Debugging account information -->
-            <Border Background="#010101"
-                    CornerRadius="8"
-                    Padding="16"
-                    IsVisible="{Binding ShowDebugInfo}">
-                <StackPanel Spacing="10">
-                    <TextBlock Text="Account Information" FontSize="16" FontWeight="SemiBold" />
-
-                    <Grid ColumnDefinitions="150,*" RowDefinitions="Auto,Auto,Auto,Auto">
-                        <TextBlock Text="Global account ID:" Grid.Row="0" Grid.Column="0" FontWeight="SemiBold" />
-                        <TextBlock Text="{Binding Account.Id}" Grid.Row="0" Grid.Column="1" TextWrapping="Wrap" />
-
-                        <TextBlock Text="Xbox user ID:" Grid.Row="1" Grid.Column="0" FontWeight="SemiBold" />
-                        <TextBlock Text="{Binding Account.XboxUserId, FallbackValue='Not available'}"
-                                   Grid.Row="1" Grid.Column="1" />
-
-                        <TextBlock Text="Minecraft UUID:" Grid.Row="2" Grid.Column="0" FontWeight="SemiBold" />
-                        <TextBlock Text="{Binding Account.MinecraftUserId, FallbackValue='Not available'}"
-                                   Grid.Row="2" Grid.Column="1" />
-
-                        <TextBlock Text="Token expires:" Grid.Row="3" Grid.Column="0" FontWeight="SemiBold" />
-                        <TextBlock Text="{Binding Account.ExpiresAt}" Grid.Row="3" Grid.Column="1" />
-                    </Grid>
-                </StackPanel>
-            </Border>
-
         </StackPanel>
     </ScrollViewer>
 </UserControl>

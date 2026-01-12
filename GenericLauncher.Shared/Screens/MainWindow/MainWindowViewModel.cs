@@ -120,10 +120,9 @@ public partial class MainWindowViewModel : ViewModelBase
         var accountToSelect = selectedAccount is null
             ? null
             : Accounts.FirstOrDefault(a => a.Account?.Id == selectedAccount.Id);
-        // The Accounts should have more than 1 item, because there is always at least the one login item
-        if (accountToSelect is null && Accounts.Count > 1)
+        if (accountToSelect is null && Accounts.Count > 0)
         {
-            accountToSelect = Accounts[0];
+            accountToSelect = Accounts.FirstOrDefault(a => !a.IsLogin);
         }
 
         SelectedAccount = accountToSelect;
@@ -145,24 +144,6 @@ public partial class MainWindowViewModel : ViewModelBase
     private void OnClickAccount()
     {
         CurrentViewModel = ProfileViewModel;
-    }
-
-    private async Task Login()
-    {
-        if (_auth is null)
-        {
-            // UI designer
-            return;
-        }
-
-        try
-        {
-            await _auth.AuthenticateAsync();
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "problem logging in into Minecraft");
-        }
     }
 
     private async Task ToggleExpand()
@@ -197,13 +178,20 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        Login()
-            .ContinueWith(t =>
-            {
-                if (t.IsFaulted)
-                {
-                    _logger?.LogError(t.Exception, "login problem");
-                }
-            });
+        // Switch to profile screen and trigger the login flow
+        CurrentViewModel = ProfileViewModel;
+        if (!ProfileViewModel.ClickLoginCommand.IsRunning)
+        {
+            // We fire and forget the login task, because error handling is in the ViewModel
+            Dispatcher.UIThread.Post(() => ProfileViewModel.ClickLoginCommand.Execute(null));
+        }
+
+        var activeAccountItem = Accounts.FirstOrDefault(a => a.Account?.Id == _auth?.ActiveAccount?.Id);
+        if (activeAccountItem is null && Accounts.Count > 0)
+        {
+            activeAccountItem = Accounts.FirstOrDefault(a => !a.IsLogin);
+        }
+
+        Dispatcher.UIThread.Post(() => SelectedAccount = activeAccountItem);
     }
 }
