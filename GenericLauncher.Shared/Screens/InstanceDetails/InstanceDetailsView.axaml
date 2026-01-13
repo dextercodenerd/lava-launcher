@@ -1,0 +1,41 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:instanceDetails="clr-namespace:GenericLauncher.Screens.InstanceDetails"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="GenericLauncher.Screens.InstanceDetails.InstanceDetailsView"
+             x:DataType="instanceDetails:InstanceDetailsViewModel">
+
+
+    <Grid RowDefinitions="Auto, *">
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="16" Spacing="8">
+            <Button Command="{Binding ClickBackCommand}" Content="← Back" />
+            <TextBlock Text="{Binding Instance.Id}" FontSize="24" FontWeight="Bold" />
+            <TextBlock Text="{Binding Instance.VersionId}" FontSize="14" Opacity="0.7" />
+        </StackPanel>
+
+        <!-- Content -->
+        <StackPanel Grid.Row="1" Margin="16" Spacing="16">
+
+            <!-- Install Status / Progress -->
+            <StackPanel IsVisible="{Binding IsInstalling}" Spacing="8">
+                <TextBlock Text="Installing..." FontWeight="SemiBold" />
+                <ProgressBar Value="{Binding ProgressMessage}" Maximum="100" Height="20" />
+                <TextBlock Text="{Binding ProgressMessage, StringFormat='{}Progress: {0}%'}"
+                           HorizontalAlignment="Center" FontSize="12" />
+            </StackPanel>
+
+            <!-- Play Button -->
+            <Button Command="{Binding ClickPlayCommand}"
+                    Content="Play"
+                    FontSize="18"
+                    Padding="32, 12"
+                    HorizontalAlignment="Left"
+                    IsEnabled="{Binding RunningState, Converter={StaticResource IsStoppedConverter}}"
+                    IsVisible="{Binding !IsInstalling}" />
+
+        </StackPanel>
+    </Grid>
+</UserControl>

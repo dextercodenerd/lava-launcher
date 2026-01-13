@@ -24,6 +24,7 @@
                         <TextBlock Text="{Binding Instance.State}"></TextBlock>
                         <TextBlock Text="{Binding ProgressMessage}"></TextBlock>
                         <Button Content="Play"
+                                IsEnabled="{Binding RunningState, Converter={StaticResource IsStoppedConverter}}"
                                 Command="{TemplateBinding ClickPlayCommand}"
                                 CommandParameter="{Binding}" />
                     </StackPanel>

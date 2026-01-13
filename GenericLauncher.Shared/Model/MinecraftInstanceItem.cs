@@ -17,6 +17,8 @@ public partial class MinecraftInstanceItem : ObservableObject
 {
     public MinecraftInstance Instance { get; }
 
+    [ObservableProperty] private MinecraftLauncher.RunningState _runningState = MinecraftLauncher.RunningState.Stopped;
+
     [ObservableProperty] private ThreadSafeInstallProgressReporter.InstallProgress? _progress;
 
     public string ProgressMessage

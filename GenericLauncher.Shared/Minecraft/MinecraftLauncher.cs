@@ -21,10 +21,12 @@ public sealed class MinecraftLauncher : IDisposable
 {
     public enum RunningState
     {
+        Authenticating,
         Launching,
         RendererReady,
         SplashScreen,
         Running,
+        Stopped,
     }
 
     private readonly string _currentOs;
@@ -44,8 +46,7 @@ public sealed class MinecraftLauncher : IDisposable
 
     public event EventHandler? AvailableVersionsChanged;
     public event EventHandler? InstancesChanged;
-    public event EventHandler? LaunchedInstancesChanged;
-
+    public event EventHandler<(string InstanceId, RunningState State)>? InstanceStateChanged;
     public event EventHandler<ThreadSafeInstallProgressReporter.InstallProgress>? InstallProgressUpdated;
 
     public MinecraftLauncher(
@@ -287,16 +288,42 @@ public sealed class MinecraftLauncher : IDisposable
         await RefreshInstancesAsync();
     }
 
-    public Task<ImmutableList<string>> LaunchInstance(MinecraftInstance instance, Account account)
+    public async Task<ImmutableList<string>> LaunchInstance(
+        MinecraftInstance instance,
+        Func<Task<Account>> accountProvider)
     {
+        if (!LaunchedInstances.TryAdd(instance.Id, RunningState.Authenticating))
+        {
+            throw new InvalidOperationException($"Instance {instance.Id} is already running or launching.");
+        }
+
+        InstanceStateChanged?.Invoke(this, (instance.Id, RunningState.Authenticating));
+
+        Account account;
+        try
+        {
+            account = await accountProvider();
+        }
+        catch (Exception)
+        {
+            if (LaunchedInstances.TryRemove(instance.Id, out _))
+            {
+                InstanceStateChanged?.Invoke(this, (instance.Id, RunningState.Stopped));
+            }
+
+            throw;
+        }
+
         // TODO: Is there a better way to handle this? We will test this before calling this method
         //  in the future, so it shouldn't happen then, shouldn't...
         var username = account.Username ?? throw new ArgumentException("Username cannot be null");
 
-        LaunchedInstances.TryAdd(instance.Id, RunningState.Launching);
-        LaunchedInstancesChanged?.Invoke(this, EventArgs.Empty);
+        if (LaunchedInstances.TryUpdate(instance.Id, RunningState.Launching, RunningState.Authenticating))
+        {
+            InstanceStateChanged?.Invoke(this, (instance.Id, RunningState.Launching));
+        }
 
-        return Task.Run(async () =>
+        return await Task.Run(async () =>
             {
                 var javaExecutable = _javaManager.GetJavaExecutablePath((int)instance.RequiredJavaVersion) ??
                                      throw new ArgumentException($"Java {instance.RequiredJavaVersion} is missing");
@@ -351,7 +378,7 @@ public sealed class MinecraftLauncher : IDisposable
                     _logger?.LogError(t.Exception, "Minecraft instance crashed");
                 }
 
-                LaunchedInstancesChanged?.Invoke(this, EventArgs.Empty);
+                InstanceStateChanged?.Invoke(this, (instance.Id, RunningState.Stopped));
 
                 if (t.IsFaulted)
                 {
@@ -370,7 +397,7 @@ public sealed class MinecraftLauncher : IDisposable
         {
             if (LaunchedInstances.TryUpdate(instance.Id, RunningState.RendererReady, RunningState.Launching))
             {
-                LaunchedInstancesChanged?.Invoke(this, EventArgs.Empty);
+                InstanceStateChanged?.Invoke(this, (instance.Id, RunningState.RendererReady));
             }
         }
         else if (logLine.Contains("Sound engine started"))
@@ -380,14 +407,14 @@ public sealed class MinecraftLauncher : IDisposable
 
             if (changed)
             {
-                LaunchedInstancesChanged?.Invoke(this, EventArgs.Empty);
+                InstanceStateChanged?.Invoke(this, (instance.Id, RunningState.Running));
             }
         }
         else
         {
             if (LaunchedInstances.TryUpdate(instance.Id, RunningState.SplashScreen, RunningState.RendererReady))
             {
-                LaunchedInstancesChanged?.Invoke(this, EventArgs.Empty);
+                InstanceStateChanged?.Invoke(this, (instance.Id, RunningState.SplashScreen));
             }
         }
     }

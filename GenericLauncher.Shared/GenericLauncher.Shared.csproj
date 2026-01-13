@@ -44,6 +44,10 @@
             <DependentUpon>MainView.axaml</DependentUpon>
             <SubType>Code</SubType>
         </Compile>
+        <Compile Update="Screens\InstanceDetails\InstanceDetailsView.axaml.cs">
+            <DependentUpon>InstanceDetailsView.axaml</DependentUpon>
+            <SubType>Code</SubType>
+        </Compile>
     </ItemGroup>
 
     <!-- Inject Azure client id and redirect URL into a generated source code file -->
