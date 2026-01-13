@@ -83,6 +83,11 @@ public partial class InstanceDetailsViewModel : ViewModelBase
             RunningState = s;
         }
 
+        if (_minecraftLauncher.CurrentInstallProgress.TryGetValue(instance.Id, out var p))
+        {
+            Progress = p;
+        }
+
         _minecraftLauncher.InstallProgressUpdated += OnInstallProgressUpdated;
         _minecraftLauncher.InstancesChanged += OnInstancesChanged;
         _minecraftLauncher.InstanceStateChanged += OnInstanceStateChanged;
@@ -104,6 +109,7 @@ public partial class InstanceDetailsViewModel : ViewModelBase
             {
                 Instance = updatedInstance;
                 OnPropertyChanged(nameof(IsInstalling));
+                ClickPlayCommand.NotifyCanExecuteChanged();
             }
         });
     }

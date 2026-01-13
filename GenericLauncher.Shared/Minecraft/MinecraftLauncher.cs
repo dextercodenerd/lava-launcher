@@ -42,6 +42,10 @@ public sealed class MinecraftLauncher : IDisposable
     private readonly SemaphoreSlim _lock = new(1, 1);
     public ImmutableList<VersionInfo> AvailableVersions = [];
     public ImmutableList<MinecraftInstance> Instances = [];
+
+    public readonly ConcurrentDictionary<string, ThreadSafeInstallProgressReporter.InstallProgress>
+        CurrentInstallProgress = [];
+
     public readonly ConcurrentDictionary<string, RunningState> LaunchedInstances = [];
 
     public event EventHandler? AvailableVersionsChanged;
@@ -189,6 +193,7 @@ public sealed class MinecraftLauncher : IDisposable
         await using var progressReporter = new ThreadSafeInstallProgressReporter(name,
             new Progress<ThreadSafeInstallProgressReporter.InstallProgress>(p =>
             {
+                CurrentInstallProgress[p.InstanceId] = p;
                 InstallProgressUpdated?.Invoke(this, p);
                 progress.Report(p);
             }));
@@ -281,6 +286,8 @@ public sealed class MinecraftLauncher : IDisposable
         await Task.WhenAll(downloadMinecraftTask, downloadJavaTask);
 
         _logger?.LogInformation("Successfully download Minecraft instance '{InstanceId}'", name);
+
+        CurrentInstallProgress.TryRemove(name, out _);
 
         await _repository.SetMinecraftInstanceAsReadyAsync(name);
         _logger?.LogInformation("Minecraft instance '{InstanceId}' is ready to play", name);

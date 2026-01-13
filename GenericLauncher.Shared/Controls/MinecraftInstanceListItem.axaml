@@ -24,6 +24,7 @@
                         <TextBlock Text="{Binding Instance.State}"></TextBlock>
                         <TextBlock Text="{Binding ProgressMessage}"></TextBlock>
                         <Button Content="Play"
+                                IsVisible="{Binding Instance.State, Converter={StaticResource IsReadyConverter}}"
                                 IsEnabled="{Binding RunningState, Converter={StaticResource IsStoppedConverter}}"
                                 Command="{TemplateBinding ClickPlayCommand}"
                                 CommandParameter="{Binding}" />

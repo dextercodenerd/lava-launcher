@@ -20,6 +20,8 @@
         <!-- Look here for overrides https://github.com/AvaloniaUI/Avalonia/blob/master/src/Avalonia.Themes.Fluent/Accents/BaseResources.xaml -->
         <x:Double x:Key="ControlContentThemeFontSize">16</x:Double>
 
+        <!-- custom converters -->
         <converters:IsStoppedConverter x:Key="IsStoppedConverter" />
+        <converters:IsReadyConverter x:Key="IsReadyConverter" />
     </Application.Resources>
 </Application>
