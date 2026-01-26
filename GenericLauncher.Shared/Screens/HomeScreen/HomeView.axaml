@@ -54,10 +54,12 @@
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="model:MinecraftInstanceItem">
                         <controls:MinecraftInstanceListItem
-                            ClickPlayCommand="{Binding $parent[ItemsControl].((homeScreen:HomeViewModel)DataContext).ClickInstanceCommand}" />
+                            ClickCommand="{Binding $parent[ItemsControl].((homeScreen:HomeViewModel)DataContext).ClickInstanceCommand}"
+                            ClickPlayCommand="{Binding $parent[ItemsControl].((homeScreen:HomeViewModel)DataContext).ClickPlayInstanceCommand}" />
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </ScrollViewer>
     </Panel>
 </UserControl>
+

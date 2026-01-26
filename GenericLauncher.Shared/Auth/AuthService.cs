@@ -256,8 +256,11 @@ public class AuthService
         return accState;
     }
 
-    public async Task<Account> AuthenticateAccountAsync(Account acc)
+    public async Task<Account> AuthenticateAccountAsync(Account acc, bool force = false)
     {
+        // TODO: Call this only if the MC token is expired, or near expiration, or force == true,
+        //  because this refreshes all the tokens and slows down the start time.
+
         var refreshedAccount = await _auth.AuthenticateWithMsRefreshTokenAsync(acc.RefreshToken);
         var accState = XstsFailureToXboxAccountState(refreshedAccount);
 

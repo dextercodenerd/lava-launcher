@@ -13,6 +13,7 @@ using GenericLauncher.Minecraft;
 using GenericLauncher.Misc;
 using GenericLauncher.Model;
 using GenericLauncher.Screens.HomeScreen;
+using GenericLauncher.Screens.InstanceDetails;
 using GenericLauncher.Screens.NewInstanceDialog;
 using GenericLauncher.Screens.ProfileScreen;
 using Microsoft.Extensions.Logging;
@@ -63,7 +64,8 @@ public partial class MainWindowViewModel : ViewModelBase
         HomeViewModel = new HomeViewModel(
             authService,
             minecraftLauncher,
-            App.LoggerFactory?.CreateLogger(nameof(HomeViewModel)));
+            App.LoggerFactory?.CreateLogger(nameof(HomeViewModel)),
+            GoToInstanceDetails);
 
         ProfileViewModel = new ProfileViewModel(
             authService,
@@ -200,5 +202,22 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         Dispatcher.UIThread.Post(() => SelectedAccount = activeAccountItem);
+    }
+
+    private void GoToInstanceDetails(MinecraftInstance instance)
+    {
+        var vm = new InstanceDetailsViewModel(
+            instance,
+            _auth,
+            _minecraftLauncher,
+            GoToHome,
+            App.LoggerFactory?.CreateLogger(nameof(InstanceDetailsViewModel)));
+
+        CurrentViewModel = vm;
+    }
+
+    private void GoToHome()
+    {
+        CurrentViewModel = HomeViewModel;
     }
 }

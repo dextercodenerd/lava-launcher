@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -30,14 +29,18 @@ public partial class HomeViewModel : ViewModelBase
     {
     }
 
+    private readonly Action<MinecraftInstance>? _openDetails;
+
     public HomeViewModel(
         AuthService? authService = null,
         MinecraftLauncher? minecraftLauncher = null,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        Action<MinecraftInstance>? openDetails = null)
     {
         _logger = logger;
         _auth = authService;
         _minecraftLauncher = minecraftLauncher;
+        _openDetails = openDetails;
 
         if (_minecraftLauncher is null)
         {
@@ -46,7 +49,7 @@ public partial class HomeViewModel : ViewModelBase
 
         UpdateInstancesUi(_minecraftLauncher.Instances);
         _minecraftLauncher.InstancesChanged += OnInstancesChanged;
-        _minecraftLauncher.LaunchedInstancesChanged += OnLaunchedInstancesChanged;
+        _minecraftLauncher.InstanceStateChanged += OnInstanceStateChanged;
         _minecraftLauncher.InstallProgressUpdated += OnInstallProgressUpdated;
     }
 
@@ -65,22 +68,36 @@ public partial class HomeViewModel : ViewModelBase
         Instances.Clear();
         // TODO: Move this merging off the UI thread -- then update also OnInstallProgressUpdated()
         //  because that is enumerating Instances and will crash.
-        instances.Select(i => new MinecraftInstanceItem(i, null))
+        instances.Select(i =>
+            {
+                // Init running state
+                var state = MinecraftLauncher.RunningState.Stopped;
+                if (_minecraftLauncher?.LaunchedInstances.TryGetValue(i.Id, out var s) == true)
+                {
+                    state = s;
+                }
+
+                return new MinecraftInstanceItem(i, null)
+                {
+                    RunningState = state,
+                };
+            })
             .ToList()
             // TODO: update only the changed instances, and add only the new ones, and remove the deleted i.e., diff
             .ForEach(i => Instances.Add(i));
     }
 
-    private void UpdateLaunchedInstancesUi(
-        IDictionary<string, MinecraftLauncher.RunningState> launchedInstances)
+    private void OnInstanceStateChanged(object? sender, (string InstanceId, MinecraftLauncher.RunningState State) e)
     {
-        Dispatcher.UIThread.VerifyAccess();
-
-        _logger?.LogDebug("Launched instances: {LaunchedInstances}", launchedInstances);
+        Dispatcher.UIThread.Post(() =>
+        {
+            var found = Instances.FirstOrDefault(i => i.Instance.Id == e.InstanceId);
+            found?.RunningState = e.State;
+        });
     }
 
     [RelayCommand]
-    private async Task ClickInstance(MinecraftInstanceItem item)
+    private async Task ClickPlayInstance(MinecraftInstanceItem item)
     {
         if (_auth is null || _minecraftLauncher is null || item.Instance.State != MinecraftInstanceState.Ready)
         {
@@ -93,9 +110,20 @@ public partial class HomeViewModel : ViewModelBase
             return;
         }
 
-        var newAcc = await _auth.AuthenticateAccountAsync(acc);
+        try
+        {
+            await _minecraftLauncher.LaunchInstance(item.Instance, () => _auth.AuthenticateAccountAsync(acc));
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to launch instance {InstanceId}", item.Instance.Id);
+        }
+    }
 
-        await _minecraftLauncher.LaunchInstance(item.Instance, newAcc);
+    [RelayCommand]
+    private void ClickInstance(MinecraftInstanceItem item)
+    {
+        _openDetails?.Invoke(item.Instance);
     }
 
     private void OnInstancesChanged(object? sender, EventArgs e)
@@ -109,17 +137,6 @@ public partial class HomeViewModel : ViewModelBase
         Dispatcher.UIThread.Post(() => { UpdateInstancesUi(instances); });
     }
 
-    private void OnLaunchedInstancesChanged(object? sender, EventArgs e)
-    {
-        // TODO: Make a deep-copy
-        var copy = _minecraftLauncher?.LaunchedInstances;
-        if (copy is null)
-        {
-            return;
-        }
-
-        Dispatcher.UIThread.Post(() => { UpdateLaunchedInstancesUi(copy); });
-    }
 
     private void OnInstallProgressUpdated(object? sender, ThreadSafeInstallProgressReporter.InstallProgress p)
     {

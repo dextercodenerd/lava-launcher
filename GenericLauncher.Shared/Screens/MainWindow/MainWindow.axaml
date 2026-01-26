@@ -9,6 +9,7 @@
         xmlns:loadingScreen="clr-namespace:GenericLauncher.Screens.LoadingScreen"
         xmlns:newInstanceDialog="clr-namespace:GenericLauncher.Screens.NewInstanceDialog"
         xmlns:profileScreen="clr-namespace:GenericLauncher.Screens.ProfileScreen"
+        xmlns:instanceDetails="clr-namespace:GenericLauncher.Screens.InstanceDetails"
         mc:Ignorable="d"
         d:DesignWidth="600"
         d:DesignHeight="450"
@@ -50,6 +51,9 @@
         </DataTemplate>
         <DataTemplate DataType="profileScreen:ProfileViewModel">
             <profileScreen:ProfileView />
+        </DataTemplate>
+        <DataTemplate DataType="instanceDetails:InstanceDetailsViewModel">
+            <instanceDetails:InstanceDetailsView />
         </DataTemplate>
     </Window.DataTemplates>
 
