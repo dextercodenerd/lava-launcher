@@ -11,11 +11,14 @@ using GenericLauncher.Database.Model;
 using GenericLauncher.Minecraft;
 using GenericLauncher.Model;
 using Microsoft.Extensions.Logging;
+using GenericLauncher.Navigation;
 
 namespace GenericLauncher.Screens.HomeScreen;
 
-public partial class HomeViewModel : ViewModelBase
+public partial class HomeViewModel : ViewModelBase, IPageViewModel
 {
+    public string Title => "Library";
+    public bool IsRootScreen => true;
     private const double DefaultSpace = 16;
 
     private readonly ILogger? _logger;

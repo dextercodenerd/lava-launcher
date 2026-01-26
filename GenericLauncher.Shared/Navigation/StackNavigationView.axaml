@@ -1,0 +1,46 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:nav="clr-namespace:GenericLauncher.Navigation"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="GenericLauncher.Navigation.StackNavigationView"
+             x:DataType="nav:StackNavigationViewModel">
+
+    <Grid RowDefinitions="Auto,*">
+
+        <Border Grid.Row="0"
+                IsVisible="True"
+                Background="Transparent"
+                Padding="16, 16, 16, 8">
+            <StackPanel Orientation="Horizontal" Spacing="16">
+                <!-- Back Button -->
+                <!-- Ideally this should be a nice icon button -->
+                <Button Command="{Binding PopCommand}"
+                        IsVisible="{Binding CanGoBack}"
+                        VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Image Width="16" Source="{DynamicResource IconBack}" />
+                        <TextBlock Text="Back" VerticalAlignment="Center" FontWeight="SemiBold" />
+                    </StackPanel>
+                </Button>
+
+                <!-- Page Title -->
+                <TextBlock Text="{Binding CurrentPage.Title}"
+                           VerticalAlignment="Center"
+                           FontSize="20"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource TextControlForeground}" />
+            </StackPanel>
+        </Border>
+
+        <!-- Page Content with Transition -->
+        <TransitioningContentControl Grid.Row="1"
+                                     Content="{Binding CurrentPage}">
+            <TransitioningContentControl.PageTransition>
+                <CrossFade Duration="0:00:00.100" />
+            </TransitioningContentControl.PageTransition>
+        </TransitioningContentControl>
+    </Grid>
+</UserControl>
+

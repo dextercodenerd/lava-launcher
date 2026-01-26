@@ -6,11 +6,14 @@ using CommunityToolkit.Mvvm.Input;
 using GenericLauncher.Auth;
 using GenericLauncher.Database.Model;
 using Microsoft.Extensions.Logging;
+using GenericLauncher.Navigation;
 
 namespace GenericLauncher.Screens.ProfileScreen;
 
-public partial class ProfileViewModel : ViewModelBase
+public partial class ProfileViewModel : ViewModelBase, IPageViewModel
 {
+    public string Title => "Profile";
+    public bool IsRootScreen => true;
     private readonly ILogger? _logger;
     private readonly AuthService? _auth;
 
