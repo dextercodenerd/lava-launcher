@@ -1,0 +1,166 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:details="clr-namespace:GenericLauncher.Screens.ModrinthProjectDetails"
+             xmlns:asyncImageLoader="clr-namespace:AsyncImageLoader;assembly=AsyncImageLoader.Avalonia"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="600"
+             x:Class="GenericLauncher.Screens.ModrinthProjectDetails.ModrinthProjectDetailsView"
+             x:DataType="details:ModrinthProjectDetailsViewModel">
+
+    <Design.DataContext>
+        <details:ModrinthProjectDetailsViewModel />
+    </Design.DataContext>
+
+    <Grid Margin="16">
+        <!-- Loading Overlay -->
+        <Border
+            Background="#CC000000"
+            IsVisible="{Binding IsLoading}"
+            ZIndex="10">
+            <TextBlock
+                Text="Loading..."
+                Foreground="White"
+                FontSize="20"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center" />
+        </Border>
+
+        <!-- Error Message -->
+        <StackPanel
+            IsVisible="{Binding HasError}"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Spacing="8">
+            <TextBlock
+                Text="⚠️ Error"
+                FontSize="20"
+                HorizontalAlignment="Center" />
+            <TextBlock
+                Text="{Binding ErrorMessage}"
+                TextWrapping="Wrap"
+                MaxWidth="400"
+                HorizontalAlignment="Center" />
+            <Button
+                Content="Retry"
+                Command="{Binding RetryCommand}"
+                HorizontalAlignment="Center" />
+        </StackPanel>
+
+        <!-- Project Details -->
+        <ScrollViewer IsVisible="{Binding !IsLoading}">
+            <StackPanel Spacing="16" IsVisible="{Binding Project, Converter={x:Static ObjectConverters.IsNotNull}}">
+                <!-- Header -->
+                <Grid ColumnDefinitions="Auto,*">
+                    <!-- Icon -->
+                    <Image
+                        Grid.Column="0"
+                        Width="96"
+                        Height="96"
+                        Margin="0 0 16 0"
+                        asyncImageLoader:ImageLoader.Source="{Binding Project.IconUrl}"
+                        Stretch="UniformToFill" />
+
+                    <!-- Title and Description -->
+                    <StackPanel Grid.Column="1" Spacing="8">
+                        <TextBlock
+                            Text="{Binding Project.Title}"
+                            FontSize="24"
+                            FontWeight="Bold" />
+                        <TextBlock
+                            Text="{Binding Project.Description}"
+                            FontSize="14"
+                            Foreground="#666"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- Stats Bar -->
+                <Border Background="LightGray" CornerRadius="8" Padding="12">
+                    <StackPanel Orientation="Horizontal" Spacing="24">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Downloads" FontSize="11" Foreground="#999" />
+                            <TextBlock Text="{Binding Project.Downloads, StringFormat={}{0:N0}}" FontWeight="Bold" />
+                        </StackPanel>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Followers" FontSize="11" Foreground="#999" />
+                            <TextBlock Text="{Binding Project.Followers, StringFormat={}{0:N0}}" FontWeight="Bold" />
+                        </StackPanel>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Type" FontSize="11" Foreground="#999" />
+                            <TextBlock Text="{Binding Project.ProjectType}" FontWeight="Bold" Foreground="#f76806" />
+                        </StackPanel>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Updated" FontSize="11" Foreground="#999" />
+                            <TextBlock Text="{Binding Project.Updated}" FontWeight="Bold" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Full Description -->
+                <Border Background="White" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Description" FontSize="16" FontWeight="Bold" />
+                        <TextBlock
+                            Text="{Binding Project.Body}"
+                            TextWrapping="Wrap"
+                            FontSize="13"
+                            LineHeight="20" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Supported Versions -->
+                <Border Background="White" CornerRadius="8" Padding="16"
+                        IsVisible="{Binding Project.GameVersions.Length, Converter={StaticResource IsGreaterThanZeroConverter}}">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Supported Minecraft Versions" FontSize="16" FontWeight="Bold" />
+                        <TextBlock
+                            Text="{Binding Project.GameVersions, Converter={StaticResource JoinStringsConverter}}"
+                            TextWrapping="Wrap"
+                            FontSize="12"
+                            Foreground="#666" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Links -->
+                <Border Background="White" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Links" FontSize="16" FontWeight="Bold" />
+                        <StackPanel Spacing="4">
+                            <TextBlock
+                                IsVisible="{Binding Project.SourceUrl, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                <Run Text="Source: " />
+                                <Run Text="{Binding Project.SourceUrl}" Foreground="Blue" />
+                            </TextBlock>
+                            <TextBlock
+                                IsVisible="{Binding Project.IssuesUrl, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                <Run Text="Issues: " />
+                                <Run Text="{Binding Project.IssuesUrl}" Foreground="Blue" />
+                            </TextBlock>
+                            <TextBlock
+                                IsVisible="{Binding Project.DiscordUrl, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                <Run Text="Discord: " />
+                                <Run Text="{Binding Project.DiscordUrl}" Foreground="Blue" />
+                            </TextBlock>
+                            <TextBlock
+                                IsVisible="{Binding Project.WikiUrl, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                <Run Text="Wiki: " />
+                                <Run Text="{Binding Project.WikiUrl}" Foreground="Blue" />
+                            </TextBlock>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- License -->
+                <Border Background="White" CornerRadius="8" Padding="16"
+                        IsVisible="{Binding Project.License, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="License" FontSize="16" FontWeight="Bold" />
+                        <TextBlock Text="{Binding Project.License.Name}" FontSize="12" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>
+

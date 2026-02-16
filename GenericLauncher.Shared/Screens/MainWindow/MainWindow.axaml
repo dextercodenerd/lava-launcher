@@ -11,6 +11,8 @@
         xmlns:newInstanceDialog="clr-namespace:GenericLauncher.Screens.NewInstanceDialog"
         xmlns:profileScreen="clr-namespace:GenericLauncher.Screens.ProfileScreen"
         xmlns:instanceDetails="clr-namespace:GenericLauncher.Screens.InstanceDetails"
+        xmlns:modrinthSearch="clr-namespace:GenericLauncher.Screens.ModrinthSearch"
+        xmlns:modrinthDetails="clr-namespace:GenericLauncher.Screens.ModrinthProjectDetails"
         mc:Ignorable="d"
         d:DesignWidth="600"
         d:DesignHeight="450"
@@ -55,6 +57,12 @@
         </DataTemplate>
         <DataTemplate DataType="instanceDetails:InstanceDetailsViewModel">
             <instanceDetails:InstanceDetailsView />
+        </DataTemplate>
+        <DataTemplate DataType="modrinthSearch:ModrinthSearchViewModel">
+            <modrinthSearch:ModrinthSearchView />
+        </DataTemplate>
+        <DataTemplate DataType="modrinthDetails:ModrinthProjectDetailsViewModel">
+            <modrinthDetails:ModrinthProjectDetailsView />
         </DataTemplate>
     </Window.DataTemplates>
 
@@ -117,7 +125,7 @@
                         </Button>
                     </Border>
 
-                    <!-- Avater/login item in the center that overlaps the main content below -->
+                    <!-- Avatar/login item in the center that overlaps the main content below -->
                     <controls:AccountSelector
                         Width="128" Height="128"
                         Background="Aqua"
@@ -125,8 +133,15 @@
                         SelectedAccount="{Binding SelectedAccount, Mode=TwoWay}"
                         ClickAccount="{Binding ClickAccountCommand}" />
 
-                    <!-- Right small item, manually offset with bottom margin -->
-                    <Border Width="60" Height="60" Background="Gray" CornerRadius="30" Margin="0 0 0 16" />
+                    <!-- Right small item: Modrinth Search button -->
+                    <Border Width="60" Height="60" Background="Gray" CornerRadius="30" Margin="0 0 0 16">
+                        <Button
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Command="{Binding ClickModrinthSearchCommand}">
+                            S
+                        </Button>
+                    </Border>
                     <!-- Fake right item for balance i.e., the center item stays in the center of the window -->
                     <Border Width="60" Height="60" Opacity="0" IsHitTestVisible="False" Margin="0 0 0 16" />
                 </StackPanel>
@@ -169,4 +184,3 @@
 
     </dialogHost:DialogHost>
 </Window>
-

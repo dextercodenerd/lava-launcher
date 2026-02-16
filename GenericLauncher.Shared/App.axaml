@@ -23,5 +23,10 @@
         <!-- custom converters -->
         <converters:IsStoppedConverter x:Key="IsStoppedConverter" />
         <converters:IsReadyConverter x:Key="IsReadyConverter" />
+        <converters:IsGreaterThanOneConverter x:Key="IsGreaterThanOneConverter" />
+        <converters:IsLessThanConverter x:Key="IsLessThanConverter" />
+        <converters:IsGreaterThanZeroConverter x:Key="IsGreaterThanZeroConverter" />
+        <converters:JoinStringsConverter x:Key="JoinStringsConverter" />
     </Application.Resources>
 </Application>
+

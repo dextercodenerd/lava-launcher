@@ -13,6 +13,7 @@ using GenericLauncher.Http;
 using GenericLauncher.Java;
 using GenericLauncher.Minecraft;
 using GenericLauncher.Misc;
+using GenericLauncher.Modrinth;
 using LavaLauncher;
 using Microsoft.Extensions.Logging;
 
@@ -56,6 +57,9 @@ public partial class App : Application
     private readonly LauncherRepository _launcherRepository = new(BaseFolder);
     private readonly AuthService _authService;
     private readonly MinecraftLauncher _minecraftLauncher;
+
+    private readonly ModrinthApiClient _modrinthApiClient =
+        new(HttpClient, LoggerFactory?.CreateLogger(typeof(ModrinthApiClient)));
 
     public App()
     {
@@ -101,7 +105,7 @@ public partial class App : Application
         {
             desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;
             DataContext =
-                new ApplicationViewModel(_authService, _minecraftLauncher);
+                new ApplicationViewModel(_authService, _minecraftLauncher, _modrinthApiClient);
         }
 
         base.OnFrameworkInitializationCompleted();
