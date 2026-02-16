@@ -7,18 +7,20 @@ using GenericLauncher.Auth;
 using GenericLauncher.Database.Model;
 using GenericLauncher.Minecraft;
 using Microsoft.Extensions.Logging;
+using GenericLauncher.Navigation;
 
 namespace GenericLauncher.Screens.InstanceDetails;
 
-public partial class InstanceDetailsViewModel : ViewModelBase
+public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, IDisposable
 {
     private readonly AuthService? _auth;
     private readonly MinecraftLauncher? _minecraftLauncher;
-    private readonly Action? _goBackAction;
     private readonly ILogger? _logger;
 
     [ObservableProperty] private MinecraftInstance _instance;
     [ObservableProperty] private ThreadSafeInstallProgressReporter.InstallProgress? _progress;
+
+    public string Title => Instance.Id;
 
     [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(ClickPlayCommand))]
     private MinecraftLauncher.RunningState _runningState = MinecraftLauncher.RunningState.Stopped;
@@ -64,13 +66,11 @@ public partial class InstanceDetailsViewModel : ViewModelBase
         MinecraftInstance instance,
         AuthService? auth,
         MinecraftLauncher? minecraftLauncher,
-        Action? goBackAction,
         ILogger? logger)
     {
         _instance = instance;
         _auth = auth;
         _minecraftLauncher = minecraftLauncher;
-        _goBackAction = goBackAction;
         _logger = logger;
 
         if (_minecraftLauncher is null)
@@ -139,13 +139,6 @@ public partial class InstanceDetailsViewModel : ViewModelBase
         OnPropertyChanged(nameof(ProgressMessage));
     }
 
-    [RelayCommand]
-    private void OnClickBack()
-    {
-        Cleanup();
-        _goBackAction?.Invoke();
-    }
-
     [RelayCommand(CanExecute = nameof(CanClickPlay))]
     private async Task OnClickPlay()
     {
@@ -194,7 +187,7 @@ public partial class InstanceDetailsViewModel : ViewModelBase
         return RunningState == MinecraftLauncher.RunningState.Stopped;
     }
 
-    private void Cleanup()
+    public void Dispose()
     {
         if (_minecraftLauncher is null)
         {
@@ -204,5 +197,7 @@ public partial class InstanceDetailsViewModel : ViewModelBase
         _minecraftLauncher.InstallProgressUpdated -= OnInstallProgressUpdated;
         _minecraftLauncher.InstancesChanged -= OnInstancesChanged;
         _minecraftLauncher.InstanceStateChanged -= OnInstanceStateChanged;
+
+        GC.SuppressFinalize(this);
     }
 }

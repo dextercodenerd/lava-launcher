@@ -18,6 +18,7 @@ using GenericLauncher.Screens.NewInstanceDialog;
 using GenericLauncher.Screens.ProfileScreen;
 using Microsoft.Extensions.Logging;
 using LoadingViewModel = GenericLauncher.Screens.LoadingScreen.LoadingViewModel;
+using GenericLauncher.Navigation;
 
 namespace GenericLauncher.Screens.MainWindow;
 
@@ -38,8 +39,8 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private ObservableCollection<AccountListItem> _accounts = [];
     [ObservableProperty] private AccountListItem? _selectedAccount;
 
-    // CurrentViewModel is used for navigation between screens
-    [ObservableProperty] private ViewModelBase _currentViewModel;
+    // Navigation Component
+    public StackNavigationViewModel Navigation { get; }
 
     public HomeViewModel HomeViewModel { get; }
     public ProfileViewModel ProfileViewModel { get; }
@@ -59,13 +60,18 @@ public partial class MainWindowViewModel : ViewModelBase
         _auth = authService;
         _minecraftLauncher = minecraftLauncher;
 
-        CurrentViewModel = new LoadingViewModel();
+        Navigation = new StackNavigationViewModel();
+
+        // TODO: Loading logic might need adjustment, skipping for now to focus on Main Nav
+        // CurrentViewModel = new LoadingViewModel();
 
         HomeViewModel = new HomeViewModel(
             authService,
             minecraftLauncher,
             App.LoggerFactory?.CreateLogger(nameof(HomeViewModel)),
             GoToInstanceDetails);
+
+        Navigation.SetRoot(HomeViewModel);
 
         ProfileViewModel = new ProfileViewModel(
             authService,
@@ -108,15 +114,15 @@ public partial class MainWindowViewModel : ViewModelBase
 
         Accounts.Add(new AccountListItem(null, true));
 
-        if (accounts.Count > 0 && CurrentViewModel is LoadingViewModel)
+        if (accounts.Count > 0 && Navigation.CurrentPage is null)
         {
-            // Switch to home only from Empty state and loading state
-            CurrentViewModel = HomeViewModel;
+            // Switch to home only from Empty state
+            Navigation.SetRoot(HomeViewModel);
         }
-        else if (accounts.Count == 0 && CurrentViewModel != ProfileViewModel)
+        else if (accounts.Count == 0)
         {
             // Switch to empty profile screen, when there are no accounts
-            CurrentViewModel = ProfileViewModel;
+            // CurrentViewModel = ProfileViewModel; // TODO: Migrate Profile
         }
 
         var accountToSelect = selectedAccount is null
@@ -133,7 +139,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private void OnClickLibrary()
     {
-        CurrentViewModel = HomeViewModel;
+        Navigation.SetRoot(HomeViewModel);
     }
 
     [RelayCommand]
@@ -145,7 +151,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private void OnClickAccount()
     {
-        CurrentViewModel = ProfileViewModel;
+        Navigation.SetRoot(ProfileViewModel);
     }
 
     private async Task ToggleExpand()
@@ -188,7 +194,7 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         // Switch to profile screen and trigger the login flow
-        CurrentViewModel = ProfileViewModel;
+        Navigation.SetRoot(ProfileViewModel);
         if (!ProfileViewModel.ClickLoginCommand.IsRunning)
         {
             // We fire and forget the login task, because error handling is in the ViewModel
@@ -210,14 +216,13 @@ public partial class MainWindowViewModel : ViewModelBase
             instance,
             _auth,
             _minecraftLauncher,
-            GoToHome,
             App.LoggerFactory?.CreateLogger(nameof(InstanceDetailsViewModel)));
 
-        CurrentViewModel = vm;
+        Navigation.Push(vm);
     }
 
     private void GoToHome()
     {
-        CurrentViewModel = HomeViewModel;
+        Navigation.SetRoot(HomeViewModel);
     }
 }

@@ -3,6 +3,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:mainWindow="clr-namespace:GenericLauncher.Screens.MainWindow"
+        xmlns:nav="clr-namespace:GenericLauncher.Navigation"
         xmlns:homeScreen="clr-namespace:GenericLauncher.Screens.HomeScreen"
         xmlns:controls="clr-namespace:GenericLauncher.Controls"
         xmlns:dialogHost="clr-namespace:DialogHostAvalonia;assembly=DialogHost.Avalonia"
@@ -160,11 +161,12 @@
                         </Transitions>
                     </Border.Transitions>
 
-                    <!-- Screens that are swapped via the CurrentViewModel property and DataTemplates -->
-                    <ContentControl Content="{Binding CurrentViewModel}" />
+                    <!-- Screens that are swapped via the Strategy pattern in StackNavigationViewModel -->
+                    <nav:StackNavigationView DataContext="{Binding Navigation}" />
                 </Border>
             </Panel>
         </Panel>
 
     </dialogHost:DialogHost>
 </Window>
+

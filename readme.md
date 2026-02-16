@@ -58,5 +58,26 @@ dotnet publish .\LavaLauncher.Desktop\LavaLauncher.Desktop.csproj -c Release -r 
 
 and find the output in the `LavaLauncher\LavaLauncher.Desktop\bin\Release\net9.0\win-x64\publish\` folder.
 
+## Navigation Architecture
+We use a **Phone-style Stack Navigation** system to keep the UI simple for children. The global "Ribbon" stays at the top, while the content area cross fades.
+
+### Technical Overview
+*   **Component**: `StackNavigationViewModel` manages the history stack (`Push`, `Pop`, `SetRoot`).
+*   **Safety**: The back button automatically disappears on root screens.
+*   **Coordinator**: `MainWindowViewModel` acts as the Coordinator. Screens do not know about each other; they fire Actions, and the Window wires them up.
+
+### Adding New Screens
+To add a new screen:
+1.  Create a ViewModel (e.g. `MyScreenViewModel`).
+2.  Implement `IPageViewModel`:
+    *   `Title`: The text shown in the header.
+    *   `IsRootScreen`: Set to `true` ONLY if this screen should clear the history (like Home/Profile). Defaults to `false` (Transient).
+3.  **Register DataTemplate**: Add a mapping in `App.axaml` (or `MainWindow.axaml` for now) so Avalonia knows how to draw it.
+
+### Lifecycle & Memory Management
+To prevent memory leaks (especially with event subscriptions to the Singleton Launcher), we use a strict ownership model:
+*   **Transient Screens** (default): Are automatically `Dispose()`d when you navigate back. Implement `IDisposable` to clean up your events!
+*   **Root Screens** (`IsRootScreen = true`): Are kept alive and reused. Never disposed by the navigation system.
+
 # Disclosure
 __NOT AN OFFICIAL MINECRAFT SERVICE. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT__

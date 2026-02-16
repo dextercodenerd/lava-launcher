@@ -10,11 +10,6 @@
 
     <Grid RowDefinitions="Auto, *">
         <!-- Header -->
-        <StackPanel Grid.Row="0" Margin="16" Spacing="8">
-            <Button Command="{Binding ClickBackCommand}" Content="← Back" />
-            <TextBlock Text="{Binding Instance.Id}" FontSize="24" FontWeight="Bold" />
-            <TextBlock Text="{Binding Instance.VersionId}" FontSize="14" Opacity="0.7" />
-        </StackPanel>
 
         <!-- Content -->
         <StackPanel Grid.Row="1" Margin="16" Spacing="16">
@@ -39,3 +34,4 @@
         </StackPanel>
     </Grid>
 </UserControl>
+
