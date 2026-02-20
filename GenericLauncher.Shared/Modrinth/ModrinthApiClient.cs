@@ -1,6 +1,6 @@
 using System;
 using System.Net.Http;
-using System.Text.Json;
+using System.Net.Http.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
@@ -28,9 +28,6 @@ public class ModrinthApiClient
     /// <summary>
     /// Search for projects on Modrinth.
     /// </summary>
-    /// <summary>
-    /// Search for projects on Modrinth.
-    /// </summary>
     public async Task<ModrinthSearchResponse?> SearchProjectsAsync(ModrinthSearchQuery query,
         CancellationToken cancellationToken = default)
     {
@@ -38,17 +35,17 @@ public class ModrinthApiClient
         {
             var queryString = BuildQueryString(query);
             var url = $"{BaseUrl}/search?{queryString}";
-
             _logger?.LogInformation("Searching Modrinth: {Url}", url);
 
             var response = await _httpClient.GetAsync(url, cancellationToken);
             response.EnsureSuccessStatusCode();
 
-            var json = await response.Content.ReadAsStringAsync();
-            return JsonSerializer.Deserialize(json, ModrinthJsonContext.Default.ModrinthSearchResponse);
+            return await response.Content.ReadFromJsonAsync(ModrinthJsonContext.Default.ModrinthSearchResponse,
+                cancellationToken);
         }
         catch (Exception ex)
         {
+            // TODO: rethrow and handle on the caller's side
             _logger?.LogError(ex, "Failed to search Modrinth projects");
             return null;
         }
@@ -57,25 +54,22 @@ public class ModrinthApiClient
     /// <summary>
     /// Get detailed information about a project.
     /// </summary>
-    /// <summary>
-    /// Get detailed information about a project.
-    /// </summary>
     public async Task<ModrinthProject?> GetProjectAsync(string idOrSlug, CancellationToken cancellationToken = default)
     {
         try
         {
-            var url = $"{BaseUrl}/project/{idOrSlug}";
-
+            var url = $"{BaseUrl}/project/{Uri.EscapeDataString(idOrSlug)}";
             _logger?.LogInformation("Fetching Modrinth project: {IdOrSlug}", idOrSlug);
 
             var response = await _httpClient.GetAsync(url, cancellationToken);
             response.EnsureSuccessStatusCode();
 
-            var json = await response.Content.ReadAsStringAsync();
-            return JsonSerializer.Deserialize(json, ModrinthJsonContext.Default.ModrinthProject);
+            return await response.Content.ReadFromJsonAsync(ModrinthJsonContext.Default.ModrinthProject,
+                cancellationToken);
         }
         catch (Exception ex)
         {
+            // TODO: rethrow and handle on the caller's side
             _logger?.LogError(ex, "Failed to get Modrinth project: {IdOrSlug}", idOrSlug);
             return null;
         }
@@ -83,8 +77,8 @@ public class ModrinthApiClient
 
     private static string BuildQueryString(ModrinthSearchQuery query)
     {
-        // Parsing (empty string) returns an internal HttpQSCollection, which we need, and it's not
-        // possible to create it directly...
+        // Parsing (empty string) returns an internal HttpQSCollection, which we need for the
+        // correct escaping, and it's not possible to create it directly...
         var parameters = HttpUtility.ParseQueryString(string.Empty);
 
         if (!string.IsNullOrWhiteSpace(query.Query))

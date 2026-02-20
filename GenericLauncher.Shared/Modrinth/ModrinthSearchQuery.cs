@@ -29,6 +29,7 @@ public record ModrinthSearchQuery(
             ModrinthProjectType.Modpack => "modpack",
             ModrinthProjectType.ResourcePack => "resourcepack",
             ModrinthProjectType.Shader => "shader",
+            ModrinthProjectType.Plugins => "plugin",
             _ => "",
         };
 
@@ -57,4 +58,5 @@ public enum ModrinthProjectType
     Modpack,
     ResourcePack,
     Shader,
+    Plugins,
 }
