@@ -12,13 +12,16 @@ using GenericLauncher.Database.Model;
 using GenericLauncher.Minecraft;
 using GenericLauncher.Misc;
 using GenericLauncher.Model;
+using GenericLauncher.Modrinth;
+using GenericLauncher.Modrinth.Json;
+using GenericLauncher.Navigation;
 using GenericLauncher.Screens.HomeScreen;
 using GenericLauncher.Screens.InstanceDetails;
+using GenericLauncher.Screens.ModrinthProjectDetails;
+using GenericLauncher.Screens.ModrinthSearch;
 using GenericLauncher.Screens.NewInstanceDialog;
 using GenericLauncher.Screens.ProfileScreen;
 using Microsoft.Extensions.Logging;
-using LoadingViewModel = GenericLauncher.Screens.LoadingScreen.LoadingViewModel;
-using GenericLauncher.Navigation;
 
 namespace GenericLauncher.Screens.MainWindow;
 
@@ -30,6 +33,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly ILogger? _logger;
     private readonly AuthService? _auth;
     private readonly MinecraftLauncher? _minecraftLauncher;
+    private readonly ModrinthApiClient? _modrinthApiClient;
 
     [ObservableProperty] private string _appTitle = Product.Name;
 
@@ -45,6 +49,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public HomeViewModel HomeViewModel { get; }
     public ProfileViewModel ProfileViewModel { get; }
     public NewInstanceDialogViewModel NewInstanceDialogViewModel { get; }
+    public ModrinthSearchViewModel ModrinthSearchViewModel { get; }
 
     // Design preview constructor
     public MainWindowViewModel() : this(null)
@@ -54,11 +59,13 @@ public partial class MainWindowViewModel : ViewModelBase
     public MainWindowViewModel(
         AuthService? authService = null,
         MinecraftLauncher? minecraftLauncher = null,
+        ModrinthApiClient? modrinthApiClient = null,
         ILogger? logger = null)
     {
         _logger = logger;
         _auth = authService;
         _minecraftLauncher = minecraftLauncher;
+        _modrinthApiClient = modrinthApiClient;
 
         Navigation = new StackNavigationViewModel();
 
@@ -80,6 +87,11 @@ public partial class MainWindowViewModel : ViewModelBase
         NewInstanceDialogViewModel = new NewInstanceDialogViewModel(
             minecraftLauncher,
             App.LoggerFactory?.CreateLogger(nameof(NewInstanceDialogViewModel)));
+
+        ModrinthSearchViewModel = new ModrinthSearchViewModel(
+            modrinthApiClient,
+            GoToModrinthProjectDetails,
+            App.LoggerFactory?.CreateLogger(nameof(ModrinthSearchViewModel)));
 
         if (_minecraftLauncher is null || _auth is null)
         {
@@ -154,6 +166,12 @@ public partial class MainWindowViewModel : ViewModelBase
         Navigation.SetRoot(ProfileViewModel);
     }
 
+    [RelayCommand]
+    private void OnClickModrinthSearch()
+    {
+        Navigation.SetRoot(ModrinthSearchViewModel);
+    }
+
     private async Task ToggleExpand()
     {
         if (MainContentBottomMargin.Top == QuickPlayPanelHeight - DefaultSpace)
@@ -217,6 +235,16 @@ public partial class MainWindowViewModel : ViewModelBase
             _auth,
             _minecraftLauncher,
             App.LoggerFactory?.CreateLogger(nameof(InstanceDetailsViewModel)));
+
+        Navigation.Push(vm);
+    }
+
+    private void GoToModrinthProjectDetails(ModrinthSearchResult searchResult)
+    {
+        var vm = new ModrinthProjectDetailsViewModel(
+            searchResult,
+            _modrinthApiClient,
+            App.LoggerFactory?.CreateLogger(nameof(ModrinthProjectDetailsViewModel)));
 
         Navigation.Push(vm);
     }

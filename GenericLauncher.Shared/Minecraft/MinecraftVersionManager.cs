@@ -313,7 +313,7 @@ public sealed class MinecraftVersionManager : IDisposable
                 }
 
                 // Platform-specific libraries
-                if (library.Natives == null || library.Downloads?.Classifiers == null)
+                if (library.Natives is null || library.Downloads?.Classifiers is null)
                 {
                     var d1 = Interlocked.Increment(ref downloaded);
                     progress?.Report(d1 / count);
@@ -432,7 +432,7 @@ public sealed class MinecraftVersionManager : IDisposable
     private bool IsLibraryAllowed(Library library, string currentOs)
     {
         // Same implementation as in MinecraftService
-        if (library.Rules == null || library.Rules.Count == 0)
+        if (library.Rules is null || library.Rules.Count == 0)
         {
             return true;
         }
@@ -440,7 +440,7 @@ public sealed class MinecraftVersionManager : IDisposable
         var allowed = true;
         foreach (var rule in library.Rules)
         {
-            if (rule.Os == null)
+            if (rule.Os is null)
             {
                 continue;
             }
@@ -467,7 +467,7 @@ public sealed class MinecraftVersionManager : IDisposable
 
     private bool IsRuleAllowed(List<Rule>? rules, string currentOs)
     {
-        if (rules == null || rules.Count == 0)
+        if (rules is null || rules.Count == 0)
         {
             return true;
         }
@@ -475,7 +475,7 @@ public sealed class MinecraftVersionManager : IDisposable
         var allowed = true;
         foreach (var rule in rules)
         {
-            if (rule.Os == null)
+            if (rule.Os is null)
             {
                 continue;
             }

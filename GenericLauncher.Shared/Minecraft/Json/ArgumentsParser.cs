@@ -10,7 +10,7 @@ public static class ArgumentsParser
     {
         var result = new List<string>();
 
-        if (arguments == null || arguments.Count == 0)
+        if (arguments is null || arguments.Count == 0)
         {
             return result;
         }
@@ -21,7 +21,7 @@ public static class ArgumentsParser
             {
                 JsonValueKind.String => new StringArgument(argElement.GetString()!),
                 JsonValueKind.Object => DeserializeObjectArgument(argElement),
-                _ => throw new InvalidOperationException($"Unsupported argument type: {argElement.ValueKind}")
+                _ => throw new InvalidOperationException($"Unsupported argument type: {argElement.ValueKind}"),
             };
 
             switch (argument)
@@ -92,7 +92,7 @@ public static class ArgumentsParser
 
     private static bool IsRuleAllowed(List<Rule>? rules, string currentOs)
     {
-        if (rules == null || rules.Count == 0)
+        if (rules is null || rules.Count == 0)
         {
             return true;
         }

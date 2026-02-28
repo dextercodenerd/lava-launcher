@@ -1,0 +1,197 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:modrinthSearch="clr-namespace:GenericLauncher.Screens.ModrinthSearch"
+             xmlns:asyncImageLoader="clr-namespace:AsyncImageLoader;assembly=AsyncImageLoader.Avalonia"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="600"
+             x:Class="GenericLauncher.Screens.ModrinthSearch.ModrinthSearchView"
+             x:DataType="modrinthSearch:ModrinthSearchViewModel">
+
+    <Design.DataContext>
+        <modrinthSearch:ModrinthSearchViewModel />
+    </Design.DataContext>
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="16">
+        <!-- Search Bar -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0 0 0 16">
+            <TextBox
+                Grid.Column="0"
+                Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
+                Watermark="Search for mods, modpacks, shaders..."
+                Margin="0 0 8 0">
+                <TextBox.KeyBindings>
+                    <KeyBinding Gesture="Enter" Command="{Binding SearchCommand}" />
+                </TextBox.KeyBindings>
+            </TextBox>
+            <Button
+                Grid.Column="1"
+                Content="Search"
+                Command="{Binding SearchCommand}" />
+        </Grid>
+
+        <!-- Filters -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" Margin="0 0 0 16">
+            <TextBlock Text="Type:" VerticalAlignment="Center" />
+            <ComboBox
+                SelectedIndex="{Binding SelectedProjectType}"
+                MinWidth="120">
+                <!-- TODO: These need to be in the same order as the enum values, because we are using SelectedIndex binding, fix this -->
+                <ComboBoxItem Content="All" />
+                <ComboBoxItem Content="Mods" />
+                <ComboBoxItem Content="Modpacks" />
+                <ComboBoxItem Content="Resource Packs" />
+                <ComboBoxItem Content="Shaders" />
+                <ComboBoxItem Content="Plugins" />
+            </ComboBox>
+
+            <TextBlock Text="Sort:" VerticalAlignment="Center" Margin="16 0 0 0" />
+            <ComboBox
+                SelectedValue="{Binding SelectedSortOrder}"
+                MinWidth="120">
+                <ComboBoxItem Content="Relevance" Tag="relevance" />
+                <ComboBoxItem Content="Downloads" Tag="downloads" />
+                <ComboBoxItem Content="Follows" Tag="follows" />
+                <ComboBoxItem Content="Newest" Tag="newest" />
+                <ComboBoxItem Content="Updated" Tag="updated" />
+            </ComboBox>
+        </StackPanel>
+
+        <!-- Results List -->
+        <Border Grid.Row="2" Background="LightGray" CornerRadius="8" Padding="8">
+            <Grid>
+                <!-- Loading Overlay -->
+                <Border
+                    Background="#CC000000"
+                    IsVisible="{Binding IsLoading}"
+                    ZIndex="10">
+                    <TextBlock
+                        Text="Loading..."
+                        Foreground="White"
+                        FontSize="20"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center" />
+                </Border>
+
+                <!-- Error Message -->
+                <StackPanel
+                    IsVisible="{Binding HasError}"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Spacing="8">
+                    <TextBlock
+                        Text="⚠️ Error"
+                        FontSize="20"
+                        HorizontalAlignment="Center" />
+                    <TextBlock
+                        Text="{Binding ErrorMessage}"
+                        TextWrapping="Wrap"
+                        MaxWidth="400"
+                        HorizontalAlignment="Center" />
+                    <Button
+                        Content="Retry"
+                        Command="{Binding SearchCommand}"
+                        HorizontalAlignment="Center" />
+                </StackPanel>
+
+                <!-- Results -->
+                <ScrollViewer IsVisible="{Binding !IsLoading}">
+                    <ItemsControl ItemsSource="{Binding SearchResults}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button
+                                    Command="{Binding $parent[ItemsControl].((modrinthSearch:ModrinthSearchViewModel)DataContext).OpenProjectDetailsCommand}"
+                                    CommandParameter="{Binding}"
+                                    Margin="0 0 0 8"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Stretch"
+                                    Padding="0"
+                                    BorderThickness="0"
+                                    Background="Transparent">
+                                    <Button.Styles>
+                                        <Style Selector="Button:pointerover /template/ ContentPresenter">
+                                            <Setter Property="Background" Value="Transparent" />
+                                        </Style>
+                                        <Style Selector="Button">
+                                            <Setter Property="Template">
+                                                <ControlTemplate>
+                                                    <Border
+                                                        Background="White"
+                                                        CornerRadius="4"
+                                                        Padding="12"
+                                                        Cursor="Hand">
+                                                        <ContentPresenter Content="{TemplateBinding Content}" />
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Setter>
+                                        </Style>
+                                    </Button.Styles>
+
+                                    <Grid ColumnDefinitions="48,*">
+                                        <!-- Icon -->
+                                        <Image
+                                            Grid.Column="0"
+                                            Width="48"
+                                            Height="48"
+                                            Margin="0 0 12 0"
+                                            asyncImageLoader:ImageLoader.Source="{Binding IconUrl}"
+                                            Stretch="UniformToFill" />
+
+                                        <!-- Project Info -->
+                                        <StackPanel Grid.Column="1" Spacing="4">
+                                            <TextBlock
+                                                Text="{Binding Title}"
+                                                FontWeight="Bold"
+                                                FontSize="14"
+                                                Foreground="Black" />
+                                            <TextBlock
+                                                Text="{Binding Description}"
+                                                TextWrapping="Wrap"
+                                                MaxLines="2"
+                                                FontSize="12"
+                                                Foreground="#666" />
+                                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                                <TextBlock
+                                                    Text="{Binding Downloads, StringFormat='⬇ {0:N0}'}"
+                                                    FontSize="11"
+                                                    Foreground="#999" />
+                                                <TextBlock
+                                                    Text="{Binding ProjectType}"
+                                                    FontSize="11"
+                                                    Foreground="#f76806"
+                                                    FontWeight="Bold" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+
+        <!-- Pagination -->
+        <StackPanel
+            Grid.Row="3"
+            Orientation="Horizontal"
+            HorizontalAlignment="Center"
+            Spacing="8"
+            Margin="0 16 0 0">
+            <Button
+                Content="Previous"
+                Command="{Binding PreviousPageCommand}"
+                IsEnabled="{Binding CurrentPage, Converter={StaticResource IsGreaterThanOneConverter}}" />
+            <TextBlock
+                Text="{Binding CurrentPage, StringFormat='Page {0} of '}"
+                VerticalAlignment="Center" />
+            <TextBlock
+                Text="{Binding TotalPages}"
+                VerticalAlignment="Center" />
+            <Button
+                Content="Next"
+                Command="{Binding NextPageCommand}"
+                IsEnabled="{Binding CurrentPage, Converter={StaticResource IsLessThanConverter}, ConverterParameter={Binding TotalPages}}" />
+        </StackPanel>
+    </Grid>
+</UserControl>
