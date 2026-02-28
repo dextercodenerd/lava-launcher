@@ -36,11 +36,13 @@
             <ComboBox
                 SelectedIndex="{Binding SelectedProjectType}"
                 MinWidth="120">
+                <!-- TODO: These need to be in the same order as the enum values, because we are using SelectedIndex binding, fix this -->
                 <ComboBoxItem Content="All" />
                 <ComboBoxItem Content="Mods" />
                 <ComboBoxItem Content="Modpacks" />
                 <ComboBoxItem Content="Resource Packs" />
                 <ComboBoxItem Content="Shaders" />
+                <ComboBoxItem Content="Plugins" />
             </ComboBox>
 
             <TextBlock Text="Sort:" VerticalAlignment="Center" Margin="16 0 0 0" />
@@ -193,4 +195,3 @@
         </StackPanel>
     </Grid>
 </UserControl>
-

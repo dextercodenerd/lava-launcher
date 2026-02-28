@@ -18,11 +18,6 @@ public record ModrinthSearchQuery(
     /// </summary>
     public string BuildFacetsJson()
     {
-        if (ProjectType == ModrinthProjectType.All)
-        {
-            return "";
-        }
-
         var projectTypeValue = ProjectType switch
         {
             ModrinthProjectType.Mod => "mod",

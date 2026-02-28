@@ -15,7 +15,7 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
     private readonly string _projectId;
     private readonly ILogger? _logger;
 
-    [ObservableProperty] private ModrinthProject? _project;
+    [ObservableProperty] private ModrinthProject _project;
     [ObservableProperty] private bool _isLoading;
     [ObservableProperty] private bool _hasError;
     [ObservableProperty] private string _errorMessage = "";
@@ -25,7 +25,8 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
 
     // Design-time constructor
     public ModrinthProjectDetailsViewModel() : this(
-        new ModrinthSearchResult("", "", "Project Title", "Description", [], "mod", 0, null, "", "", ""), null)
+        new ModrinthSearchResult("", "", "Project Title", "Description", [], "mod", 0, null, "", "", ""),
+        null)
     {
     }
 
@@ -47,17 +48,25 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
             searchResult.Description,
             "", // Body not available yet
             searchResult.Categories,
-            "", "", // Client/Server side unknown
+            "",
+            "", // Client/Server side unknown
             searchResult.Downloads,
             0, // Followers unknown
             searchResult.IconUrl,
             searchResult.DateCreated,
             searchResult.DateModified,
-            null, null, null, null, null, null, [], [] // License, links, versions unknown
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            [],
+            [] // License, links, versions unknown
         );
 
         // Load full project details
-        if (!string.IsNullOrEmpty(_projectId) && apiClient != null)
+        if (apiClient is not null)
         {
             LoadProjectAsync()
                 .ContinueWith(t =>
@@ -72,7 +81,7 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
 
     private async Task LoadProjectAsync()
     {
-        if (_apiClient == null || string.IsNullOrEmpty(_projectId) || IsLoading)
+        if (_apiClient is null || string.IsNullOrEmpty(_projectId) || IsLoading)
         {
             return;
         }
@@ -84,8 +93,7 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
         try
         {
             var project = await _apiClient.GetProjectAsync(_projectId);
-
-            if (project == null)
+            if (project is null)
             {
                 HasError = true;
                 ErrorMessage = "Failed to load project details. Please try again.";
@@ -93,7 +101,6 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
             }
 
             Project = project;
-
             _logger?.LogInformation("Loaded project: {Title} ({Id})", project.Title, project.Id);
         }
         catch (Exception ex)
@@ -114,7 +121,7 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
         await LoadProjectAsync();
     }
 
-    partial void OnProjectChanged(ModrinthProject? value)
+    partial void OnProjectChanged(ModrinthProject value)
     {
         OnPropertyChanged(nameof(Title));
     }

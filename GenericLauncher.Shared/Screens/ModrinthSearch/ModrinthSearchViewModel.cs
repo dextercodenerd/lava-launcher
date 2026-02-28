@@ -53,7 +53,7 @@ public partial class ModrinthSearchViewModel : ViewModelBase, IPageViewModel
 
         _debounceTimer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromMilliseconds(500)
+            Interval = TimeSpan.FromMilliseconds(500),
         };
         _debounceTimer.Tick += OnDebounceTimerTick;
     }
@@ -131,7 +131,7 @@ public partial class ModrinthSearchViewModel : ViewModelBase, IPageViewModel
 
     private async Task ExecuteSearchAsync(CancellationToken cancellationToken)
     {
-        if (_apiClient == null)
+        if (_apiClient is null)
         {
             return;
         }
@@ -157,7 +157,7 @@ public partial class ModrinthSearchViewModel : ViewModelBase, IPageViewModel
                 return;
             }
 
-            if (response == null)
+            if (response is null)
             {
                 HasError = true;
                 ErrorMessage = "Failed to fetch results from Modrinth. Please try again.";
