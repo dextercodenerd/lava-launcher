@@ -50,6 +50,9 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
         _instance = new MinecraftInstance(
             "test-id",
             "1.21.1",
+            "1.21.1",
+            MinecraftInstanceModLoader.Vanilla,
+            null,
             MinecraftInstanceState.Ready,
             "release",
             "folder",

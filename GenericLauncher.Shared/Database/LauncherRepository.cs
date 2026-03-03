@@ -77,6 +77,9 @@ public class LauncherRepository
         var instance = new MinecraftInstance(
             name,
             minecraft.VersionId,
+            minecraft.VersionId,
+            MinecraftInstanceModLoader.Vanilla,
+            null,
             MinecraftInstanceState.Installing,
             minecraft.Type,
             folderName,

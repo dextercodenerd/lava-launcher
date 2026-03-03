@@ -127,8 +127,8 @@ public sealed class LauncherDatabase
     {
         return _rwLock.ExecuteWriteAsync(() => _conn.ExecuteAsync(
             $@"
-                INSERT INTO {MinecraftInstance.Table} (Id, VersionId, State, Type, Folder, RequiredJavaVersion, ClientJarPath, MainClass, AssetIndex, ClassPath, GameArguments, JvmArguments)
-                VALUES (@Id, @VersionId, @State, @Type, @Folder, @RequiredJavaVersion, @ClientJarPath, @MainClass, @AssetIndex, @ClassPath, @GameArguments, @JvmArguments)
+                INSERT INTO {MinecraftInstance.Table} (Id, VersionId, LaunchVersionId, ModLoader, ModLoaderVersion, State, Type, Folder, RequiredJavaVersion, ClientJarPath, MainClass, AssetIndex, ClassPath, GameArguments, JvmArguments)
+                VALUES (@Id, @VersionId, @LaunchVersionId, @ModLoader, @ModLoaderVersion, @State, @Type, @Folder, @RequiredJavaVersion, @ClientJarPath, @MainClass, @AssetIndex, @ClassPath, @GameArguments, @JvmArguments)
                 ",
             instance));
     }
