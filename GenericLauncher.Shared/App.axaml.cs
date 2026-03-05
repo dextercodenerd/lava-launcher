@@ -12,6 +12,7 @@ using GenericLauncher.Database;
 using GenericLauncher.Http;
 using GenericLauncher.Java;
 using GenericLauncher.Minecraft;
+using GenericLauncher.Minecraft.ModLoaders.Fabric;
 using GenericLauncher.Misc;
 using GenericLauncher.Modrinth;
 using LavaLauncher;
@@ -31,6 +32,8 @@ public partial class App : Application
     private static readonly string BaseMinecraftInstallFolder = "mc";
     private static readonly string BaseJavaInstallFolder = "java";
     private static readonly string BaseInstancesFolder = "instances";
+    private static readonly string BaseModLaunchersFolder = "modlaunchers";
+    private static readonly string FabricModLauncherFolder = "fabric";
 
     // Manual DI, no runtime magic, ever!
     private static readonly HttpClient HttpClient = HttpRetry.CreateHttpClient(4);
@@ -53,6 +56,12 @@ public partial class App : Application
             HttpClient,
             FileDownloader,
             LoggerFactory?.CreateLogger(typeof(JavaVersionManager)));
+
+    private readonly FabricModLoaderService _fabricModLoaderService =
+        new(Path.Combine(BaseFolder, BaseMinecraftInstallFolder, BaseModLaunchersFolder, FabricModLauncherFolder),
+            HttpClient,
+            FileDownloader,
+            LoggerFactory?.CreateLogger(typeof(FabricModLoaderService)));
 
     private readonly LauncherRepository _launcherRepository = new(BaseFolder);
     private readonly AuthService _authService;
