@@ -23,13 +23,14 @@ public sealed class FabricModLoaderService : IModLoaderService
     private readonly ILogger? _logger;
 
     private readonly string _metadataFolder;
-    private readonly string _librariesFolder;
+    private readonly string _sharedLibrariesFolder;
     private readonly string _versionsFolder;
 
     public string DisplayName => "Fabric";
 
     public FabricModLoaderService(
         string fabricRootFolder,
+        string sharedLibrariesFolder,
         HttpClient httpClient,
         FileDownloader fileDownloader,
         ILogger? logger = null)
@@ -39,7 +40,7 @@ public sealed class FabricModLoaderService : IModLoaderService
         _logger = logger;
 
         _metadataFolder = Path.Combine(fabricRootFolder, "metadata");
-        _librariesFolder = Path.Combine(fabricRootFolder, "libraries");
+        _sharedLibrariesFolder = sharedLibrariesFolder;
         _versionsFolder = Path.Combine(fabricRootFolder, "versions");
     }
 
@@ -130,6 +131,7 @@ public sealed class FabricModLoaderService : IModLoaderService
             launchVersionId,
             selectedLoader.VersionId,
             metadataPath,
+            string.IsNullOrWhiteSpace(profile.MainClass) ? null : profile.MainClass,
             extraJvmArgs,
             extraGameArgs,
             libraries);
@@ -145,7 +147,7 @@ public sealed class FabricModLoaderService : IModLoaderService
             throw new ArgumentException("Resolved version does not belong to Fabric loader", nameof(resolved));
         }
 
-        Directory.CreateDirectory(_librariesFolder);
+        Directory.CreateDirectory(_sharedLibrariesFolder);
 
         if (resolved.Libraries.Count == 0)
         {
@@ -167,7 +169,7 @@ public sealed class FabricModLoaderService : IModLoaderService
             async (lib, token) =>
             {
                 var destinationPath =
-                    Path.Combine(_librariesFolder, lib.RelativePath.Replace('/', Path.DirectorySeparatorChar));
+                    Path.Combine(_sharedLibrariesFolder, lib.RelativePath.Replace('/', Path.DirectorySeparatorChar));
 
                 await _fileDownloader.DownloadFileAsync(
                     lib.Url,

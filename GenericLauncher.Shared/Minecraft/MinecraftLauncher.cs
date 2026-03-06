@@ -12,6 +12,7 @@ using GenericLauncher.Database;
 using GenericLauncher.Database.Model;
 using GenericLauncher.Java;
 using GenericLauncher.Minecraft.Json;
+using GenericLauncher.Minecraft.ModLoaders;
 using GenericLauncher.Misc;
 using Microsoft.Extensions.Logging;
 
@@ -37,11 +38,18 @@ public sealed class MinecraftLauncher : IDisposable
     private readonly LauncherRepository _repository;
     private readonly JavaVersionManager _javaManager;
     private readonly MinecraftVersionManager _minecraftManager;
+    private readonly IReadOnlyDictionary<MinecraftInstanceModLoader, IModLoaderService> _modLoaderServices;
     private readonly ILogger? _logger;
 
     private readonly SemaphoreSlim _lock = new(1, 1);
     public ImmutableList<VersionInfo> AvailableVersions = [];
     public ImmutableList<MinecraftInstance> Instances = [];
+
+    public ImmutableList<MinecraftInstanceModLoader> AvailableModLoaders =>
+        _modLoaderServices.Keys
+            .Where(v => v != MinecraftInstanceModLoader.Unknown)
+            .OrderBy(v => v)
+            .ToImmutableList();
 
     public readonly ConcurrentDictionary<string, ThreadSafeInstallProgressReporter.InstallProgress>
         CurrentInstallProgress = [];
@@ -61,6 +69,7 @@ public sealed class MinecraftLauncher : IDisposable
         LauncherRepository repository,
         MinecraftVersionManager minecraftVersionManager,
         JavaVersionManager javaVersionManager,
+        IReadOnlyDictionary<MinecraftInstanceModLoader, IModLoaderService> modLoaderServices,
         ILogger? logger = null)
     {
         _currentOs = currentOs;
@@ -70,7 +79,13 @@ public sealed class MinecraftLauncher : IDisposable
         _repository = repository;
         _javaManager = javaVersionManager;
         _minecraftManager = minecraftVersionManager;
+        _modLoaderServices = modLoaderServices;
         _logger = logger;
+
+        if (!_modLoaderServices.ContainsKey(MinecraftInstanceModLoader.Vanilla))
+        {
+            throw new InvalidOperationException("Missing mod loader service for VANILLA");
+        }
 
         // TODO: Generate clientid after installation and save it; it is used by Mojang for
         //  telemetry purposes to differentiate installed clients.
@@ -132,9 +147,19 @@ public sealed class MinecraftLauncher : IDisposable
         }
     }
 
+    public async Task<ImmutableList<ModLoaderVersionInfo>> GetLoaderVersionsAsync(
+        MinecraftInstanceModLoader modLoader,
+        bool reload)
+    {
+        var service = GetModLoaderService(modLoader);
+        return await service.GetLoaderVersionsAsync(reload);
+    }
+
     public async Task CreateInstance(
         VersionInfo version,
         string name,
+        MinecraftInstanceModLoader modLoader,
+        string? preferredModLoaderVersion,
         IProgress<ThreadSafeInstallProgressReporter.InstallProgress> progress)
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -171,12 +196,19 @@ public sealed class MinecraftLauncher : IDisposable
 
         Directory.CreateDirectory(instanceFolder);
 
+        var modLoaderService = GetModLoaderService(modLoader);
+        var resolvedModLoader = await modLoaderService.ResolveAsync(
+            version.Id,
+            preferredModLoaderVersion,
+            _currentOs);
+
         ////////////////////////////////////////////////////////////////////////////////////////////
         // Download basic information about specific Minecraft version i.e., its client.json file
         var (versionDetails, minecraft) = await _minecraftManager.DownloadVersionAsync(
             version,
             _currentOs
         );
+        minecraft = ApplyModLoaderToVersion(minecraft, resolvedModLoader);
 
         _logger?.LogInformation("Inserting Minecraft instance into DB");
 
@@ -185,7 +217,10 @@ public sealed class MinecraftLauncher : IDisposable
         await _repository.AddInstallingMinecraftInstanceAsync(
             name,
             minecraft,
-            sanitizedAndNumberedInstanceFolderName);
+            sanitizedAndNumberedInstanceFolderName,
+            modLoader,
+            resolvedModLoader.LaunchVersionId,
+            resolvedModLoader.LoaderVersionId);
         await RefreshInstancesAsync();
 
         // Now create a complex thread-safe progress reporter, that handles parallelism and
@@ -262,6 +297,10 @@ public sealed class MinecraftLauncher : IDisposable
             })
         );
 
+        var downloadModLoaderTask = modLoaderService.DownloadAsync(
+            resolvedModLoader,
+            null);
+
         ////////////////////////////////////////////////////////////////////////
         // Download Java
         var javaVersion = minecraft.RequiredJavaVersion;
@@ -283,7 +322,7 @@ public sealed class MinecraftLauncher : IDisposable
                 progressReporter.ReportJavaDownloadProgress(pp);
             }));
 
-        await Task.WhenAll(downloadMinecraftTask, downloadJavaTask);
+        await Task.WhenAll(downloadMinecraftTask, downloadJavaTask, downloadModLoaderTask);
 
         _logger?.LogInformation("Successfully download Minecraft instance '{InstanceId}'", name);
 
@@ -334,7 +373,21 @@ public sealed class MinecraftLauncher : IDisposable
             {
                 var javaExecutable = _javaManager.GetJavaExecutablePath((int)instance.RequiredJavaVersion) ??
                                      throw new ArgumentException($"Java {instance.RequiredJavaVersion} is missing");
-                var mc = await _minecraftManager.GetCachedVersionDetailsAsync(instance.VersionId, _currentOs);
+                var cachedMc = await _minecraftManager.GetCachedVersionDetailsAsync(instance.VersionId, _currentOs);
+                var mc = cachedMc with
+                {
+                    VersionId = string.IsNullOrWhiteSpace(instance.LaunchVersionId)
+                        ? cachedMc.VersionId
+                        : instance.LaunchVersionId,
+                    Type = instance.Type,
+                    RequiredJavaVersion = (int)instance.RequiredJavaVersion,
+                    ClientJarPath = instance.ClientJarPath,
+                    MainClass = instance.MainClass,
+                    AssetIndex = instance.AssetIndex,
+                    ClassPath = instance.ClassPath,
+                    GameArguments = instance.GameArguments,
+                    JvmArguments = instance.JvmArguments,
+                };
                 var workdir = Path.Combine(_instancesFolder, instance.Folder);
 
                 var allArguments = BuildLaunchArguments(
@@ -487,6 +540,56 @@ public sealed class MinecraftLauncher : IDisposable
         }
 
         return sb.ToString();
+    }
+
+    private IModLoaderService GetModLoaderService(MinecraftInstanceModLoader modLoader)
+    {
+        if (_modLoaderServices.TryGetValue(modLoader, out var service))
+        {
+            return service;
+        }
+
+        throw new InvalidOperationException($"No mod loader service configured for {modLoader}");
+    }
+
+    private static MinecraftVersionManager.Version ApplyModLoaderToVersion(
+        MinecraftVersionManager.Version minecraft,
+        ResolvedModLoaderVersion modLoader)
+    {
+        if (modLoader.Libraries.Count == 0
+            && modLoader.ExtraGameArguments.Count == 0
+            && modLoader.ExtraJvmArguments.Count == 0
+            && string.IsNullOrWhiteSpace(modLoader.MainClassOverride))
+        {
+            return minecraft;
+        }
+
+        var classPath = minecraft.ClassPath
+            .Concat(modLoader.Libraries.Select(l =>
+            {
+                var path = l.RelativePath.Replace('/', Path.DirectorySeparatorChar);
+                return path;
+            }))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var gameArgs = minecraft.GameArguments
+            .Concat(modLoader.ExtraGameArguments)
+            .ToList();
+
+        var jvmArgs = minecraft.JvmArguments
+            .Concat(modLoader.ExtraJvmArguments)
+            .ToList();
+
+        return minecraft with
+        {
+            MainClass = string.IsNullOrWhiteSpace(modLoader.MainClassOverride)
+                ? minecraft.MainClass
+                : modLoader.MainClassOverride,
+            ClassPath = classPath,
+            GameArguments = gameArgs,
+            JvmArguments = jvmArgs,
+        };
     }
 
     private string ProcessGamePlaceholders(

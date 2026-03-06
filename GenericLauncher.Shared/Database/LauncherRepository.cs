@@ -72,14 +72,17 @@ public class LauncherRepository
     public async Task AddInstallingMinecraftInstanceAsync(
         string name,
         MinecraftVersionManager.Version minecraft,
-        string folderName)
+        string folderName,
+        MinecraftInstanceModLoader modLoader,
+        string launchVersionId,
+        string? modLoaderVersion)
     {
         var instance = new MinecraftInstance(
             name,
             minecraft.VersionId,
-            minecraft.VersionId,
-            MinecraftInstanceModLoader.Vanilla,
-            null,
+            launchVersionId,
+            modLoader,
+            modLoaderVersion,
             MinecraftInstanceState.Installing,
             minecraft.Type,
             folderName,

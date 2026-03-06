@@ -1,7 +1,9 @@
 ﻿<Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="using:GenericLauncher.Screens.NewInstanceDialog"
-        xmlns:json="clr-namespace:GenericLauncher.Minecraft.Json">
+        xmlns:json="clr-namespace:GenericLauncher.Minecraft.Json"
+        xmlns:model="clr-namespace:GenericLauncher.Database.Model"
+        xmlns:modLoaders="clr-namespace:GenericLauncher.Minecraft.ModLoaders">
 
     <Design.PreviewWith>
         <controls:NewInstanceDialog
@@ -71,6 +73,64 @@
                                             FontSize="16"
                                             FontWeight="DemiBold"
                                             Text="{Binding Id}" />
+                                    </DataTemplate>
+                                </ComboBox.SelectionBoxItemTemplate>
+                            </ComboBox>
+                            <TextBlock Text="Mod Loader" />
+                            <ComboBox
+                                ItemsSource="{Binding AvailableModLoaders}"
+                                SelectedItem="{Binding SelectedModLoader, Mode=TwoWay}"
+                                HorizontalAlignment="Stretch">
+                                <ComboBox.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel />
+                                    </ItemsPanelTemplate>
+                                </ComboBox.ItemsPanel>
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate DataType="model:MinecraftInstanceModLoader">
+                                        <TextBlock
+                                            HorizontalAlignment="Center"
+                                            FontSize="16"
+                                            FontWeight="DemiBold"
+                                            Text="{Binding}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                                <ComboBox.SelectionBoxItemTemplate>
+                                    <DataTemplate DataType="model:MinecraftInstanceModLoader">
+                                        <TextBlock
+                                            HorizontalAlignment="Center"
+                                            FontSize="16"
+                                            FontWeight="DemiBold"
+                                            Text="{Binding}" />
+                                    </DataTemplate>
+                                </ComboBox.SelectionBoxItemTemplate>
+                            </ComboBox>
+                            <TextBlock Text="Loader Version" />
+                            <ComboBox
+                                ItemsSource="{Binding AvailableModLoaderVersions}"
+                                SelectedItem="{Binding SelectedModLoaderVersion, Mode=TwoWay}"
+                                HorizontalAlignment="Stretch">
+                                <ComboBox.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel />
+                                    </ItemsPanelTemplate>
+                                </ComboBox.ItemsPanel>
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate DataType="modLoaders:ModLoaderVersionInfo">
+                                        <TextBlock
+                                            HorizontalAlignment="Center"
+                                            FontSize="16"
+                                            FontWeight="DemiBold"
+                                            Text="{Binding VersionId}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                                <ComboBox.SelectionBoxItemTemplate>
+                                    <DataTemplate DataType="modLoaders:ModLoaderVersionInfo">
+                                        <TextBlock
+                                            HorizontalAlignment="Center"
+                                            FontSize="16"
+                                            FontWeight="DemiBold"
+                                            Text="{Binding VersionId}" />
                                     </DataTemplate>
                                 </ComboBox.SelectionBoxItemTemplate>
                             </ComboBox>

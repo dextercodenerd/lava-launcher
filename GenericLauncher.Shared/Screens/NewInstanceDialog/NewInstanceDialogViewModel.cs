@@ -6,8 +6,10 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DialogHostAvalonia;
+using GenericLauncher.Database.Model;
 using GenericLauncher.Minecraft;
 using GenericLauncher.Minecraft.Json;
+using GenericLauncher.Minecraft.ModLoaders;
 using Microsoft.Extensions.Logging;
 
 namespace GenericLauncher.Screens.NewInstanceDialog;
@@ -22,6 +24,10 @@ public partial class NewInstanceDialogViewModel : ViewModelBase
 
     [ObservableProperty] private ImmutableList<VersionInfo> _availableMinecraftVersions = [];
     [ObservableProperty] private VersionInfo? _selectedMinecraftVersion = null;
+    [ObservableProperty] private ImmutableList<MinecraftInstanceModLoader> _availableModLoaders = [];
+    [ObservableProperty] private MinecraftInstanceModLoader _selectedModLoader = MinecraftInstanceModLoader.Vanilla;
+    [ObservableProperty] private ImmutableList<ModLoaderVersionInfo> _availableModLoaderVersions = [];
+    [ObservableProperty] private ModLoaderVersionInfo? _selectedModLoaderVersion = null;
     [ObservableProperty] private string? _newInstanceName = null;
     [ObservableProperty] private bool _preparingInstance = false;
     [ObservableProperty] private string _instanceNameWatermark = "Vanilla"; // prepared for mod launchers e.g., Fabric
@@ -51,7 +57,11 @@ public partial class NewInstanceDialogViewModel : ViewModelBase
         }
 
         AvailableMinecraftVersions = _minecraftLauncher.AvailableVersions;
+        AvailableModLoaders = _minecraftLauncher.AvailableModLoaders;
+        SelectedModLoader = AvailableModLoaders.FirstOrDefault();
         _minecraftLauncher.AvailableVersionsChanged += OnAvailableVersionsChanged;
+
+        _ = LoadModLoaderVersionsAsync(SelectedModLoader, false);
     }
 
     private void OnDialogOpened(object sender, DialogOpenedEventArgs args)
@@ -60,6 +70,10 @@ public partial class NewInstanceDialogViewModel : ViewModelBase
         // when the dialog is hidden, it detaches the items source and triggers selected item
         // update to null. So, the next time the dialog was opened, nothing was preselected.
         SelectedMinecraftVersion = AvailableMinecraftVersions.FirstOrDefault();
+        if (AvailableModLoaders.Count > 0)
+        {
+            SelectedModLoader = AvailableModLoaders[0];
+        }
     }
 
     private void OnDialogClosing(object sender, DialogClosingEventArgs args)
@@ -88,7 +102,9 @@ public partial class NewInstanceDialogViewModel : ViewModelBase
 
         // Displaying "Vanilla" name, instead of the MC version is less confusing when upgrading
         // the instance's base MC version. We would have to rename the instance or what?
-        var name = NewInstanceName ?? "Vanilla";
+        var name = NewInstanceName ?? InstanceNameWatermark;
+        var modLoader = SelectedModLoader;
+        var preferredModLoaderVersion = SelectedModLoaderVersion?.VersionId;
 
         NewInstanceName = null;
         SelectedMinecraftVersion = null;
@@ -105,6 +121,8 @@ public partial class NewInstanceDialogViewModel : ViewModelBase
             {
                 await _minecraftLauncher.CreateInstance(versionInfo,
                     name,
+                    modLoader,
+                    preferredModLoaderVersion,
                     new Progress<ThreadSafeInstallProgressReporter.InstallProgress>(p =>
                     {
                         if (!p.IsValidMinecraftVersion)
@@ -152,5 +170,50 @@ public partial class NewInstanceDialogViewModel : ViewModelBase
             AvailableMinecraftVersions = _minecraftLauncher.AvailableVersions;
             SelectedMinecraftVersion = AvailableMinecraftVersions.FirstOrDefault();
         });
+    }
+
+    partial void OnSelectedModLoaderChanged(MinecraftInstanceModLoader value)
+    {
+        if (_minecraftLauncher is null)
+        {
+            return;
+        }
+
+        InstanceNameWatermark = value switch
+        {
+            MinecraftInstanceModLoader.Fabric => "Fabric",
+            MinecraftInstanceModLoader.NeoForge => "NeoForge",
+            MinecraftInstanceModLoader.Forge => "Forge",
+            _ => "Vanilla",
+        };
+
+        _ = LoadModLoaderVersionsAsync(value, false);
+    }
+
+    private async Task LoadModLoaderVersionsAsync(MinecraftInstanceModLoader modLoader, bool reload)
+    {
+        if (_minecraftLauncher is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var versions = await _minecraftLauncher.GetLoaderVersionsAsync(modLoader, reload);
+            Dispatcher.UIThread.Post(() =>
+            {
+                AvailableModLoaderVersions = versions;
+                SelectedModLoaderVersion = AvailableModLoaderVersions.FirstOrDefault();
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Problem loading mod loader versions for {ModLoader}", modLoader);
+            Dispatcher.UIThread.Post(() =>
+            {
+                AvailableModLoaderVersions = [];
+                SelectedModLoaderVersion = null;
+            });
+        }
     }
 }

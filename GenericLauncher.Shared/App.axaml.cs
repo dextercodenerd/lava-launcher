@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -9,10 +10,13 @@ using Avalonia.Data.Core.Plugins;
 using Avalonia.Markup.Xaml;
 using GenericLauncher.Auth;
 using GenericLauncher.Database;
+using GenericLauncher.Database.Model;
 using GenericLauncher.Http;
 using GenericLauncher.Java;
 using GenericLauncher.Minecraft;
+using GenericLauncher.Minecraft.ModLoaders;
 using GenericLauncher.Minecraft.ModLoaders.Fabric;
+using GenericLauncher.Minecraft.ModLoaders.Vanilla;
 using GenericLauncher.Misc;
 using GenericLauncher.Modrinth;
 using LavaLauncher;
@@ -32,6 +36,7 @@ public partial class App : Application
     private static readonly string BaseMinecraftInstallFolder = "mc";
     private static readonly string BaseJavaInstallFolder = "java";
     private static readonly string BaseInstancesFolder = "instances";
+    private static readonly string BaseMinecraftLibrariesFolder = "libraries";
     private static readonly string BaseModLaunchersFolder = "modlaunchers";
     private static readonly string FabricModLauncherFolder = "fabric";
 
@@ -59,9 +64,13 @@ public partial class App : Application
 
     private readonly FabricModLoaderService _fabricModLoaderService =
         new(Path.Combine(BaseFolder, BaseMinecraftInstallFolder, BaseModLaunchersFolder, FabricModLauncherFolder),
+            Path.Combine(BaseFolder, BaseMinecraftInstallFolder, BaseMinecraftLibrariesFolder),
             HttpClient,
             FileDownloader,
             LoggerFactory?.CreateLogger(typeof(FabricModLoaderService)));
+
+    private readonly VanillaModLoaderService _vanillaModLoaderService =
+        new();
 
     private readonly LauncherRepository _launcherRepository = new(BaseFolder);
     private readonly AuthService _authService;
@@ -85,6 +94,11 @@ public partial class App : Application
             _launcherRepository,
             _minecraftVersionManager,
             _javaVersionManager,
+            new Dictionary<MinecraftInstanceModLoader, IModLoaderService>
+            {
+                [MinecraftInstanceModLoader.Vanilla] = _vanillaModLoaderService,
+                [MinecraftInstanceModLoader.Fabric] = _fabricModLoaderService,
+            },
             LoggerFactory?.CreateLogger(typeof(MinecraftLauncher)));
     }
 
