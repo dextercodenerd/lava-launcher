@@ -61,14 +61,38 @@
         <Delete Files="$(_OutputPath)" Condition="Exists('$(_OutputPath)')"/>
 
         <ReadLinesFromFile File="$(_TemplatePath)">
-            <Output TaskParameter="Lines" ItemName="_TemplateLines"/>
+            <Output TaskParameter="Lines" ItemName="_AzureTemplateLines"/>
         </ReadLinesFromFile>
 
         <ItemGroup>
-            <_TransformedLines Include="@(_TemplateLines->Replace('${CLIENT_ID}', '$(AzureClientId)')->Replace('${REDIRECT_URL}', '$(AzureRedirectUrl)'))"/>
+            <_AzureTransformedLines Include="@(_AzureTemplateLines->Replace('${CLIENT_ID}', '$(AzureClientId)')->Replace('${REDIRECT_URL}', '$(AzureRedirectUrl)'))"/>
         </ItemGroup>
 
-        <WriteLinesToFile File="$(_OutputPath)" Lines="@(_TransformedLines)" Overwrite="true"/>
+        <WriteLinesToFile File="$(_OutputPath)" Lines="@(_AzureTransformedLines)" Overwrite="true"/>
+
+        <ItemGroup>
+            <Compile Include="$(_OutputPath)"/>
+            <FileWrites Include="$(_OutputPath)"/>
+        </ItemGroup>
+    </Target>
+
+    <Target Name="GenerateAppConfig" BeforeTargets="BeforeCompile">
+        <PropertyGroup>
+            <_TemplatePath>$(MSBuildThisFileDirectory)..\Data\AppConfig.template.cs</_TemplatePath>
+            <_OutputPath>$(IntermediateOutputPath)AppConfig.generated.cs</_OutputPath>
+        </PropertyGroup>
+
+        <Delete Files="$(_OutputPath)" Condition="Exists('$(_OutputPath)')"/>
+
+        <ReadLinesFromFile File="$(_TemplatePath)">
+            <Output TaskParameter="Lines" ItemName="_AppConfigTemplateLines"/>
+        </ReadLinesFromFile>
+
+        <ItemGroup>
+            <_AppConfigTransformedLines Include="@(_AppConfigTemplateLines->Replace('${MAC_BUNDLE_IDENTIFIER}', '$(MacBundleIdentifier)'))"/>
+        </ItemGroup>
+
+        <WriteLinesToFile File="$(_OutputPath)" Lines="@(_AppConfigTransformedLines)" Overwrite="true"/>
 
         <ItemGroup>
             <Compile Include="$(_OutputPath)"/>

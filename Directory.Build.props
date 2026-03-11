@@ -17,6 +17,7 @@
 
     <!-- Import user-specific props if exists -->
     <Import Project="user.props" Condition="Exists('user.props')"/>
+
     <!-- inject Azure Entra ID App client id -->
     <PropertyGroup>
         <!-- Priority: Command line/user.props -> Environment -> Default -->

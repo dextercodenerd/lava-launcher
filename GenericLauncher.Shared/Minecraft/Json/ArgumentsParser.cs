@@ -1,12 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
+using GenericLauncher.Misc;
 
 namespace GenericLauncher.Minecraft.Json;
 
 public static class ArgumentsParser
 {
-    public static List<string> FlattenArguments(List<JsonElement>? arguments, string currentOs)
+    public static List<string> FlattenArguments(List<JsonElement>? arguments, LauncherPlatform platform)
     {
         var result = new List<string>();
 
@@ -31,7 +33,7 @@ public static class ArgumentsParser
                     break;
 
                 case ObjectArgument objArg:
-                    if (IsRuleAllowed(objArg.Rules, currentOs))
+                    if (IsRuleAllowed(objArg.Rules, platform))
                     {
                         FlattenArgumentValue(objArg.Value, result);
                     }
@@ -90,40 +92,33 @@ public static class ArgumentsParser
         return new ObjectArgument(rules, valueElement);
     }
 
-    private static bool IsRuleAllowed(List<Rule>? rules, string currentOs)
+    internal static bool IsRuleAllowed(List<Rule>? rules, LauncherPlatform platform)
     {
         if (rules is null || rules.Count == 0)
         {
             return true;
         }
 
+        var allowed = rules.All(r => !string.Equals(r.Action, "allow", StringComparison.Ordinal));
         foreach (var rule in rules)
         {
-            if (!IsSingleRuleAllowed(rule, currentOs))
+            if (!IsSingleRuleTargetMatch(rule, platform))
             {
-                return false;
+                continue;
             }
+
+            allowed = rule.Action == "allow";
         }
 
-        return true;
+        return allowed;
     }
 
-    private static bool IsSingleRuleAllowed(Rule rule, string currentOs)
+    private static bool IsSingleRuleTargetMatch(Rule rule, LauncherPlatform platform)
     {
         // OS-based rules
-        if (rule.Os != null)
+        if (rule.Os != null && !platform.MatchesOs(rule.Os))
         {
-            var osMatches = rule.Os.Name?.Equals(currentOs, StringComparison.OrdinalIgnoreCase) == true;
-
-            if (rule.Action == "allow" && !osMatches)
-            {
-                return false;
-            }
-
-            if (rule.Action == "disallow" && osMatches)
-            {
-                return false;
-            }
+            return false;
         }
 
         // Feature-based rules e.g., quick play
@@ -134,13 +129,7 @@ public static class ArgumentsParser
                 // TODO: In a real implementation, you'd check if the feature is available.
                 //  This should come from your feature tracking.
                 var featureAvailable = false;
-
-                if (rule.Action == "allow" && feature.Value != featureAvailable)
-                {
-                    return false;
-                }
-
-                if (rule.Action == "disallow" && feature.Value == featureAvailable)
+                if (feature.Value != featureAvailable)
                 {
                     return false;
                 }

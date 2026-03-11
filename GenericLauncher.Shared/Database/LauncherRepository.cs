@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading.Tasks;
 using GenericLauncher.Database.Model;
 using GenericLauncher.Minecraft;
+using GenericLauncher.Misc;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 
@@ -15,19 +16,20 @@ public class LauncherRepository
 
     private readonly LauncherDatabase _db;
     private readonly Task _initTask;
+    internal string DatabasePath { get; }
 
     public LauncherRepository(
-        string baseDir,
+        LauncherPlatform platform,
         ILogger? logger = null)
     {
-        _baseDir = baseDir;
+        _baseDir = platform.AppDataPath;
         _logger = logger;
 
         Directory.CreateDirectory(_baseDir);
-        var dbPath = Path.Combine(_baseDir, "ll.sqlite");
+        DatabasePath = Path.Combine(_baseDir, "ll.sqlite");
         var builder = new SqliteConnectionStringBuilder
         {
-            DataSource = dbPath,
+            DataSource = DatabasePath,
             Mode = SqliteOpenMode.ReadWriteCreate,
             Cache = SqliteCacheMode.Shared,
             ForeignKeys = true,

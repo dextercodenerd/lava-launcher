@@ -2,6 +2,7 @@
     <PropertyGroup>
         <AppName>Yet Another Minecrafy Launcher</AppName>
         <AppAssemblyName>YamLauncher</AppAssemblyName>
+        <MacBundleIdentifier>com.example.yamlauncher</MacBundleIdentifier>
     </PropertyGroup>
     <PropertyGroup>
         <AzureClientId>YOUR_ACTUAL_CLIENT_ID_HERE</AzureClientId>

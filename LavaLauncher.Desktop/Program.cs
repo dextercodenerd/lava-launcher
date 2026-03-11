@@ -45,7 +45,6 @@ internal class Program
         TaskScheduler.UnobservedTaskException += (s, e) =>
         {
             programLogger.LogCritical(e.Exception, "unobserved task exception");
-
             throw e.Exception;
         };
 
@@ -59,16 +58,29 @@ internal class Program
         // This is needed for the live previews to work
         GC.KeepAlive(typeof(SvgImageExtension).Assembly);
 
-        return AppBuilder.Configure(() => new App())
+        var builder = AppBuilder.Configure(() => new App())
             .UsePlatformDetect()
             .WithInterFont()
-            .With(new Win32PlatformOptions
-            {
-                // Some computers crash with the default ANGLE based HW acceleration, so we must
-                // just OpenGL or even software rendering.
-                RenderingMode = [Win32RenderingMode.Wgl, Win32RenderingMode.Software],
-            })
             .With(new SkiaOptions { UseOpacitySaveLayer = true })
             .LogToTrace();
+
+        if (OperatingSystem.IsWindows())
+        {
+            builder = builder.With(new Win32PlatformOptions
+            {
+                // Some computers crash with the default ANGLE based HW acceleration, so we must
+                // use OpenGL or even software rendering.
+                RenderingMode = [Win32RenderingMode.Wgl, Win32RenderingMode.Software],
+            });
+        }
+        else if (OperatingSystem.IsMacOS())
+        {
+            builder = builder.With(new AvaloniaNativePlatformOptions
+            {
+                RenderingMode = [AvaloniaNativeRenderingMode.Metal, AvaloniaNativeRenderingMode.Software],
+            });
+        }
+
+        return builder;
     }
 }

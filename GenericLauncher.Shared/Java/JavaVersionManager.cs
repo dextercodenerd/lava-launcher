@@ -9,24 +9,28 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using GenericLauncher.Http;
+using GenericLauncher.Misc;
 using Microsoft.Extensions.Logging;
 
 namespace GenericLauncher.Java;
 
 public sealed class JavaVersionManager : IDisposable
 {
+    private readonly LauncherPlatform _platform;
     private readonly HttpClient _httpClient;
     private readonly FileDownloader _downloader;
     private readonly string _javaInstallationsDirectory;
+    internal string JavaInstallationsDirectory => _javaInstallationsDirectory;
     private readonly ILogger? _logger;
 
     public JavaVersionManager(
-        string javaInstallationsDirectory,
+        LauncherPlatform platform,
         HttpClient httpClient,
         FileDownloader fileDownloader,
         ILogger? logger = null)
     {
-        _javaInstallationsDirectory = javaInstallationsDirectory;
+        _platform = platform;
+        _javaInstallationsDirectory = Path.Combine(platform.AppDataPath, "java");
         _downloader = fileDownloader;
         _httpClient = httpClient;
         _logger = logger;
@@ -58,7 +62,7 @@ public sealed class JavaVersionManager : IDisposable
         var (downloadUrl, expectedHash) = await GetTemurinDownloadInfoAsync(javaVersion, cancellationToken);
 
         // Download JDK
-        var tempDir = Path.Combine(Path.GetTempPath(), $"java-{javaVersion}-temurin-{Guid.NewGuid()}");
+        var tempDir = Path.Combine(_javaInstallationsDirectory, "_tmp", $"java-{javaVersion}-temurin-{Guid.NewGuid()}");
         var downloadPath = await _downloader.DownloadFileToFolderAsync(
             downloadUrl,
             tempDir,
@@ -136,44 +140,44 @@ public sealed class JavaVersionManager : IDisposable
         }
     }
 
-    private static (string os, string arch, string extension) GetPlatformDetails()
+    private (string os, string arch, string extension) GetPlatformDetails()
     {
-        if (OperatingSystem.IsWindows())
+        if (_platform.CurrentOs == "windows")
         {
-            var arch = RuntimeInformation.ProcessArchitecture switch
+            var arch = _platform.Architecture switch
             {
-                Architecture.X64 => "x64",
-                Architecture.Arm64 => "aarch64",
-                Architecture.Arm => "arm",
+                "x64" => "x64",
+                "arm64" => "aarch64",
+                "arm" => "arm",
                 _ => "x64",
             };
             return ("windows", arch, "zip");
         }
-        else if (OperatingSystem.IsLinux())
+
+        if (_platform.CurrentOs == "linux")
         {
-            var arch = RuntimeInformation.ProcessArchitecture switch
+            var arch = _platform.Architecture switch
             {
-                Architecture.X64 => "x64",
-                Architecture.Arm64 => "aarch64",
-                Architecture.Arm => "arm",
+                "x64" => "x64",
+                "arm64" => "aarch64",
+                "arm" => "arm",
                 _ => "x64",
             };
             return ("linux", arch, "tar.gz");
         }
-        else if (OperatingSystem.IsMacOS())
+
+        if (_platform.CurrentOs == "osx")
         {
-            var arch = RuntimeInformation.ProcessArchitecture switch
+            var arch = _platform.Architecture switch
             {
-                Architecture.X64 => "x64",
-                Architecture.Arm64 => "aarch64",
+                "x64" => "x64",
+                "arm64" => "aarch64",
                 _ => "x64",
             };
             return ("mac", arch, "tar.gz");
         }
-        else
-        {
-            throw new PlatformNotSupportedException($"Unsupported platform: {RuntimeInformation.OSDescription}");
-        }
+
+        throw new PlatformNotSupportedException($"Unsupported platform: {RuntimeInformation.OSDescription}");
     }
 
     private static async Task ExtractAndInstallJavaAsync(string archivePath,
@@ -282,22 +286,27 @@ public sealed class JavaVersionManager : IDisposable
         return Path.Combine(_javaInstallationsDirectory, $"{javaVersion}-{os}-{arch}");
     }
 
-    private static bool IsJavaInstallationValid(string installationPath)
+    private bool IsJavaInstallationValid(string installationPath)
     {
-        var javaExe = GetJavaExecutablePath(installationPath);
+        var javaExe = BuildJavaExecutablePath(installationPath, _platform);
         return File.Exists(javaExe);
     }
 
-    private static string GetJavaExecutablePath(string installationPath)
+    internal static string BuildJavaExecutablePath(string installationPath, LauncherPlatform platform)
     {
-        var executableName = OperatingSystem.IsWindows() ? "java.exe" : "java";
+        var executableName = platform.CurrentOs == "windows" ? "java.exe" : "java";
+        if (platform.CurrentOs == "osx")
+        {
+            return Path.Combine(installationPath, "Contents", "Home", "bin", executableName);
+        }
+
         return Path.Combine(installationPath, "bin", executableName);
     }
 
     public string? GetJavaExecutablePath(int javaVersion)
     {
         var installationPath = GetJavaInstallationPath(javaVersion);
-        var javaExe = GetJavaExecutablePath(installationPath);
+        var javaExe = BuildJavaExecutablePath(installationPath, _platform);
         return File.Exists(javaExe) ? javaExe : null;
     }
 

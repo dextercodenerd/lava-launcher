@@ -30,7 +30,7 @@ public sealed class MinecraftLauncher : IDisposable
         Stopped,
     }
 
-    private readonly string _currentOs;
+    private readonly LauncherPlatform _platform;
     private readonly string _launcherName;
     private readonly string _launcherVersion;
     private readonly string _instancesFolder;
@@ -51,6 +51,9 @@ public sealed class MinecraftLauncher : IDisposable
             .OrderBy(v => v)
             .ToImmutableList();
 
+    internal static string GetInstancesFolder(LauncherPlatform platform) => Path.Combine(platform.AppDataPath, "instances");
+    internal string InstancesFolder => _instancesFolder;
+
     public readonly ConcurrentDictionary<string, ThreadSafeInstallProgressReporter.InstallProgress>
         CurrentInstallProgress = [];
 
@@ -62,20 +65,19 @@ public sealed class MinecraftLauncher : IDisposable
     public event EventHandler<ThreadSafeInstallProgressReporter.InstallProgress>? InstallProgressUpdated;
 
     public MinecraftLauncher(
-        string currentOs,
+        LauncherPlatform platform,
         string launcherName,
         string launcherVersion,
-        string instancesFolder,
         LauncherRepository repository,
         MinecraftVersionManager minecraftVersionManager,
         JavaVersionManager javaVersionManager,
         IReadOnlyDictionary<MinecraftInstanceModLoader, IModLoaderService> modLoaderServices,
         ILogger? logger = null)
     {
-        _currentOs = currentOs;
+        _platform = platform;
         _launcherName = launcherName;
         _launcherVersion = launcherVersion;
-        _instancesFolder = instancesFolder;
+        _instancesFolder = GetInstancesFolder(platform);
         _repository = repository;
         _javaManager = javaVersionManager;
         _minecraftManager = minecraftVersionManager;
@@ -200,13 +202,12 @@ public sealed class MinecraftLauncher : IDisposable
         var resolvedModLoader = await modLoaderService.ResolveAsync(
             version.Id,
             preferredModLoaderVersion,
-            _currentOs);
+            _platform.CurrentOs);
 
         ////////////////////////////////////////////////////////////////////////////////////////////
         // Download basic information about specific Minecraft version i.e., its client.json file
         var (versionDetails, minecraft) = await _minecraftManager.DownloadVersionAsync(
-            version,
-            _currentOs
+            version
         );
         minecraft = ApplyModLoaderToVersion(minecraft, resolvedModLoader);
 
@@ -244,7 +245,6 @@ public sealed class MinecraftLauncher : IDisposable
 
         var downloadMinecraftTask = _minecraftManager.DownloadAssetsAndLibraries(
             versionDetails,
-            _currentOs,
             new Progress<double>(mcProgress =>
             {
                 var pp = mcProgress < 1.0
@@ -373,7 +373,7 @@ public sealed class MinecraftLauncher : IDisposable
             {
                 var javaExecutable = _javaManager.GetJavaExecutablePath((int)instance.RequiredJavaVersion) ??
                                      throw new ArgumentException($"Java {instance.RequiredJavaVersion} is missing");
-                var cachedMc = await _minecraftManager.GetCachedVersionDetailsAsync(instance.VersionId, _currentOs);
+                var cachedMc = await _minecraftManager.GetCachedVersionDetailsAsync(instance.VersionId);
                 var mc = cachedMc with
                 {
                     VersionId = string.IsNullOrWhiteSpace(instance.LaunchVersionId)
