@@ -68,16 +68,26 @@ internal class Program
         {
             builder = builder.With(new Win32PlatformOptions
             {
-                // Some computers crash with the default ANGLE based HW acceleration, so we must
-                // use OpenGL or even software rendering.
-                RenderingMode = [Win32RenderingMode.Wgl, Win32RenderingMode.Software],
+                // Some computers crash with the default ANGLE-based HW acceleration, so we must use OpenGL or even
+                // software rendering. But we are trying Vulkan now.
+                RenderingMode = [Win32RenderingMode.Vulkan, Win32RenderingMode.Wgl, Win32RenderingMode.Software],
             });
         }
         else if (OperatingSystem.IsMacOS())
         {
             builder = builder.With(new AvaloniaNativePlatformOptions
             {
-                RenderingMode = [AvaloniaNativeRenderingMode.Metal, AvaloniaNativeRenderingMode.Software],
+                // OpenGL is deprecated, but it will still be better than software rendering.
+                RenderingMode = [AvaloniaNativeRenderingMode.Metal, AvaloniaNativeRenderingMode.OpenGl, AvaloniaNativeRenderingMode.Software],
+            });
+        }
+        else if (OperatingSystem.IsLinux())
+        {
+            builder = builder.With(new X11PlatformOptions
+            {
+                // Linux GPU driver support varies a lot, so try both all the accelerated paths before falling back to
+                // the software rendering.
+                RenderingMode = [X11RenderingMode.Vulkan, X11RenderingMode.Egl, X11RenderingMode.Glx, X11RenderingMode.Software],
             });
         }
 
