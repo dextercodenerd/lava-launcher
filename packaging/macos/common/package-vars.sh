@@ -36,5 +36,6 @@ resolve_property() {
 }
 
 PACKAGE_VERSION=${PACKAGE_VERSION:-$(sed -n 's:.*<AppVersion>\\(.*\\)</AppVersion>.*:\\1:p' "$REPO_ROOT/Directory.Build.props" | head -n 1)}
+APP_NAME=$(resolve_property "${APP_NAME:-}" "AppName" "Yet Another Minecrafy Launcher")
 APP_BINARY=$(resolve_property "${APP_BINARY:-}" "AppAssemblyName" "YamLauncher")
-LINUX_FOLDER_NAME=$(resolve_property "${LINUX_FOLDER_NAME:-}" "LinuxFolderName" "yamlauncher")
+MAC_BUNDLE_IDENTIFIER=$(resolve_property "${MAC_BUNDLE_IDENTIFIER:-}" "MacBundleIdentifier" "com.example.yamlauncher")

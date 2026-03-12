@@ -84,16 +84,47 @@ Linux packages stage the published app under `/usr/lib/<LinuxFolderName>/` and i
 The repository includes two helper scripts:
 
 ```sh
-./scripts/package-linux-deb.sh /path/to/linux-x64/publish
-./scripts/package-linux-rpm.sh /path/to/linux-x64/publish
+./scripts/package-linux-deb.sh
+./scripts/package-linux-rpm.sh
 ```
 
-Both scripts expect the Linux `dotnet publish` output as input and package these assets:
+Both scripts run `dotnet publish` for `linux-x64` by default with release packaging flags:
+
+```sh
+dotnet publish LavaLauncher.Desktop/LavaLauncher.Desktop.csproj -c Release -r linux-x64 --self-contained true -p:PublishAot=true -p:PublishTrimmed=true -p:PublishSingleFile=true
+```
+
+You can also pass either an existing publish folder or a different RID as the first argument.
+
+The packaged Linux assets are:
 
 * `/usr/bin/lavalauncher`
 * `/usr/lib/lavalauncher/`
 * `/usr/share/applications/lavalauncher.desktop`
-* `/usr/share/icons/hicolor/scalable/apps/lavalauncher.svg`
+* `/usr/share/icons/hicolor/scalable/apps/<LinuxFolderName>.svg`
+
+## macOS packaging
+The repository also includes a helper script for wrapping macOS `dotnet publish` output into a native `.app` bundle that follows Avalonia's standard macOS layout:
+
+```sh
+./scripts/package-macos-app.sh
+```
+
+The script uses:
+
+* `AppName` for the `.app` bundle name
+* `AppAssemblyName` for the executable inside `Contents/MacOS/`
+* `MacBundleIdentifier` for `Info.plist`
+* `packaging/common/app-icon.svg` as the shared source icon for Linux and macOS
+* `rsvg-convert` and `iconutil` to build the macOS `.icns` icon from the shared SVG
+
+By default it runs:
+
+```sh
+dotnet publish LavaLauncher.Desktop/LavaLauncher.Desktop.csproj -c Release -r osx-arm64 --self-contained true -p:PublishAot=true -p:PublishTrimmed=true -p:PublishSingleFile=true
+```
+
+You can also pass either an existing publish folder or a different RID as the first argument.
 
 ## Navigation Architecture
 We use a **Phone-style Stack Navigation** system to keep the UI simple for children. The global "Ribbon" stays at the top, while the content area cross fades.

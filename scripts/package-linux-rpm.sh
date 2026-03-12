@@ -5,15 +5,32 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 . "$REPO_ROOT/packaging/linux/common/package-vars.sh"
 
-PUBLISH_DIR=${1:-"$REPO_ROOT/LavaLauncher.Desktop/bin/Release/net10.0/linux-x64/publish"}
+PROJECT_PATH="$REPO_ROOT/LavaLauncher.Desktop/LavaLauncher.Desktop.csproj"
+RUNTIME_IDENTIFIER=${RUNTIME_IDENTIFIER:-linux-x64}
+PUBLISH_DIR=${PUBLISH_DIR:-"$REPO_ROOT/artifacts/publish/$RUNTIME_IDENTIFIER"}
 RPM_ROOT="$REPO_ROOT/artifacts/linux/rpm"
 STAGING_DIR="$RPM_ROOT/staging"
 BUILDROOT_DIR="$RPM_ROOT/buildroot"
 SPEC_FILE="$RPM_ROOT/$LINUX_FOLDER_NAME.spec"
 
+if [ $# -gt 0 ]; then
+  if [ -d "$1" ]; then
+    PUBLISH_DIR=$1
+  else
+    RUNTIME_IDENTIFIER=$1
+    PUBLISH_DIR="$REPO_ROOT/artifacts/publish/$RUNTIME_IDENTIFIER"
+  fi
+fi
+
 if [ ! -d "$PUBLISH_DIR" ]; then
-  echo "Publish directory not found: $PUBLISH_DIR" >&2
-  exit 1
+  dotnet publish "$PROJECT_PATH" \
+    -c Release \
+    -r "$RUNTIME_IDENTIFIER" \
+    --self-contained true \
+    -p:PublishAot=true \
+    -p:PublishTrimmed=true \
+    -p:PublishSingleFile=true \
+    -o "$PUBLISH_DIR"
 fi
 
 rm -rf "$STAGING_DIR" "$BUILDROOT_DIR"
@@ -34,7 +51,7 @@ sed \
   -e "s/__LINUX_FOLDER_NAME__/$LINUX_FOLDER_NAME/g" \
   "$REPO_ROOT/packaging/linux/common/lavalauncher.desktop" \
   > "$STAGING_DIR/usr/share/applications/$LINUX_FOLDER_NAME.desktop"
-cp "$REPO_ROOT/packaging/linux/common/lavalauncher.svg" \
+cp "$REPO_ROOT/packaging/common/app-icon.svg" \
   "$STAGING_DIR/usr/share/icons/hicolor/scalable/apps/$LINUX_FOLDER_NAME.svg"
 
 sed \
