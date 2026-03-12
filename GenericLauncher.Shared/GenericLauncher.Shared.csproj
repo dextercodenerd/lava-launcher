@@ -89,7 +89,7 @@
         </ReadLinesFromFile>
 
         <ItemGroup>
-            <_AppConfigTransformedLines Include="@(_AppConfigTemplateLines->Replace('${MAC_BUNDLE_IDENTIFIER}', '$(MacBundleIdentifier)'))"/>
+            <_AppConfigTransformedLines Include="@(_AppConfigTemplateLines->Replace('${WINDOWS_FOLDER_NAME}', '$(WindowsFolderName)')->Replace('${LINUX_FOLDER_NAME}', '$(LinuxFolderName)')->Replace('${MAC_BUNDLE_IDENTIFIER}', '$(MacBundleIdentifier)'))"/>
         </ItemGroup>
 
         <WriteLinesToFile File="$(_OutputPath)" Lines="@(_AppConfigTransformedLines)" Overwrite="true"/>

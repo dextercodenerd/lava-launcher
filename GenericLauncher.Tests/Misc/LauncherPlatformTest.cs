@@ -11,19 +11,37 @@ namespace GenericLauncher.Tests.Misc;
 public class LauncherPlatformTest
 {
     [Fact]
-    public void CreateCurrent_OnMac_UsesApplicationDataAndBundleIdentifier()
+    public void ResolveStoragePaths_OnWindows_UsesConfiguredFolderName()
     {
-        if (!OperatingSystem.IsMacOS())
-        {
-            return;
-        }
+        var localAppDataRoot = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var paths = LauncherPlatform.ResolveStoragePaths("windows");
 
-        var platform = LauncherPlatform.CreateCurrent();
+        Assert.Equal(AppConfig.WindowsFolderName, paths.appIdentifier);
+        Assert.Equal(Path.Combine(localAppDataRoot, AppConfig.WindowsFolderName), paths.appDataPath);
+        Assert.Equal(paths.appDataPath, paths.configPath);
+    }
+
+    [Fact]
+    public void ResolveStoragePaths_OnLinux_UsesConfiguredFolderName()
+    {
+        var localAppDataRoot = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var configRoot = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+
+        var paths = LauncherPlatform.ResolveStoragePaths("linux");
+
+        Assert.Equal(AppConfig.LinuxFolderName, paths.appIdentifier);
+        Assert.Equal(Path.Combine(localAppDataRoot, AppConfig.LinuxFolderName), paths.appDataPath);
+        Assert.Equal(Path.Combine(configRoot, AppConfig.LinuxFolderName), paths.configPath);
+    }
+
+    [Fact]
+    public void ResolveStoragePaths_OnMac_UsesBundleIdentifier()
+    {
         var applicationDataRoot = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var paths = LauncherPlatform.ResolveStoragePaths("osx");
 
-        Assert.Equal("osx", platform.CurrentOs);
-        Assert.Equal(AppConfig.MacBundleIdentifier, platform.AppIdentifier);
-        Assert.Equal(Path.Combine(applicationDataRoot, AppConfig.MacBundleIdentifier), platform.AppDataPath);
-        Assert.Equal(platform.AppDataPath, platform.ConfigPath);
+        Assert.Equal(AppConfig.MacBundleIdentifier, paths.appIdentifier);
+        Assert.Equal(Path.Combine(applicationDataRoot, AppConfig.MacBundleIdentifier), paths.appDataPath);
+        Assert.Equal(paths.appDataPath, paths.configPath);
     }
 }

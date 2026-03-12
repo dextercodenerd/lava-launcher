@@ -9,9 +9,6 @@ namespace GenericLauncher.Misc;
 
 public sealed record LauncherPlatform
 {
-    // TODO: inejct trough user.props
-    private const string LinuxFolderName = "yamlauncher";
-
     public string CurrentOs { get; }
     public string Architecture { get; }
     public Version OsVersion { get; }
@@ -144,13 +141,13 @@ public sealed record LauncherPlatform
         return "unknown";
     }
 
-    private static (string appIdentifier, string appDataPath, string configPath) ResolveStoragePaths(string currentOs)
+    internal static (string appIdentifier, string appDataPath, string configPath) ResolveStoragePaths(string currentOs)
     {
         if (currentOs == "windows")
         {
             // Windows launcher data is already stored under LocalAppData, which is the normal
             // place for per-user app-managed state that should stay local to the machine.
-            var appIdentifier = Product.AssemblyName;
+            var appIdentifier = AppConfig.WindowsFolderName;
             var appDataRoot = GetSpecialFolderPath(Environment.SpecialFolder.LocalApplicationData);
             var appDataPath = Path.Combine(appDataRoot, appIdentifier);
             return (appIdentifier, appDataPath, appDataPath);
@@ -168,9 +165,9 @@ public sealed record LauncherPlatform
             var dataRoot = GetSpecialFolderPath(Environment.SpecialFolder.LocalApplicationData);
             var configRoot = GetSpecialFolderPath(Environment.SpecialFolder.ApplicationData);
             return (
-                LinuxFolderName,
-                Path.Combine(dataRoot, LinuxFolderName),
-                Path.Combine(configRoot, LinuxFolderName));
+                AppConfig.LinuxFolderName,
+                Path.Combine(dataRoot, AppConfig.LinuxFolderName),
+                Path.Combine(configRoot, AppConfig.LinuxFolderName));
         }
 
         if (currentOs == "osx")

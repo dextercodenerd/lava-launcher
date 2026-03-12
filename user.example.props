@@ -2,6 +2,8 @@
     <PropertyGroup>
         <AppName>Yet Another Minecrafy Launcher</AppName>
         <AppAssemblyName>YamLauncher</AppAssemblyName>
+        <WindowsFolderName>YamLauncher</WindowsFolderName>
+        <LinuxFolderName>yamlauncher</LinuxFolderName>
         <MacBundleIdentifier>com.example.yamlauncher</MacBundleIdentifier>
     </PropertyGroup>
     <PropertyGroup>

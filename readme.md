@@ -12,7 +12,7 @@ Below are some notes about how and why we are doing things at the moment. Some b
 ## Azure Entra ID App Client id
 _Mojang/Microsoft_ reviews every new _Azure Entra ID_ app id, before it can use Minecraft APIs like to get an access token for running Minecraft with an authenticated user. Because of this, the client id is not yet included in the repository and is injected into code via `user.props` file, command line parameter, or ENV variable.
 
-In your fork, you have to set your own Azure Entra ID app client id for the Microsoft/Minecraft login to work. Copy the `user.example.props` as `user.props` file and fill in the client id, redirect URL and app name.
+In your fork, you have to set your own Azure Entra ID app client id for the Microsoft/Minecraft login to work. Copy the `user.example.props` as `user.props` file and fill in the client id, redirect URL and app name. That same file can also override the platform app identifiers used for storage paths, such as `MacBundleIdentifier`, `LinuxFolderName`, and `WindowsFolderName`.
 
 ## App version
 The app version is defined in the `Directory.Build.props` file in the root folder.
@@ -62,17 +62,19 @@ and find the output in the `LavaLauncher\LavaLauncher.Desktop\bin\Release\net10.
 The launcher intentionally uses a small set of platform-specific storage roots:
 
 * Windows:
-  * data root: `%LocalAppData%\<AssemblyName>`
+  * data root: `%LocalAppData%\<WindowsFolderName>`
   * config root: same as data root
   * why: the launcher keeps local machine-specific user state and already stores it under `LocalAppData`
+  * default: `WindowsFolderName` defaults to the assembly name so existing installs keep the same path
 * macOS:
   * data root: `~/Library/Application Support/<bundle-id>`
   * config root: same as data root
   * why: app-managed files belong in `Application Support`; we do not use a separate Preferences root because the launcher stores its own files rather than system-managed defaults
 * Linux:
-  * data root: `Environment.SpecialFolder.LocalApplicationData/yamlauncher`
-  * config root: `Environment.SpecialFolder.ApplicationData/yamlauncher`
+  * data root: `Environment.SpecialFolder.LocalApplicationData/<LinuxFolderName>`
+  * config root: `Environment.SpecialFolder.ApplicationData/<LinuxFolderName>`
   * why: .NET already maps these special folders to the standard XDG-style Linux locations, so we use the same API shape as Windows and macOS while still splitting config from data
+  * default: `LinuxFolderName` defaults to `yamlauncher`
 
 The Linux folder name is a stable lowercase executable identity. It is not derived from `Product.Name`, because branding can change and may contain spaces.
 
