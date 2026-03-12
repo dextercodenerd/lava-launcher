@@ -1,0 +1,26 @@
+Name: lavalauncher
+Version: @VERSION@
+Release: 1%{?dist}
+Summary: A simple Minecraft launcher
+License: GPL-3.0-only
+URL: https://github.com/example/lavalauncher
+BuildArch: x86_64
+
+%description
+Lava Launcher is a desktop Minecraft launcher built with .NET 10 and Avalonia.
+
+%install
+mkdir -p %{buildroot}/usr/bin
+mkdir -p %{buildroot}/usr/lib/lavalauncher
+mkdir -p %{buildroot}/usr/share/applications
+mkdir -p %{buildroot}/usr/share/icons/hicolor/scalable/apps
+cp -a @STAGING_DIR@/usr/bin/lavalauncher %{buildroot}/usr/bin/lavalauncher
+cp -a @STAGING_DIR@/usr/lib/lavalauncher/. %{buildroot}/usr/lib/lavalauncher/
+cp -a @STAGING_DIR@/usr/share/applications/lavalauncher.desktop %{buildroot}/usr/share/applications/lavalauncher.desktop
+cp -a @STAGING_DIR@/usr/share/icons/hicolor/scalable/apps/lavalauncher.svg %{buildroot}/usr/share/icons/hicolor/scalable/apps/lavalauncher.svg
+
+%files
+/usr/bin/lavalauncher
+/usr/lib/lavalauncher
+/usr/share/applications/lavalauncher.desktop
+/usr/share/icons/hicolor/scalable/apps/lavalauncher.svg

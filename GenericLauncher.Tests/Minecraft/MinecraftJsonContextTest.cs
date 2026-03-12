@@ -19,6 +19,7 @@ public class MinecraftJsonContextTest
             architecture,
             version ?? new System.Version(14, 0),
             AppConfig.MacBundleIdentifier,
+            Path.Combine(Path.GetTempPath(), "lavalancher-tests", os, architecture),
             Path.Combine(Path.GetTempPath(), "lavalancher-tests", os, architecture));
 
     [Fact]

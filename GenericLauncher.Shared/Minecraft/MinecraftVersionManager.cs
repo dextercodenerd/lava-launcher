@@ -52,9 +52,6 @@ public sealed class MinecraftVersionManager : IDisposable
     private readonly string _minecraftVersionsFolder;
     private readonly string _sharedAssetsFolder;
     private readonly string _sharedLibrariesFolder;
-    internal string MinecraftVersionsFolderPath => _minecraftVersionsFolder;
-    internal string SharedAssetsFolderPath => _sharedAssetsFolder;
-    internal string SharedLibrariesFolderPath => _sharedLibrariesFolder;
 
     public MinecraftVersionManager(
         LauncherPlatform platform,

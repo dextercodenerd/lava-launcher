@@ -19,6 +19,7 @@ public class JavaVersionManagerTest
             "arm64",
             new Version(14, 0),
             AppConfig.MacBundleIdentifier,
+            "/tmp/lavalancher-tests",
             "/tmp/lavalancher-tests");
         var installationPath = Path.Combine("/tmp/lavalancher-tests", "java", "21-mac-aarch64");
 

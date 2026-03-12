@@ -51,9 +51,6 @@ public sealed class MinecraftLauncher : IDisposable
             .OrderBy(v => v)
             .ToImmutableList();
 
-    internal static string GetInstancesFolder(LauncherPlatform platform) => Path.Combine(platform.AppDataPath, "instances");
-    internal string InstancesFolder => _instancesFolder;
-
     public readonly ConcurrentDictionary<string, ThreadSafeInstallProgressReporter.InstallProgress>
         CurrentInstallProgress = [];
 
@@ -77,7 +74,7 @@ public sealed class MinecraftLauncher : IDisposable
         _platform = platform;
         _launcherName = launcherName;
         _launcherVersion = launcherVersion;
-        _instancesFolder = GetInstancesFolder(platform);
+        _instancesFolder = Path.Combine(platform.AppDataPath, "instances");
         _repository = repository;
         _javaManager = javaVersionManager;
         _minecraftManager = minecraftVersionManager;

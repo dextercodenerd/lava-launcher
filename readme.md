@@ -56,7 +56,42 @@ Run the `dotnet publish` command below to create a Windows x64 application binar
 dotnet publish .\LavaLauncher.Desktop\LavaLauncher.Desktop.csproj -c Release -r win-x64 -p:PublishAot=true
 ```
 
-and find the output in the `LavaLauncher\LavaLauncher.Desktop\bin\Release\net9.0\win-x64\publish\` folder.
+and find the output in the `LavaLauncher\LavaLauncher.Desktop\bin\Release\net10.0\win-x64\publish\` folder.
+
+## App folders
+The launcher intentionally uses a small set of platform-specific storage roots:
+
+* Windows:
+  * data root: `%LocalAppData%\<AssemblyName>`
+  * config root: same as data root
+  * why: the launcher keeps local machine-specific user state and already stores it under `LocalAppData`
+* macOS:
+  * data root: `~/Library/Application Support/<bundle-id>`
+  * config root: same as data root
+  * why: app-managed files belong in `Application Support`; we do not use a separate Preferences root because the launcher stores its own files rather than system-managed defaults
+* Linux:
+  * data root: `Environment.SpecialFolder.LocalApplicationData/yamlauncher`
+  * config root: `Environment.SpecialFolder.ApplicationData/yamlauncher`
+  * why: .NET already maps these special folders to the standard XDG-style Linux locations, so we use the same API shape as Windows and macOS while still splitting config from data
+
+The Linux folder name is a stable lowercase executable identity. It is not derived from `Product.Name`, because branding can change and may contain spaces.
+
+## Linux packaging
+Linux packages stage the published app under `/usr/lib/lavalauncher/` and install `/usr/bin/lavalauncher` as a thin wrapper that executes the real binary from there. This is intentional: Avalonia and SQLite may emit native sidecar libraries, and those files need to stay next to the published executable instead of being scattered into `/usr/bin`.
+
+The repository includes two helper scripts:
+
+```sh
+./scripts/package-linux-deb.sh /path/to/linux-x64/publish
+./scripts/package-linux-rpm.sh /path/to/linux-x64/publish
+```
+
+Both scripts expect the Linux `dotnet publish` output as input and package these assets:
+
+* `/usr/bin/lavalauncher`
+* `/usr/lib/lavalauncher/`
+* `/usr/share/applications/lavalauncher.desktop`
+* `/usr/share/icons/hicolor/scalable/apps/lavalauncher.svg`
 
 ## Navigation Architecture
 We use a **Phone-style Stack Navigation** system to keep the UI simple for children. The global "Ribbon" stays at the top, while the content area cross fades.

@@ -20,7 +20,6 @@ public sealed class JavaVersionManager : IDisposable
     private readonly HttpClient _httpClient;
     private readonly FileDownloader _downloader;
     private readonly string _javaInstallationsDirectory;
-    internal string JavaInstallationsDirectory => _javaInstallationsDirectory;
     private readonly ILogger? _logger;
 
     public JavaVersionManager(

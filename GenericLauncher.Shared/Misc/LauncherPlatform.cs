@@ -9,18 +9,23 @@ namespace GenericLauncher.Misc;
 
 public sealed record LauncherPlatform
 {
+    // TODO: inejct trough user.props
+    private const string LinuxFolderName = "yamlauncher";
+
     public string CurrentOs { get; }
     public string Architecture { get; }
     public Version OsVersion { get; }
     public string AppIdentifier { get; }
     public string AppDataPath { get; }
+    public string ConfigPath { get; }
 
     internal LauncherPlatform(
         string currentOs,
         string architecture,
         Version osVersion,
         string appIdentifier,
-        string appDataPath)
+        string appDataPath,
+        string configPath)
     {
         if (string.IsNullOrWhiteSpace(currentOs))
         {
@@ -42,34 +47,32 @@ public sealed record LauncherPlatform
             throw new ArgumentException("App data path cannot be empty", nameof(appDataPath));
         }
 
+        if (string.IsNullOrWhiteSpace(configPath))
+        {
+            throw new ArgumentException("Config path cannot be empty", nameof(configPath));
+        }
+
         CurrentOs = currentOs;
         Architecture = architecture;
         OsVersion = osVersion;
         AppIdentifier = appIdentifier;
         AppDataPath = appDataPath;
+        ConfigPath = configPath;
     }
 
     public static LauncherPlatform CreateCurrent()
     {
         var currentOs = ResolveCurrentOs();
         var architecture = NormalizeArchitecture(RuntimeInformation.ProcessArchitecture);
-        var appIdentifier = currentOs == "osx"
-            ? AppConfig.MacBundleIdentifier
-            : Product.AssemblyName;
-        var appDataRoot = Environment.GetFolderPath(currentOs == "osx"
-            ? Environment.SpecialFolder.ApplicationData
-            : Environment.SpecialFolder.LocalApplicationData);
-        if (string.IsNullOrWhiteSpace(appDataRoot))
-        {
-            throw new InvalidOperationException("Failed to resolve the app data root folder for this platform.");
-        }
+        var (appIdentifier, appDataPath, configPath) = ResolveStoragePaths(currentOs);
 
         return new LauncherPlatform(
             currentOs,
             architecture,
             Environment.OSVersion.Version,
             appIdentifier,
-            Path.Combine(appDataRoot, appIdentifier));
+            appDataPath,
+            configPath);
     }
 
     public bool MatchesOs(OsInfo? os)
@@ -139,6 +142,60 @@ public sealed record LauncherPlatform
         }
 
         return "unknown";
+    }
+
+    private static (string appIdentifier, string appDataPath, string configPath) ResolveStoragePaths(string currentOs)
+    {
+        if (currentOs == "windows")
+        {
+            // Windows launcher data is already stored under LocalAppData, which is the normal
+            // place for per-user app-managed state that should stay local to the machine.
+            var appIdentifier = Product.AssemblyName;
+            var appDataRoot = GetSpecialFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var appDataPath = Path.Combine(appDataRoot, appIdentifier);
+            return (appIdentifier, appDataPath, appDataPath);
+        }
+
+        if (currentOs == "linux")
+        {
+            // On Linux, .NET maps SpecialFolder.ApplicationData to the config-style XDG location
+            // and SpecialFolder.LocalApplicationData to the data-style XDG location. We keep one
+            // launcher-managed data root and only split config, to avoid broad storage churn in
+            // the rest of the app.
+            //
+            // The folder name is a stable lowercase executable identity, not Product.Name:
+            // Product.Name is branding and may contain spaces, while this should stay predictable.
+            var dataRoot = GetSpecialFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var configRoot = GetSpecialFolderPath(Environment.SpecialFolder.ApplicationData);
+            return (
+                LinuxFolderName,
+                Path.Combine(dataRoot, LinuxFolderName),
+                Path.Combine(configRoot, LinuxFolderName));
+        }
+
+        if (currentOs == "osx")
+        {
+            // macOS convention is to keep app-managed files under Application Support using the
+            // bundle identifier. We intentionally do not split config into Preferences because the
+            // launcher stores its own files rather than system-managed defaults entries.
+            var appIdentifier = AppConfig.MacBundleIdentifier;
+            var appDataRoot = GetSpecialFolderPath(Environment.SpecialFolder.ApplicationData);
+            var appDataPath = Path.Combine(appDataRoot, appIdentifier);
+            return (appIdentifier, appDataPath, appDataPath);
+        }
+
+        throw new PlatformNotSupportedException($"Unsupported platform: {RuntimeInformation.OSDescription}");
+    }
+
+    private static string GetSpecialFolderPath(Environment.SpecialFolder folder)
+    {
+        var path = Environment.GetFolderPath(folder);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new InvalidOperationException("Failed to resolve the app data root folder for this platform.");
+        }
+
+        return path;
     }
 
     private static string NormalizeOs(string rawName)

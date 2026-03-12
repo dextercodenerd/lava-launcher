@@ -16,7 +16,6 @@ public class LauncherRepository
 
     private readonly LauncherDatabase _db;
     private readonly Task _initTask;
-    internal string DatabasePath { get; }
 
     public LauncherRepository(
         LauncherPlatform platform,
@@ -26,10 +25,10 @@ public class LauncherRepository
         _logger = logger;
 
         Directory.CreateDirectory(_baseDir);
-        DatabasePath = Path.Combine(_baseDir, "ll.sqlite");
+        var dbPath = Path.Combine(_baseDir, "ll.sqlite");
         var builder = new SqliteConnectionStringBuilder
         {
-            DataSource = DatabasePath,
+            DataSource = dbPath,
             Mode = SqliteOpenMode.ReadWriteCreate,
             Cache = SqliteCacheMode.Shared,
             ForeignKeys = true,
