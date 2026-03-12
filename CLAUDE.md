@@ -1,51 +1,46 @@
-# CLAUDE.md - LavaLauncher Project Guide
+# CLAUDE.md
 
-## Important: Read AGENTS.md First
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Please read [`AGENTS.md`](./AGENTS.md) before starting work on this project.** It contains essential architecture rules, conventions, and coding guidance.
+> **Read AGENTS.md** for full architecture rules, coding conventions, and guidance before making changes.
 
-## Project Overview
+## Commands
 
-LavaLauncher is a .NET 10 desktop Minecraft launcher built with Avalonia UI and CommunityToolkit.MVVM. The codebase is optimized for NativeAOT and trimming, with strict architectural patterns to maintain these constraints.
-
-## Key Architectural Rules (from AGENTS.md)
-
-1. **Manual DI Only**: No IServiceCollection or reflection-driven DI. Long-lived services are created directly in `GenericLauncher.Shared/App.axaml.cs`.
-
-2. **AOT & Trimming Safety**: Prefer static code paths and explicit types. Avoid reflection-heavy libraries and runtime type scanning.
-
-3. **Source-Generated JSON**: All serialization uses `System.Text.Json` with `JsonSerializerIsReflectionEnabledByDefault=false`. Register new JSON models in relevant `JsonSerializerContext` files.
-
-4. **Ownership Model**: App owns long-lived services (AuthService, MinecraftLauncher, LauncherRepository, etc.). Root screens are reused; transient screens are pushed onto StackNavigationViewModel.
-
-5. **UI Conventions**: Use CommunityToolkit MVVM attributes, maintain accurate `x:DataType` in Avalonia views, and marshal UI updates to the UI thread.
-
-6. **Persistence**: Use `LauncherRepository` and `LauncherDatabase` for all SQLite access. The database layer uses a custom `AsyncRwLock` for concurrency.
-
-## Project Layout
-
-- `LavaLauncher.Desktop/`: Native desktop host and Avalonia bootstrap
-- `GenericLauncher.Shared/`: Core application logic, UI, services, persistence, auth, and Minecraft integration
-- `GenericLauncher.Tests/`: Unit tests
-
-## Verification
-
-Run tests with:
 ```bash
+# Run tests
 dotnet test LavaLauncher.sln
-```
 
-For build/publish verification:
-```bash
+# Run a single test by name
+dotnet test LavaLauncher.sln --filter "FullyQualifiedName~MyTestName"
+
+# Build
 dotnet build LavaLauncher.sln
+
+# Run locally (debug)
+dotnet run --project LavaLauncher.Desktop/LavaLauncher.Desktop.csproj
+
+# AOT publish (Windows)
 dotnet publish LavaLauncher.Desktop/LavaLauncher.Desktop.csproj -c Release -r win-x64 -p:PublishAot=true
 ```
 
-## Next Steps
+For Azure auth config, copy `user.example.props` to `user.props` and fill in values before building.
 
-Refer to **AGENTS.md** for:
-- Detailed project layout
-- Complete architecture rules
-- Coding guidance for new features
-- Database and persistence patterns
-- Configuration and build settings
+## Architecture
+
+**Startup flow**: `Program.cs` → Avalonia bootstraps `App` (composition root in `App.axaml.cs`) → `ApplicationViewModel` creates `MainWindowViewModel` → `MainWindowViewModel` owns `StackNavigationViewModel` and all root page VMs.
+
+**Service ownership** (`App.axaml.cs`): `AuthService`, `MinecraftLauncher`, `LauncherRepository`, `ModrinthApiClient`, `HttpClient`, and all mod loader services are created once here and passed down manually — no DI container.
+
+**Navigation**: `StackNavigationViewModel` holds a `Stack<IPageViewModel>`. `SetRoot()` replaces the root and disposes any non-root pages in the backstack. `Push()` adds transient pages. `MainWindowViewModel` is the navigation coordinator — screens don't navigate to each other directly.
+
+**Screen lifecycle**: Root screens (`IsRootScreen = true`) are never disposed. Transient screens implement `IDisposable` if they subscribe to long-lived events, and are disposed on `Pop()` or `SetRoot()`.
+
+**State pattern**: `AuthService` and `MinecraftLauncher` maintain immutable snapshots + events. UI subscribes to events and posts updates to `Dispatcher.UIThread`.
+
+**Persistence**: All SQLite access goes through `LauncherRepository` → `LauncherDatabase`. Custom `AsyncRwLock` handles single-writer concurrency. No ORM.
+
+**JSON**: `JsonSerializerIsReflectionEnabledByDefault=false`. New models must be registered in the appropriate `*JsonSerializerContext.cs` file under `*/Json/`.
+
+**Code generation**: `AzureConfig.generated.cs` and `AppConfig.generated.cs` are generated at build time by MSBuild targets in `GenericLauncher.Shared.csproj` from templates in `Data/`. Do not edit the generated files.
+
+**Logging**: Use `ILogger` (not `ILogger<T>`), created via `App.LoggerFactory?.CreateLogger(typeof(...))`.
