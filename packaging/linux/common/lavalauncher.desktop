@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Lava Launcher
+Comment=A simple Minecraft launcher
+Exec=__LINUX_FOLDER_NAME__ %u
+Icon=__LINUX_FOLDER_NAME__
+Terminal=false
+Categories=Game;
+StartupNotify=true

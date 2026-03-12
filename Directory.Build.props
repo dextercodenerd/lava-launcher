@@ -17,6 +17,7 @@
 
     <!-- Import user-specific props if exists -->
     <Import Project="user.props" Condition="Exists('user.props')"/>
+
     <!-- inject Azure Entra ID App client id -->
     <PropertyGroup>
         <!-- Priority: Command line/user.props -> Environment -> Default -->
@@ -27,6 +28,22 @@
         <AzureRedirectUrl Condition="'$(AzureRedirectUrl)' != ''">$(AzureRedirectUrl)</AzureRedirectUrl>
         <AzureRedirectUrl Condition="'$(AzureRedirectUrl)' == ''">$(AZURE_REDIREC_URL)</AzureRedirectUrl>
         <AzureRedirectUrl Condition="'$(AzureRedirectUrl)' == ''">NOT_CONFIGURED</AzureRedirectUrl>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <!-- Priority: Command line/user.props -> Environment -> Default -->
+        <WindowsFolderName Condition="'$(WindowsFolderName)' != ''">$(WindowsFolderName)</WindowsFolderName>
+        <WindowsFolderName Condition="'$(WindowsFolderName)' == ''">$(WINDOWS_FOLDER_NAME)</WindowsFolderName>
+        <WindowsFolderName Condition="'$(WindowsFolderName)' == '' and '$(AppAssemblyName)' != ''">$(AppAssemblyName)</WindowsFolderName>
+        <WindowsFolderName Condition="'$(WindowsFolderName)' == ''">YamLauncher</WindowsFolderName>
+
+        <LinuxFolderName Condition="'$(LinuxFolderName)' != ''">$(LinuxFolderName)</LinuxFolderName>
+        <LinuxFolderName Condition="'$(LinuxFolderName)' == ''">$(LINUX_FOLDER_NAME)</LinuxFolderName>
+        <LinuxFolderName Condition="'$(LinuxFolderName)' == ''">yamlauncher</LinuxFolderName>
+
+        <MacBundleIdentifier Condition="'$(MacBundleIdentifier)' != ''">$(MacBundleIdentifier)</MacBundleIdentifier>
+        <MacBundleIdentifier Condition="'$(MacBundleIdentifier)' == ''">$(MAC_BUNDLE_IDENTIFIER)</MacBundleIdentifier>
+        <MacBundleIdentifier Condition="'$(MacBundleIdentifier)' == ''">com.example.yamlauncher</MacBundleIdentifier>
     </PropertyGroup>
 
     <!-- Native AOT compilation -->

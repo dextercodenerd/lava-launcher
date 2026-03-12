@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using GenericLauncher.Http;
 using GenericLauncher.Minecraft.Json;
+using GenericLauncher.Misc;
 using Microsoft.Extensions.Logging;
 
 namespace GenericLauncher.Minecraft;
@@ -36,6 +37,7 @@ public sealed class MinecraftVersionManager : IDisposable
     private const string MinecraftVersionsFolder = "versions";
     private const string ManifestFilename = "version_manifest_v2.json";
 
+    private readonly LauncherPlatform _platform;
     private readonly HttpClient _httpClient;
     private readonly FileDownloader _fileDownloader;
     private readonly ILogger? _logger;
@@ -52,15 +54,17 @@ public sealed class MinecraftVersionManager : IDisposable
     private readonly string _sharedLibrariesFolder;
 
     public MinecraftVersionManager(
-        string baseFolder,
+        LauncherPlatform platform,
         HttpClient httpClient,
         FileDownloader fileDownloader,
         ILogger? logger)
     {
+        _platform = platform;
         _logger = logger;
         _httpClient = httpClient;
         _fileDownloader = fileDownloader;
 
+        var baseFolder = Path.Combine(platform.AppDataPath, "mc");
         _minecraftVersionsFolder = Path.Combine(baseFolder, MinecraftVersionsFolder);
         _sharedAssetsFolder = Path.Combine(baseFolder, SharedAssetsFolder);
         _sharedLibrariesFolder = Path.Combine(baseFolder, SharedLibrariesFolder);
@@ -122,7 +126,6 @@ public sealed class MinecraftVersionManager : IDisposable
 
     public async Task<Version> GetCachedVersionDetailsAsync(
         string versionId,
-        string currentOs,
         CancellationToken cancellationToken = default)
     {
         // TODO: Use Lazy<> or somehow cache these
@@ -144,9 +147,9 @@ public sealed class MinecraftVersionManager : IDisposable
             GetNativeLibrariesFolder(versionId),
             _sharedAssetsFolder,
             versionDetails.AssetIndex.Id,
-            CreateClassPath(versionDetails.Libraries, currentOs),
-            ArgumentsParser.FlattenArguments(versionDetails.Arguments?.Game, currentOs),
-            ArgumentsParser.FlattenArguments(versionDetails.Arguments?.Jvm, currentOs)
+            CreateClassPath(versionDetails.Libraries),
+            ArgumentsParser.FlattenArguments(versionDetails.Arguments?.Game, _platform),
+            ArgumentsParser.FlattenArguments(versionDetails.Arguments?.Jvm, _platform)
         );
     }
 
@@ -163,7 +166,6 @@ public sealed class MinecraftVersionManager : IDisposable
 
     public async Task<(VersionDetails, Version)> DownloadVersionAsync(
         VersionInfo versionInfo,
-        string currentOs,
         CancellationToken cancellationToken = default)
     {
         // We use the official Minecraft launcher's folder structure.
@@ -205,15 +207,14 @@ public sealed class MinecraftVersionManager : IDisposable
                 nativeLibrariesFolder,
                 _sharedAssetsFolder,
                 versionDetails.AssetIndex.Id,
-                CreateClassPath(versionDetails.Libraries, currentOs),
-                ArgumentsParser.FlattenArguments(versionDetails.Arguments?.Game, currentOs),
-                ArgumentsParser.FlattenArguments(versionDetails.Arguments?.Jvm, currentOs)
+                CreateClassPath(versionDetails.Libraries),
+                ArgumentsParser.FlattenArguments(versionDetails.Arguments?.Game, _platform),
+                ArgumentsParser.FlattenArguments(versionDetails.Arguments?.Jvm, _platform)
             ));
     }
 
     public async Task DownloadAssetsAndLibraries(
         VersionDetails versionDetails,
-        string currentOs,
         IProgress<double> minecraftDownloadProgress,
         IProgress<double> assetsDownloadProgress,
         IProgress<double> librariesDownloadProgress,
@@ -224,7 +225,6 @@ public sealed class MinecraftVersionManager : IDisposable
 
         var downloadLibrariesTask = DownloadLibrariesAsync(
             versionDetails.Libraries,
-            currentOs,
             _sharedLibrariesFolder,
             nativeLibrariesFolder,
             librariesDownloadProgress,
@@ -245,15 +245,9 @@ public sealed class MinecraftVersionManager : IDisposable
         ]);
     }
 
-    private List<string> CreateClassPath(List<Library>? libraries, string currentOs)
+    private List<string> CreateClassPath(List<Library>? libraries)
     {
-        if (libraries is null || libraries.Count == 0)
-        {
-            return [];
-        }
-
-        return libraries.Where(l => IsLibraryAllowed(l, currentOs))
-            .DistinctBy(l => l.Name)
+        return SelectLibraries(libraries)
             .Select(l => l.Downloads?.Artifact?.Path)
             .OfType<string>()
             // The paths use '/' as directory separator, but not every platform is using the same character...
@@ -263,7 +257,6 @@ public sealed class MinecraftVersionManager : IDisposable
 
     private async Task DownloadLibrariesAsync(
         List<Library>? libraries,
-        string currentOs,
         string librariesFolder,
         string nativeLibrariesFolder,
         IProgress<double>? progress,
@@ -286,10 +279,13 @@ public sealed class MinecraftVersionManager : IDisposable
         };
 
         // Every library has the (Maven) Name property, so we can filter-out duplicates
-        var librariesToDownload = libraries
-            .Where(l => IsLibraryAllowed(l, currentOs))
-            .DistinctBy(l => l.Name)
-            .ToList();
+        var librariesToDownload = SelectLibraries(libraries);
+        if (librariesToDownload.Count == 0)
+        {
+            progress?.Report(1.0);
+            return;
+        }
+
         var count = (double)librariesToDownload.Count;
         var downloaded = 0;
 
@@ -320,7 +316,7 @@ public sealed class MinecraftVersionManager : IDisposable
                     return;
                 }
 
-                if (!library.Natives.TryGetValue(currentOs, out var nativeKey) ||
+                if (!library.Natives.TryGetValue(_platform.CurrentOs, out var nativeKey) ||
                     !library.Downloads.Classifiers.TryGetValue(nativeKey, out var nativeArtifact))
                 {
                     var d2 = Interlocked.Increment(ref downloaded);
@@ -429,74 +425,113 @@ public sealed class MinecraftVersionManager : IDisposable
         progress.Report(1.0);
     }
 
-    private bool IsLibraryAllowed(Library library, string currentOs)
+    private List<Library> SelectLibraries(List<Library>? libraries)
     {
-        // Same implementation as in MinecraftService
-        if (library.Rules is null || library.Rules.Count == 0)
+        // TODO: Still the same implementation as in MinecraftService ???
+        if (libraries is null || libraries.Count == 0)
         {
-            return true;
+            return [];
         }
 
-        var allowed = true;
-        foreach (var rule in library.Rules)
+        var selected = new List<Library>();
+        var groupedDirectNatives = new Dictionary<string, List<(Library Library, int Rank)>>();
+
+        foreach (var library in libraries)
         {
-            if (rule.Os is null)
+            if (!ArgumentsParser.IsRuleAllowed(library.Rules, _platform))
             {
                 continue;
             }
 
-            // TODO: Handle also the Os.Version, which can have a regex value like "^10\\." -- client_1.17.json
-            var matchesOs = rule.Os.Name?.ToLower() switch
+            var directNativeGroupKey = GetDirectNativeGroupKey(library);
+            if (directNativeGroupKey is null)
             {
-                "windows" => currentOs == "windows",
-                "linux" => currentOs == "linux",
-                "osx" => currentOs == "osx",
-                _ => true,
-            };
+                selected.Add(library);
+                continue;
+            }
 
-            allowed = rule.Action switch
+            var directNativeRank = GetDirectNativeRank(library);
+            if (directNativeRank is null)
             {
-                "allow" => matchesOs,
-                "disallow" => !matchesOs,
-                _ => allowed,
-            };
+                continue;
+            }
+
+            if (!groupedDirectNatives.TryGetValue(directNativeGroupKey, out var group))
+            {
+                group = [];
+                groupedDirectNatives[directNativeGroupKey] = group;
+            }
+
+            group.Add((library, directNativeRank.Value));
         }
 
-        return allowed;
+        foreach (var group in groupedDirectNatives.Values)
+        {
+            selected.Add(group.OrderBy(v => v.Rank).ThenBy(v => v.Library.Name, StringComparer.Ordinal).First().Library);
+        }
+
+        return selected
+            .DistinctBy(l => l.Name)
+            .ToList();
     }
 
-    private bool IsRuleAllowed(List<Rule>? rules, string currentOs)
+    internal List<string> CreateClassPathForTesting(List<Library>? libraries) => CreateClassPath(libraries);
+
+    private static string? GetDirectNativeGroupKey(Library library)
     {
-        if (rules is null || rules.Count == 0)
+        if (library.Downloads?.Artifact?.Path?.Contains("-natives-") != true)
         {
-            return true;
+            return null;
         }
 
-        var allowed = true;
-        foreach (var rule in rules)
+        var parts = library.Name.Split(':');
+        if (parts.Length < 4 || !parts[3].StartsWith("natives-", StringComparison.OrdinalIgnoreCase))
         {
-            if (rule.Os is null)
-            {
-                continue;
-            }
-
-            var matchesOs = rule.Os.Name?.ToLower() switch
-            {
-                "windows" => currentOs == "windows",
-                "linux" => currentOs == "linux",
-                "osx" => currentOs == "osx",
-                _ => true,
-            };
-
-            allowed = rule.Action switch
-            {
-                "allow" => matchesOs,
-                "disallow" => !matchesOs,
-                _ => allowed,
-            };
+            return null;
         }
 
-        return allowed;
+        return string.Join(':', parts.Take(3));
+    }
+
+    private int? GetDirectNativeRank(Library library)
+    {
+        var parts = library.Name.Split(':');
+        if (parts.Length < 4)
+        {
+            return null;
+        }
+
+        var classifier = parts[3].ToLowerInvariant();
+        if (!classifier.StartsWith("natives-", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return (_platform.CurrentOs, _platform.Architecture, classifier) switch
+        {
+            ("osx", "arm64", "natives-macos-arm64") => 0,
+            ("osx", "arm64", "natives-osx-arm64") => 0,
+            ("osx", "arm64", "natives-macos") => 1,
+            ("osx", "arm64", "natives-osx") => 1,
+            ("osx", "x64", "natives-macos") => 0,
+            ("osx", "x64", "natives-osx") => 0,
+            ("osx", "x64", "natives-macos-x64") => 1,
+            ("osx", "x64", "natives-osx-x64") => 1,
+            ("windows", "arm64", "natives-windows-arm64") => 0,
+            ("windows", "arm64", "natives-windows") => 1,
+            ("windows", "x64", "natives-windows") => 0,
+            ("windows", "x64", "natives-windows-x64") => 1,
+            ("windows", "x86", "natives-windows-x86") => 0,
+            ("windows", "x86", "natives-windows") => 1,
+            ("linux", "arm64", "natives-linux-arm64") => 0,
+            ("linux", "arm64", "natives-linux-aarch64") => 0,
+            ("linux", "arm64", "natives-linux-aarch_64") => 0,
+            ("linux", "arm64", "natives-linux") => 1,
+            ("linux", "x64", "natives-linux") => 0,
+            ("linux", "x64", "natives-linux-x64") => 1,
+            ("linux", "x64", "natives-linux-x86_64") => 1,
+            _ => null,
+        };
     }
 
     public bool IsVersionInstalled(string versionId) => File.Exists(GetClientJarPath(versionId));

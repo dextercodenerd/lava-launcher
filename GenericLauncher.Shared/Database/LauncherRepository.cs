@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading.Tasks;
 using GenericLauncher.Database.Model;
 using GenericLauncher.Minecraft;
+using GenericLauncher.Misc;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 
@@ -17,10 +18,10 @@ public class LauncherRepository
     private readonly Task _initTask;
 
     public LauncherRepository(
-        string baseDir,
+        LauncherPlatform platform,
         ILogger? logger = null)
     {
-        _baseDir = baseDir;
+        _baseDir = platform.AppDataPath;
         _logger = logger;
 
         Directory.CreateDirectory(_baseDir);

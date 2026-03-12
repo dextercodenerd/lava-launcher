@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -27,15 +26,8 @@ namespace GenericLauncher;
 public partial class App : Application
 {
     public static ILoggerFactory? LoggerFactory;
+    private static readonly LauncherPlatform Platform = LauncherPlatform.CreateCurrent();
 
-    // TODO: Inject the sub-folder/assembly name via constructor?
-    private static readonly string BaseFolder = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        Product.AssemblyName);
-
-    private static readonly string BaseMinecraftInstallFolder = "mc";
-    private static readonly string BaseJavaInstallFolder = "java";
-    private static readonly string BaseInstancesFolder = "instances";
     private static readonly string BaseMinecraftLibrariesFolder = "libraries";
     private static readonly string BaseModLaunchersFolder = "modlaunchers";
     private static readonly string FabricModLauncherFolder = "fabric";
@@ -51,20 +43,20 @@ public partial class App : Application
             LoggerFactory?.CreateLogger(typeof(Authenticator)));
 
     private readonly MinecraftVersionManager _minecraftVersionManager =
-        new(Path.Combine(BaseFolder, BaseMinecraftInstallFolder),
+        new(Platform,
             HttpClient,
             FileDownloader,
             LoggerFactory?.CreateLogger(typeof(MinecraftVersionManager)));
 
     private readonly JavaVersionManager _javaVersionManager =
-        new(Path.Combine(BaseFolder, BaseJavaInstallFolder),
+        new(Platform,
             HttpClient,
             FileDownloader,
             LoggerFactory?.CreateLogger(typeof(JavaVersionManager)));
 
     private readonly FabricModLoaderService _fabricModLoaderService =
-        new(Path.Combine(BaseFolder, BaseMinecraftInstallFolder, BaseModLaunchersFolder, FabricModLauncherFolder),
-            Path.Combine(BaseFolder, BaseMinecraftInstallFolder, BaseMinecraftLibrariesFolder),
+        new(Path.Combine(Platform.AppDataPath, "mc", BaseModLaunchersFolder, FabricModLauncherFolder),
+            Path.Combine(Platform.AppDataPath, "mc", BaseMinecraftLibrariesFolder),
             HttpClient,
             FileDownloader,
             LoggerFactory?.CreateLogger(typeof(FabricModLoaderService)));
@@ -72,7 +64,7 @@ public partial class App : Application
     private readonly VanillaModLoaderService _vanillaModLoaderService =
         new();
 
-    private readonly LauncherRepository _launcherRepository = new(BaseFolder);
+    private readonly LauncherRepository _launcherRepository = new(Platform);
     private readonly AuthService _authService;
     private readonly MinecraftLauncher _minecraftLauncher;
 
@@ -87,10 +79,9 @@ public partial class App : Application
             LoggerFactory?.CreateLogger(typeof(AuthService)));
 
         _minecraftLauncher = new MinecraftLauncher(
-            Product.CurrentOs,
+            Platform,
             Product.Name,
             Product.Version,
-            Path.Combine(BaseFolder, BaseInstancesFolder),
             _launcherRepository,
             _minecraftVersionManager,
             _javaVersionManager,
