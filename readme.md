@@ -79,7 +79,7 @@ The launcher intentionally uses a small set of platform-specific storage roots:
 The Linux folder name is a stable lowercase executable identity. It is not derived from `Product.Name`, because branding can change and may contain spaces.
 
 ## Linux packaging
-Linux packages stage the published app under `/usr/lib/lavalauncher/` and install `/usr/bin/lavalauncher` as a thin wrapper that executes the real binary from there. This is intentional: Avalonia and SQLite may emit native sidecar libraries, and those files need to stay next to the published executable instead of being scattered into `/usr/bin`.
+Linux packages stage the published app under `/usr/lib/<LinuxFolderName>/` and install `/usr/bin/<LinuxFolderName>` as a thin wrapper that executes the real `AppAssemblyName` binary from there. This is intentional: Avalonia and SQLite may emit native sidecar libraries, and those files need to stay next to the published executable instead of being scattered into `/usr/bin`.
 
 The repository includes two helper scripts:
 

@@ -1,4 +1,4 @@
 #!/bin/sh
 set -eu
 
-exec /usr/lib/lavalauncher/__APP_BINARY__ "$@"
+exec /usr/lib/__LINUX_FOLDER_NAME__/__APP_BINARY__ "$@"
