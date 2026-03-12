@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+    <Package
+        Name="$(var.AppName)"
+        Manufacturer="Lava Launcher"
+        Version="$(var.AppVersion)"
+        UpgradeCode="8F1E6BE3-4AC2-4524-9A3F-5AB5F5CF5B0D"
+        Scope="perMachine"
+        Language="1033"
+        InstallerVersion="500"
+        Compressed="yes">
+
+        <SummaryInformation Description="$(var.AppName) Installer" Manufacturer="Lava Launcher" />
+        <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+        <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+        <Property Id="ARPPRODUCTICON" Value="AppProductIcon" />
+        <Property Id="WINDOWSFOLDERNAME" Value="$(var.WindowsFolderName)" />
+        <Property Id="DELETEUSERDATA" Secure="yes" />
+        <Property Id="WixAppDataFolder" Value="" />
+
+        <Icon Id="AppProductIcon" SourceFile="$(var.GeneratedAssetsDir)/app-icon.ico" />
+
+        <ui:WixUI Id="WixUI_Minimal" />
+        <WixVariable Id="WixUILicenseRtf" Value="packaging/windows/common/license.rtf" />
+
+        <SetProperty
+            Id="WixAppDataFolder"
+            Value="%LOCALAPPDATA%\[WINDOWSFOLDERNAME]"
+            Before="WixRemoveFoldersEx"
+            Sequence="execute"
+            Condition="REMOVE=&quot;ALL&quot; AND DELETEUSERDATA=&quot;1&quot;" />
+
+        <StandardDirectory Id="ProgramFiles64Folder">
+            <Directory Id="INSTALLFOLDER" Name="$(var.AppName)">
+                <Files Include="$(var.PublishDir)/**" />
+                <Component Id="LauncherDataCleanupComponent" Guid="A04798B5-0EC4-4D60-A367-5D9BFF38E2E5">
+                    <RegistryValue Root="HKLM"
+                                   Key="Software\Lava Launcher\$(var.WindowsFolderName)"
+                                   Name="Installed"
+                                   Type="integer"
+                                   Value="1"
+                                   KeyPath="yes" />
+                    <util:RemoveFolderEx Property="WixAppDataFolder" On="uninstall" />
+                </Component>
+            </Directory>
+        </StandardDirectory>
+
+        <StandardDirectory Id="ProgramMenuFolder">
+            <Directory Id="ApplicationProgramsFolder" Name="$(var.AppName)">
+                <Component Id="ApplicationShortcutComponent" Guid="D316EED2-E171-4F08-B784-B1E3C51825D3">
+                    <Shortcut Id="ApplicationStartMenuShortcut"
+                              Name="$(var.AppName)"
+                              Description="$(var.AppName)"
+                              Target="[INSTALLFOLDER]$(var.AppAssemblyName).exe"
+                              WorkingDirectory="INSTALLFOLDER" />
+                    <RemoveFolder Id="RemoveApplicationProgramsFolder" Directory="ApplicationProgramsFolder" On="uninstall" />
+                    <RegistryValue Root="HKLM"
+                                   Key="Software\Lava Launcher\$(var.WindowsFolderName)"
+                                   Name="StartMenuShortcut"
+                                   Type="integer"
+                                   Value="1"
+                                   KeyPath="yes" />
+                </Component>
+            </Directory>
+        </StandardDirectory>
+
+        <Feature Id="MainFeature" Title="$(var.AppName)" Level="1">
+            <ComponentRef Id="ApplicationShortcutComponent" />
+            <ComponentRef Id="LauncherDataCleanupComponent" />
+        </Feature>
+
+        <UI>
+            <DialogRef Id="VerifyReadyDlg" />
+            <Control Id="DeleteUserDataCheckbox"
+                     Dialog="VerifyReadyDlg"
+                     Type="CheckBox"
+                     X="20"
+                     Y="150"
+                     Width="300"
+                     Height="17"
+                     Property="DELETEUSERDATA"
+                     CheckBoxValue="1"
+                     Text="Delete all launcher data, including instances, Java runtimes, libraries, and cached files"
+                     Hidden="yes">
+                <Condition Action="show">REMOVE="ALL"</Condition>
+                <Condition Action="hide">NOT REMOVE="ALL"</Condition>
+            </Control>
+        </UI>
+    </Package>
+</Wix>
