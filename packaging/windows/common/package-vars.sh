@@ -35,7 +35,7 @@ resolve_property() {
   printf '%s\n' "$fallback_value"
 }
 
-PACKAGE_VERSION=${PACKAGE_VERSION:-$(sed -n 's:.*<AppVersion>\\(.*\\)</AppVersion>.*:\\1:p' "$REPO_ROOT/Directory.Build.props" | head -n 1)}
-APP_NAME=$(resolve_property "${APP_NAME:-}" "AppName" "Yet Another Minecrafy Launcher")
+PACKAGE_VERSION=${PACKAGE_VERSION:-$(sed -n 's:.*<AppVersion>\(.*\)</AppVersion>.*:\1:p' "$REPO_ROOT/Directory.Build.props" | head -n 1)}
+APP_NAME=$(resolve_property "${APP_NAME:-}" "AppName" "Yet Another Minecraft Launcher")
 APP_BINARY=$(resolve_property "${APP_BINARY:-}" "AppAssemblyName" "YamLauncher")
 WINDOWS_FOLDER_NAME=$(resolve_property "${WINDOWS_FOLDER_NAME:-}" "WindowsFolderName" "YamLauncher")

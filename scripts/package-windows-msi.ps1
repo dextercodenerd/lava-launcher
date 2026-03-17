@@ -1,5 +1,11 @@
 $ErrorActionPreference = "Stop"
 
+function Assert-ExitCode([string]$Command) {
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Command failed with exit code $LASTEXITCODE."
+    }
+}
+
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Resolve-Path (Join-Path $scriptDir "..")
 . (Join-Path $repoRoot "packaging/windows/common/package-vars.ps1")
@@ -14,7 +20,7 @@ $windowsRoot = Join-Path $repoRoot "artifacts/windows"
 $generatedAssetsDir = Join-Path $windowsRoot "generated"
 $packageOutputDir = Join-Path $windowsRoot "msi"
 $rsvgConvertBin = if ($env:RSVG_CONVERT_BIN) { $env:RSVG_CONVERT_BIN } else { (Get-Command rsvg-convert -ErrorAction SilentlyContinue)?.Source }
-$suppressValidation = if ($env:SUPPRESS_VALIDATION) { $env:SUPPRESS_VALIDATION } else { "true" }
+$suppressValidation = if ($env:SUPPRESS_VALIDATION) { $env:SUPPRESS_VALIDATION } else { "false" }
 
 if (-not $IsWindows) {
     throw "WiX 6 packaging currently requires Windows."
@@ -39,6 +45,7 @@ if (-not (Test-Path -LiteralPath $publishDir -PathType Container)) {
         -p:PublishTrimmed=true `
         -p:PublishSingleFile=true `
         -o $publishDir
+    Assert-ExitCode "dotnet publish"
 }
 
 if (-not (Test-Path -LiteralPath $iconSourcePath -PathType Leaf)) {
@@ -59,6 +66,7 @@ foreach ($iconSize in $iconSizes) {
         --height $iconSize `
         $iconSourcePath `
         --output (Join-Path $generatedAssetsDir "app-icon-$iconSize.png")
+    Assert-ExitCode "rsvg-convert ($iconSize px)"
 }
 
 dotnet run `
@@ -71,6 +79,7 @@ dotnet run `
     (Join-Path $generatedAssetsDir "app-icon-64.png") `
     (Join-Path $generatedAssetsDir "app-icon-128.png") `
     (Join-Path $generatedAssetsDir "app-icon-256.png")
+Assert-ExitCode "Icon tool"
 
 dotnet build $wixProjectPath `
     -c Release `
@@ -80,13 +89,16 @@ dotnet build $wixProjectPath `
     -p:AppAssemblyName=$script:AppBinary `
     -p:AppVersion=$script:PackageVersion `
     -p:WindowsFolderName=$script:WindowsFolderName `
+    -p:RuntimeIdentifier=$runtimeIdentifier `
     -p:SuppressValidation=$suppressValidation
+Assert-ExitCode "dotnet build (WiX)"
 
-$outputMsi = Get-ChildItem -Path (Join-Path $repoRoot "packaging/windows/bin") -Recurse -Filter "$($script:WindowsFolderName)-$($script:PackageVersion)-win-x64.msi" | Select-Object -First 1
+$msiFileName = "$($script:WindowsFolderName)-$($script:PackageVersion)-$runtimeIdentifier.msi"
+$outputMsi = Get-ChildItem -Path (Join-Path $repoRoot "packaging/windows/bin") -Recurse -Filter $msiFileName | Select-Object -First 1
 if (-not $outputMsi) {
     throw "Could not find the built MSI in packaging/windows/bin."
 }
 
 Copy-Item -LiteralPath $outputMsi.FullName -Destination $packageOutputDir -Force
 
-Write-Output (Join-Path $packageOutputDir "$($script:WindowsFolderName)-$($script:PackageVersion)-win-x64.msi")
+Write-Output (Join-Path $packageOutputDir $msiFileName)

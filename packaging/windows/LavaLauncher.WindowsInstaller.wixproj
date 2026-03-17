@@ -3,7 +3,7 @@
         <OutputType>Package</OutputType>
         <InstallerPlatform>x64</InstallerPlatform>
         <Cultures>en-US</Cultures>
-        <OutputName>$(WindowsFolderName)-$(AppVersion)-win-x64</OutputName>
+        <OutputName>$(WindowsFolderName)-$(AppVersion)-$(RuntimeIdentifier)</OutputName>
         <SuppressValidation Condition="'$(SuppressValidation)' == ''">false</SuppressValidation>
         <DefineConstants>
             PublishDir=$(PublishDir);

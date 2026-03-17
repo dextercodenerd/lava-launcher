@@ -15,7 +15,7 @@ WINDOWS_ROOT="$REPO_ROOT/artifacts/windows"
 GENERATED_ASSETS_DIR="$WINDOWS_ROOT/generated"
 PACKAGE_OUTPUT_DIR="$WINDOWS_ROOT/msi"
 RSVG_CONVERT_BIN=${RSVG_CONVERT_BIN:-$(command -v rsvg-convert || true)}
-SUPPRESS_VALIDATION=${SUPPRESS_VALIDATION:-true}
+SUPPRESS_VALIDATION=${SUPPRESS_VALIDATION:-false}
 CURRENT_OS=$(uname -s)
 
 case "$CURRENT_OS" in
@@ -98,9 +98,11 @@ dotnet build "$WIX_PROJECT_PATH" \
   -p:AppAssemblyName="$APP_BINARY" \
   -p:AppVersion="$PACKAGE_VERSION" \
   -p:WindowsFolderName="$WINDOWS_FOLDER_NAME" \
+  -p:RuntimeIdentifier="$RUNTIME_IDENTIFIER" \
   -p:SuppressValidation="$SUPPRESS_VALIDATION"
 
-OUTPUT_MSI=$(find "$REPO_ROOT/packaging/windows/bin" -type f -name "${WINDOWS_FOLDER_NAME}-${PACKAGE_VERSION}-win-x64.msi" | head -n 1)
+MSI_FILENAME="${WINDOWS_FOLDER_NAME}-${PACKAGE_VERSION}-${RUNTIME_IDENTIFIER}.msi"
+OUTPUT_MSI=$(find "$REPO_ROOT/packaging/windows/bin" -type f -name "$MSI_FILENAME" | head -n 1)
 if [ -z "$OUTPUT_MSI" ]; then
   echo "Could not find the built MSI in packaging/windows/bin." >&2
   exit 1
@@ -108,4 +110,4 @@ fi
 
 cp "$OUTPUT_MSI" "$PACKAGE_OUTPUT_DIR/"
 
-printf '%s\n' "$PACKAGE_OUTPUT_DIR/${WINDOWS_FOLDER_NAME}-${PACKAGE_VERSION}-win-x64.msi"
+printf '%s\n' "$PACKAGE_OUTPUT_DIR/$MSI_FILENAME"
