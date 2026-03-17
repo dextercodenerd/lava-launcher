@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Version=1.0
-Name=Lava Launcher
+Name=__APP_NAME__
 Comment=A simple Minecraft launcher
 Exec=__LINUX_FOLDER_NAME__ %u
 Icon=__LINUX_FOLDER_NAME__

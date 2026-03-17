@@ -22,6 +22,12 @@
   <string>__PACKAGE_VERSION__</string>
   <key>CFBundleVersion</key>
   <string>__PACKAGE_VERSION__</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>12.0</string>
+  <key>LSApplicationCategoryType</key>
+  <string>public.app-category.games</string>
+  <key>NSPrincipalClass</key>
+  <string>NSApplication</string>
   <key>NSHighResolutionCapable</key>
   <true/>
 </dict>

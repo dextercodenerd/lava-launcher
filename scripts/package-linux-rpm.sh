@@ -7,6 +7,7 @@ REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 
 PROJECT_PATH="$REPO_ROOT/LavaLauncher.Desktop/LavaLauncher.Desktop.csproj"
 RUNTIME_IDENTIFIER=${RUNTIME_IDENTIFIER:-linux-x64}
+RPM_ARCH=$(rid_to_rpm_arch "$RUNTIME_IDENTIFIER")
 PUBLISH_DIR=${PUBLISH_DIR:-"$REPO_ROOT/artifacts/publish/$RUNTIME_IDENTIFIER"}
 RPM_ROOT="$REPO_ROOT/artifacts/linux/rpm"
 STAGING_DIR="$RPM_ROOT/staging"
@@ -48,6 +49,7 @@ sed \
   > "$STAGING_DIR/usr/bin/$LINUX_FOLDER_NAME"
 chmod 755 "$STAGING_DIR/usr/bin/$LINUX_FOLDER_NAME"
 sed \
+  -e "s/__APP_NAME__/$APP_NAME/g" \
   -e "s/__LINUX_FOLDER_NAME__/$LINUX_FOLDER_NAME/g" \
   "$REPO_ROOT/packaging/linux/common/lavalauncher.desktop" \
   > "$STAGING_DIR/usr/share/applications/$LINUX_FOLDER_NAME.desktop"
@@ -58,6 +60,8 @@ sed \
   -e "s/@VERSION@/$PACKAGE_VERSION/g" \
   -e "s#@STAGING_DIR@#$STAGING_DIR#g" \
   -e "s/@LINUX_FOLDER_NAME@/$LINUX_FOLDER_NAME/g" \
+  -e "s/@RPM_ARCH@/$RPM_ARCH/g" \
+  -e "s#@URL@#${PROJECT_URL:-https://github.com/example/lavalauncher}#g" \
   "$REPO_ROOT/packaging/linux/rpm/lavalauncher.spec.in" \
   > "$SPEC_FILE"
 

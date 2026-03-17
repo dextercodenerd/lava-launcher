@@ -3,8 +3,9 @@ Version: @VERSION@
 Release: 1%{?dist}
 Summary: A simple Minecraft launcher
 License: GPL-3.0-only
-URL: https://github.com/example/lavalauncher
-BuildArch: x86_64
+URL: @URL@
+BuildArch: @RPM_ARCH@
+Requires: libX11, fontconfig, libicu
 
 %description
 Lava Launcher is a desktop Minecraft launcher built with .NET 10 and Avalonia.
@@ -20,7 +21,16 @@ cp -a @STAGING_DIR@/usr/share/applications/@LINUX_FOLDER_NAME@.desktop %{buildro
 cp -a @STAGING_DIR@/usr/share/icons/hicolor/scalable/apps/@LINUX_FOLDER_NAME@.svg %{buildroot}/usr/share/icons/hicolor/scalable/apps/@LINUX_FOLDER_NAME@.svg
 
 %files
-/usr/bin/@LINUX_FOLDER_NAME@
+%defattr(-,root,root,-)
+%attr(755,root,root) /usr/bin/@LINUX_FOLDER_NAME@
 /usr/lib/@LINUX_FOLDER_NAME@
 /usr/share/applications/@LINUX_FOLDER_NAME@.desktop
 /usr/share/icons/hicolor/scalable/apps/@LINUX_FOLDER_NAME@.svg
+
+%posttrans
+gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || :
+update-desktop-database /usr/share/applications 2>/dev/null || :
+
+%postun
+gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || :
+update-desktop-database /usr/share/applications 2>/dev/null || :

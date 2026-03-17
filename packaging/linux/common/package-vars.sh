@@ -35,6 +35,30 @@ resolve_property() {
   printf '%s\n' "$fallback_value"
 }
 
-PACKAGE_VERSION=${PACKAGE_VERSION:-$(sed -n 's:.*<AppVersion>\\(.*\\)</AppVersion>.*:\\1:p' "$REPO_ROOT/Directory.Build.props" | head -n 1)}
+rid_to_deb_arch() {
+  case "$1" in
+    linux-x64)   printf 'amd64\n' ;;
+    linux-arm64)  printf 'arm64\n' ;;
+    linux-arm)    printf 'armhf\n' ;;
+    *)
+      echo "Unsupported RUNTIME_IDENTIFIER for DEB architecture: $1" >&2
+      exit 1
+      ;;
+  esac
+}
+
+rid_to_rpm_arch() {
+  case "$1" in
+    linux-x64)   printf 'x86_64\n' ;;
+    linux-arm64)  printf 'aarch64\n' ;;
+    *)
+      echo "Unsupported RUNTIME_IDENTIFIER for RPM architecture: $1" >&2
+      exit 1
+      ;;
+  esac
+}
+
+PACKAGE_VERSION=${PACKAGE_VERSION:-$(sed -n 's:.*<AppVersion>\(.*\)</AppVersion>.*:\1:p' "$REPO_ROOT/Directory.Build.props" | head -n 1)}
+APP_NAME=$(resolve_property "${APP_NAME:-}" "AppName" "Yet Another Minecraft Launcher")
 APP_BINARY=$(resolve_property "${APP_BINARY:-}" "AppAssemblyName" "YamLauncher")
 LINUX_FOLDER_NAME=$(resolve_property "${LINUX_FOLDER_NAME:-}" "LinuxFolderName" "yamlauncher")
