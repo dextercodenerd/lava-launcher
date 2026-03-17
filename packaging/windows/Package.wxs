@@ -7,7 +7,7 @@
         Manufacturer="Lava Launcher"
         Version="$(var.AppVersion)"
         UpgradeCode="8F1E6BE3-4AC2-4524-9A3F-5AB5F5CF5B0D"
-        Scope="perMachine"
+        Scope="perUser"
         Language="1033"
         InstallerVersion="500"
         Compressed="yes">
@@ -33,18 +33,20 @@
             Sequence="execute"
             Condition="REMOVE=&quot;ALL&quot; AND DELETEUSERDATA=&quot;1&quot;" />
 
-        <StandardDirectory Id="ProgramFiles64Folder">
-            <Directory Id="INSTALLFOLDER" Name="$(var.AppName)">
-                <Files Include="$(var.PublishDir)/**" />
-                <Component Id="LauncherDataCleanupComponent" Guid="A04798B5-0EC4-4D60-A367-5D9BFF38E2E5">
-                    <RegistryValue Root="HKLM"
-                                   Key="Software\Lava Launcher\$(var.WindowsFolderName)"
-                                   Name="Installed"
-                                   Type="integer"
-                                   Value="1"
-                                   KeyPath="yes" />
-                    <util:RemoveFolderEx Property="WixAppDataFolder" On="uninstall" />
-                </Component>
+        <StandardDirectory Id="LocalAppDataFolder">
+            <Directory Id="ProgramsFolder" Name="Programs">
+                <Directory Id="INSTALLFOLDER" Name="$(var.AppName)">
+                    <Files Include="$(var.PublishDir)/**" />
+                    <Component Id="LauncherDataCleanupComponent" Guid="A04798B5-0EC4-4D60-A367-5D9BFF38E2E5">
+                        <RegistryValue Root="HKCU"
+                                       Key="Software\Lava Launcher\$(var.WindowsFolderName)"
+                                       Name="Installed"
+                                       Type="integer"
+                                       Value="1"
+                                       KeyPath="yes" />
+                        <util:RemoveFolderEx Property="WixAppDataFolder" On="uninstall" />
+                    </Component>
+                </Directory>
             </Directory>
         </StandardDirectory>
 
@@ -57,7 +59,7 @@
                               Target="[INSTALLFOLDER]$(var.AppAssemblyName).exe"
                               WorkingDirectory="INSTALLFOLDER" />
                     <RemoveFolder Id="RemoveApplicationProgramsFolder" Directory="ApplicationProgramsFolder" On="uninstall" />
-                    <RegistryValue Root="HKLM"
+                    <RegistryValue Root="HKCU"
                                    Key="Software\Lava Launcher\$(var.WindowsFolderName)"
                                    Name="StartMenuShortcut"
                                    Type="integer"

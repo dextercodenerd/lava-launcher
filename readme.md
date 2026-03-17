@@ -147,9 +147,9 @@ WiX 6 packaging currently requires running the packaging step on Windows. The sh
 
 The installer:
 
-* installs the app into `Program Files`
-* creates a Start Menu shortcut
-* supports major-upgrade install-over-install behavior
+* installs the app per-user into `%LocalAppData%\Programs\<AppName>`
+* creates a per-user Start Menu shortcut
+* supports same-user major-upgrade install-over-install behavior without admin rights
 * shows an uninstall checkbox for deleting `%LocalAppData%\<WindowsFolderName>` and all launcher-managed data under it
 
 For silent/scripted uninstall, the same cleanup path is available through the public MSI property `DELETEUSERDATA=1`.
