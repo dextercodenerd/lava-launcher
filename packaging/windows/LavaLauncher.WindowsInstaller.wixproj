@@ -1,0 +1,22 @@
+<Project Sdk="WixToolset.Sdk/6.0.2">
+    <PropertyGroup>
+        <OutputType>Package</OutputType>
+        <InstallerPlatform>x64</InstallerPlatform>
+        <Cultures>en-US</Cultures>
+        <OutputName>$(WindowsFolderName)-$(AppVersion)-$(RuntimeIdentifier)</OutputName>
+        <SuppressValidation Condition="'$(SuppressValidation)' == ''">false</SuppressValidation>
+        <DefineConstants>
+            PublishDir=$(PublishDir);
+            GeneratedAssetsDir=$(GeneratedAssetsDir);
+            AppName=$(AppName);
+            AppAssemblyName=$(AppAssemblyName);
+            AppVersion=$(AppVersion);
+            WindowsFolderName=$(WindowsFolderName)
+        </DefineConstants>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="WixToolset.UI.wixext" Version="$(WixToolsetVersion)" />
+        <PackageReference Include="WixToolset.Util.wixext" Version="$(WixToolsetVersion)" />
+    </ItemGroup>
+</Project>

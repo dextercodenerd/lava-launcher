@@ -126,6 +126,34 @@ dotnet publish LavaLauncher.Desktop/LavaLauncher.Desktop.csproj -c Release -r os
 
 You can also pass either an existing publish folder or a different RID as the first argument.
 
+## Windows packaging
+The repository also includes helper scripts for wrapping the Windows `dotnet publish` output into an MSI installer using WiX 6:
+
+```sh
+./scripts/package-windows-msi.sh
+```
+
+```powershell
+./scripts/package-windows-msi.ps1
+```
+
+Both scripts:
+
+* publish `win-x64` by default unless you pass a different RID or an existing publish folder
+* use `packaging/common/app-icon.svg` as the source icon and generate a Windows `.ico`
+* build a WiX-based MSI installer under `artifacts/windows/msi/`
+
+WiX 6 packaging currently requires running the packaging step on Windows. The shell script is intended for Windows bash environments such as Git Bash in local use or CI.
+
+The installer:
+
+* installs the app per-user into `%LocalAppData%\Programs\<AppName>`
+* creates a per-user Start Menu shortcut
+* supports same-user major-upgrade install-over-install behavior without admin rights
+* shows an uninstall checkbox for deleting `%LocalAppData%\<WindowsFolderName>` and all launcher-managed data under it
+
+For silent/scripted uninstall, the same cleanup path is available through the public MSI property `DELETEUSERDATA=1`.
+
 ## Navigation Architecture
 We use a **Phone-style Stack Navigation** system to keep the UI simple for children. The global "Ribbon" stays at the top, while the content area cross fades.
 

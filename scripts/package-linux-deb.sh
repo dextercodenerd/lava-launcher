@@ -7,9 +7,10 @@ REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 
 PROJECT_PATH="$REPO_ROOT/LavaLauncher.Desktop/LavaLauncher.Desktop.csproj"
 RUNTIME_IDENTIFIER=${RUNTIME_IDENTIFIER:-linux-x64}
+DEB_ARCH=$(rid_to_deb_arch "$RUNTIME_IDENTIFIER")
 PUBLISH_DIR=${PUBLISH_DIR:-"$REPO_ROOT/artifacts/publish/$RUNTIME_IDENTIFIER"}
 STAGING_DIR="$REPO_ROOT/artifacts/linux/deb/staging"
-PACKAGE_ROOT="$STAGING_DIR/${LINUX_FOLDER_NAME}_${PACKAGE_VERSION}_amd64"
+PACKAGE_ROOT="$STAGING_DIR/${LINUX_FOLDER_NAME}_${PACKAGE_VERSION}_${DEB_ARCH}"
 
 if [ $# -gt 0 ]; then
   if [ -d "$1" ]; then
@@ -46,20 +47,41 @@ sed \
   > "$PACKAGE_ROOT/usr/bin/$LINUX_FOLDER_NAME"
 chmod 755 "$PACKAGE_ROOT/usr/bin/$LINUX_FOLDER_NAME"
 sed \
+  -e "s/__APP_NAME__/$APP_NAME/g" \
   -e "s/__LINUX_FOLDER_NAME__/$LINUX_FOLDER_NAME/g" \
   "$REPO_ROOT/packaging/linux/common/lavalauncher.desktop" \
   > "$PACKAGE_ROOT/usr/share/applications/$LINUX_FOLDER_NAME.desktop"
 cp "$REPO_ROOT/packaging/common/app-icon.svg" \
   "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/apps/$LINUX_FOLDER_NAME.svg"
 
+cat > "$PACKAGE_ROOT/DEBIAN/postinst" <<'SCRIPT'
+#!/bin/sh
+set -e
+gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || :
+update-desktop-database /usr/share/applications 2>/dev/null || :
+SCRIPT
+chmod 755 "$PACKAGE_ROOT/DEBIAN/postinst"
+
+cat > "$PACKAGE_ROOT/DEBIAN/postrm" <<'SCRIPT'
+#!/bin/sh
+set -e
+gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || :
+update-desktop-database /usr/share/applications 2>/dev/null || :
+SCRIPT
+chmod 755 "$PACKAGE_ROOT/DEBIAN/postrm"
+
+INSTALLED_SIZE=$(du -sk "$PACKAGE_ROOT" | cut -f1)
+
 cat > "$PACKAGE_ROOT/DEBIAN/control" <<EOF
 Package: $LINUX_FOLDER_NAME
 Version: $PACKAGE_VERSION
 Section: games
 Priority: optional
-Architecture: amd64
+Architecture: $DEB_ARCH
 Maintainer: Lava Launcher
+Installed-Size: $INSTALLED_SIZE
+Depends: libx11-6, libfontconfig1, libicu72 | libicu74 | libicu76
 Description: A simple Minecraft launcher
 EOF
 
-dpkg-deb --build "$PACKAGE_ROOT" "$REPO_ROOT/artifacts/linux/deb/${LINUX_FOLDER_NAME}_${PACKAGE_VERSION}_amd64.deb"
+dpkg-deb --build "$PACKAGE_ROOT" "$REPO_ROOT/artifacts/linux/deb/${LINUX_FOLDER_NAME}_${PACKAGE_VERSION}_${DEB_ARCH}.deb"

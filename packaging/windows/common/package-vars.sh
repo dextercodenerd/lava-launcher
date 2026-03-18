@@ -2,7 +2,7 @@
 
 set -eu
 
-REPO_ROOT=${REPO_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)}
+REPO_ROOT=${REPO_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)}
 USER_PROPS_PATH="$REPO_ROOT/user.props"
 
 read_xml_property() {
@@ -38,4 +38,4 @@ resolve_property() {
 PACKAGE_VERSION=${PACKAGE_VERSION:-$(sed -n 's:.*<AppVersion>\(.*\)</AppVersion>.*:\1:p' "$REPO_ROOT/Directory.Build.props" | head -n 1)}
 APP_NAME=$(resolve_property "${APP_NAME:-}" "AppName" "Yet Another Minecraft Launcher")
 APP_BINARY=$(resolve_property "${APP_BINARY:-}" "AppAssemblyName" "YamLauncher")
-MAC_BUNDLE_IDENTIFIER=$(resolve_property "${MAC_BUNDLE_IDENTIFIER:-}" "MacBundleIdentifier" "com.example.yamlauncher")
+WINDOWS_FOLDER_NAME=$(resolve_property "${WINDOWS_FOLDER_NAME:-}" "WindowsFolderName" "YamLauncher")

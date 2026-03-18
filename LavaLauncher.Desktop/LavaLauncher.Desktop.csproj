@@ -24,7 +24,7 @@
             * chaning <AssemblyName> will change the exe file name which will trigger the uninstall
               ook when installing over previous version, which will do a clean-up
         -->
-        <Product Condition="'$(AppName)' == ''">Yet Another Minecrafy Launcher</Product>
+        <Product Condition="'$(AppName)' == ''">Yet Another Minecraft Launcher</Product>
         <Product Condition="'$(AppName)' != ''">$(AppName)</Product>
         <AssemblyName Condition="'$(AppAssemblyName)' == ''">YamLauncher</AssemblyName>
         <AssemblyName Condition="'$(AppAssemblyName)' != ''">$(AppAssemblyName)</AssemblyName>

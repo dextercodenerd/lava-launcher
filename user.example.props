@@ -1,6 +1,6 @@
 <Project>
     <PropertyGroup>
-        <AppName>Yet Another Minecrafy Launcher</AppName>
+        <AppName>Yet Another Minecraft Launcher</AppName>
         <AppAssemblyName>YamLauncher</AppAssemblyName>
         <WindowsFolderName>YamLauncher</WindowsFolderName>
         <LinuxFolderName>yamlauncher</LinuxFolderName>
