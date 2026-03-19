@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.IO;
 using System.Threading.Tasks;
 using GenericLauncher.Database.Orm;
 using Microsoft.Data.Sqlite;
@@ -187,6 +188,12 @@ public record MinecraftInstance(
         cmd.AddParam("@GameArguments", v.GameArguments, handlers, DbType.String);
         cmd.AddParam("@JvmArguments", v.JvmArguments, handlers, DbType.String);
     }
+
+    public string GetNativeLibrariesFolder(string instancesRoot) =>
+        GetNativeLibrariesFolder(instancesRoot, Folder);
+
+    public static string GetNativeLibrariesFolder(string instancesRoot, string instanceFolder) =>
+        Path.Combine(instancesRoot, instanceFolder, "natives");
 
     public static MinecraftInstanceState StateFromString(string raw) => raw switch
     {

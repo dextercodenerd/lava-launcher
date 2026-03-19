@@ -194,6 +194,8 @@ public sealed class MinecraftLauncher : IDisposable
         }
 
         Directory.CreateDirectory(instanceFolder);
+        var instanceNativeLibrariesFolder =
+            MinecraftInstance.GetNativeLibrariesFolder(_instancesFolder, sanitizedAndNumberedInstanceFolderName);
 
         var modLoaderService = GetModLoaderService(modLoader);
         var resolvedModLoader = await modLoaderService.ResolveAsync(
@@ -206,6 +208,7 @@ public sealed class MinecraftLauncher : IDisposable
         var (versionDetails, minecraft) = await _minecraftManager.DownloadVersionAsync(
             version
         );
+        var cachedVanillaNativeLibrariesFolder = minecraft.NativeLibrariesFolder;
         minecraft = ApplyModLoaderToVersion(minecraft, resolvedModLoader);
 
         _logger?.LogInformation("Inserting Minecraft instance into DB");
@@ -320,6 +323,7 @@ public sealed class MinecraftLauncher : IDisposable
             }));
 
         await Task.WhenAll(downloadMinecraftTask, downloadJavaTask, downloadModLoaderTask);
+        MaterializeInstanceNativeLibraries(cachedVanillaNativeLibrariesFolder, instanceNativeLibrariesFolder);
 
         _logger?.LogInformation("Successfully download Minecraft instance '{InstanceId}'", name);
 
@@ -371,6 +375,7 @@ public sealed class MinecraftLauncher : IDisposable
                 var javaExecutable = _javaManager.GetJavaExecutablePath((int)instance.RequiredJavaVersion) ??
                                      throw new ArgumentException($"Java {instance.RequiredJavaVersion} is missing");
                 var cachedMc = await _minecraftManager.GetCachedVersionDetailsAsync(instance.VersionId);
+                var nativeLibrariesFolder = instance.GetNativeLibrariesFolder(_instancesFolder);
                 var mc = cachedMc with
                 {
                     VersionId = string.IsNullOrWhiteSpace(instance.LaunchVersionId)
@@ -381,6 +386,7 @@ public sealed class MinecraftLauncher : IDisposable
                     ClientJarPath = instance.ClientJarPath,
                     MainClass = instance.MainClass,
                     AssetIndex = instance.AssetIndex,
+                    NativeLibrariesFolder = nativeLibrariesFolder,
                     ClassPath = instance.ClassPath,
                     GameArguments = instance.GameArguments,
                     JvmArguments = instance.JvmArguments,
@@ -533,7 +539,7 @@ public sealed class MinecraftLauncher : IDisposable
         foreach (var lib in version.ClassPath)
         {
             sb.Append(Path.PathSeparator);
-            sb.Append(Path.Combine(version.LibrariesFolder, lib));
+            sb.Append(lib);
         }
 
         return sb.ToString();
@@ -562,11 +568,7 @@ public sealed class MinecraftLauncher : IDisposable
         }
 
         var classPath = minecraft.ClassPath
-            .Concat(modLoader.Libraries.Select(l =>
-            {
-                var path = l.RelativePath.Replace('/', Path.DirectorySeparatorChar);
-                return path;
-            }))
+            .Concat(modLoader.Libraries.Select(l => l.FilePath))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
@@ -587,6 +589,36 @@ public sealed class MinecraftLauncher : IDisposable
             GameArguments = gameArgs,
             JvmArguments = jvmArgs,
         };
+    }
+
+    private static void MaterializeInstanceNativeLibraries(
+        string sourceFolder,
+        string destinationFolder)
+    {
+        if (!Directory.Exists(sourceFolder))
+        {
+            throw new InvalidOperationException($"Missing cached native libraries folder '{sourceFolder}'");
+        }
+
+        if (Directory.Exists(destinationFolder))
+        {
+            Directory.Delete(destinationFolder, true);
+        }
+
+        Directory.CreateDirectory(destinationFolder);
+
+        foreach (var sourceFile in Directory.GetFiles(sourceFolder, "*", SearchOption.AllDirectories))
+        {
+            var relativePath = Path.GetRelativePath(sourceFolder, sourceFile);
+            var destinationPath = Path.Combine(destinationFolder, relativePath);
+            var destinationDirectory = Path.GetDirectoryName(destinationPath);
+            if (!string.IsNullOrWhiteSpace(destinationDirectory))
+            {
+                Directory.CreateDirectory(destinationDirectory);
+            }
+
+            File.Copy(sourceFile, destinationPath, true);
+        }
     }
 
     private string ProcessGamePlaceholders(

@@ -29,8 +29,8 @@ public partial class App : Application
     private static readonly LauncherPlatform Platform = LauncherPlatform.CreateCurrent();
 
     private static readonly string BaseMinecraftLibrariesFolder = "libraries";
-    private static readonly string BaseModLaunchersFolder = "modlaunchers";
-    private static readonly string FabricModLauncherFolder = "fabric";
+    private static readonly string BaseModLoadersFolder = "modloaders";
+    private static readonly string FabricModLoaderFolder = "fabric";
 
     // Manual DI, no runtime magic, ever!
     private static readonly HttpClient HttpClient = HttpRetry.CreateHttpClient(4);
@@ -55,8 +55,8 @@ public partial class App : Application
             LoggerFactory?.CreateLogger(typeof(JavaVersionManager)));
 
     private readonly FabricModLoaderService _fabricModLoaderService =
-        new(Path.Combine(Platform.AppDataPath, "mc", BaseModLaunchersFolder, FabricModLauncherFolder),
-            Path.Combine(Platform.AppDataPath, "mc", BaseMinecraftLibrariesFolder),
+        new(Path.Combine(Platform.AppDataPath, "mc", BaseModLoadersFolder, FabricModLoaderFolder),
+            Path.Combine(Platform.AppDataPath, "mc", BaseModLoadersFolder, FabricModLoaderFolder, BaseMinecraftLibrariesFolder),
             HttpClient,
             FileDownloader,
             LoggerFactory?.CreateLogger(typeof(FabricModLoaderService)));

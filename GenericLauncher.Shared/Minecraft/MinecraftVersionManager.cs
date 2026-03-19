@@ -169,9 +169,9 @@ public sealed class MinecraftVersionManager : IDisposable
         CancellationToken cancellationToken = default)
     {
         // We use the official Minecraft launcher's folder structure.
-        // 1) assets & libraries are shared between all installations
-        // 2) native libraries are extracted per some id/hash, not sure what it is, so we extract
-        //    them per-instance
+        // 1) assets & Java libraries are shared between installations of the same game version
+        // 2) native libraries are extracted once per Minecraft version and later copied into each
+        //    instance's runtime natives folder
         var installationFolder = GetInstallationFolder(versionInfo.Id);
         Directory.CreateDirectory(installationFolder);
 
@@ -251,7 +251,7 @@ public sealed class MinecraftVersionManager : IDisposable
             .Select(l => l.Downloads?.Artifact?.Path)
             .OfType<string>()
             // The paths use '/' as directory separator, but not every platform is using the same character...
-            .Select(p => p.Replace('/', Path.DirectorySeparatorChar))
+            .Select(p => Path.Combine(_sharedLibrariesFolder, p.Replace('/', Path.DirectorySeparatorChar)))
             .ToList();
     }
 

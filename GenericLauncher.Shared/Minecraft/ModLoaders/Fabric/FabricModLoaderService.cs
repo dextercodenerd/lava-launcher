@@ -23,14 +23,14 @@ public sealed class FabricModLoaderService : IModLoaderService
     private readonly ILogger? _logger;
 
     private readonly string _metadataFolder;
-    private readonly string _sharedLibrariesFolder;
+    private readonly string _librariesFolder;
     private readonly string _versionsFolder;
 
     public string DisplayName => "Fabric";
 
     public FabricModLoaderService(
         string fabricRootFolder,
-        string sharedLibrariesFolder,
+        string librariesFolder,
         HttpClient httpClient,
         FileDownloader fileDownloader,
         ILogger? logger = null)
@@ -40,7 +40,7 @@ public sealed class FabricModLoaderService : IModLoaderService
         _logger = logger;
 
         _metadataFolder = Path.Combine(fabricRootFolder, "metadata");
-        _sharedLibrariesFolder = sharedLibrariesFolder;
+        _librariesFolder = librariesFolder;
         _versionsFolder = Path.Combine(fabricRootFolder, "versions");
     }
 
@@ -102,19 +102,12 @@ public sealed class FabricModLoaderService : IModLoaderService
         Directory.CreateDirectory(_metadataFolder);
         Directory.CreateDirectory(_versionsFolder);
 
-        var profilePath = Path.Combine(_versionsFolder, $"{launchVersionId}.json");
+        var versionFolder = Path.Combine(_versionsFolder, launchVersionId);
+        Directory.CreateDirectory(versionFolder);
+        var profilePath = Path.Combine(versionFolder, "profile.json");
         var profileUrl =
             $"{FabricMetaBaseUrl}/versions/loader/{Uri.EscapeDataString(minecraftVersionId)}/{Uri.EscapeDataString(selectedLoader.VersionId)}/profile/json";
         var profileJson = await GetCachedOrDownloadJsonAsync(profilePath, profileUrl, true, cancellationToken);
-
-        // A compact metadata snapshot is also kept for loader-specific cache inspection/debugging.
-        var metadataPath = Path.Combine(_metadataFolder, $"{launchVersionId}.json");
-
-        // Do not interrupt saving the data with cancellation, so we don't corrupt the file.
-#pragma warning disable CA2016
-        // ReSharper disable once MethodSupportsCancellation
-        await File.WriteAllTextAsync(metadataPath, profileJson);
-#pragma warning restore CA2016
 
         var profile = JsonSerializer.Deserialize(profileJson, FabricJsonContext.Default.FabricLauncherProfile)
                       ?? throw new InvalidOperationException("Failed to deserialize Fabric launcher profile");
@@ -130,7 +123,7 @@ public sealed class FabricModLoaderService : IModLoaderService
             minecraftVersionId,
             launchVersionId,
             selectedLoader.VersionId,
-            metadataPath,
+            profilePath,
             string.IsNullOrWhiteSpace(profile.MainClass) ? null : profile.MainClass,
             extraJvmArgs,
             extraGameArgs,
@@ -147,7 +140,7 @@ public sealed class FabricModLoaderService : IModLoaderService
             throw new ArgumentException("Resolved version does not belong to Fabric loader", nameof(resolved));
         }
 
-        Directory.CreateDirectory(_sharedLibrariesFolder);
+        Directory.CreateDirectory(_librariesFolder);
 
         if (resolved.Libraries.Count == 0)
         {
@@ -168,12 +161,9 @@ public sealed class FabricModLoaderService : IModLoaderService
             parallelOptions,
             async (lib, token) =>
             {
-                var destinationPath =
-                    Path.Combine(_sharedLibrariesFolder, lib.RelativePath.Replace('/', Path.DirectorySeparatorChar));
-
                 await _fileDownloader.DownloadFileAsync(
                     lib.Url,
-                    destinationPath,
+                    lib.FilePath,
                     lib.Sha1,
                     null,
                     token);
@@ -230,7 +220,7 @@ public sealed class FabricModLoaderService : IModLoaderService
             .ToImmutableList();
     }
 
-    private static ImmutableList<ResolvedModLoaderLibrary> ResolveLibraries(List<FabricLibrary>? libraries)
+    private ImmutableList<ResolvedModLoaderLibrary> ResolveLibraries(List<FabricLibrary>? libraries)
     {
         if (libraries is null || libraries.Count == 0)
         {
@@ -246,11 +236,12 @@ public sealed class FabricModLoaderService : IModLoaderService
                 var baseUrl = string.IsNullOrWhiteSpace(lib.Url) ? FabricMavenBaseUrl : lib.Url!;
                 var normalizedBaseUrl = baseUrl.EndsWith('/') ? baseUrl : $"{baseUrl}/";
                 var url = $"{normalizedBaseUrl}{relativePath}";
+                var filePath = Path.Combine(_librariesFolder, relativePath.Replace('/', Path.DirectorySeparatorChar));
 
                 return new ResolvedModLoaderLibrary(
                     lib.Name,
                     url,
-                    relativePath,
+                    filePath,
                     string.IsNullOrWhiteSpace(lib.Sha1) ? null : lib.Sha1);
             })
             .ToImmutableList();
