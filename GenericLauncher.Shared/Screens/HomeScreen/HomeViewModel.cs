@@ -80,7 +80,7 @@ public partial class HomeViewModel : ViewModelBase, IPageViewModel
                     state = s;
                 }
 
-                return new MinecraftInstanceItem(i, null)
+                return new MinecraftInstanceItem(i, null, PlayInstance)
                 {
                     RunningState = state,
                 };
@@ -99,8 +99,7 @@ public partial class HomeViewModel : ViewModelBase, IPageViewModel
         });
     }
 
-    [RelayCommand]
-    private async Task ClickPlayInstance(MinecraftInstanceItem item)
+    private async Task PlayInstance(MinecraftInstanceItem item)
     {
         if (_auth is null || _minecraftLauncher is null || item.Instance.State != MinecraftInstanceState.Ready)
         {
