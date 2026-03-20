@@ -1,0 +1,36 @@
+Name: @LINUX_FOLDER_NAME@
+Version: @VERSION@
+Release: 1%{?dist}
+Summary: A simple Minecraft launcher
+License: GPL-3.0-only
+URL: @URL@
+BuildArch: @RPM_ARCH@
+Requires: libX11, fontconfig, libicu
+
+%description
+Lava Launcher is a desktop Minecraft launcher built with .NET 10 and Avalonia.
+
+%install
+mkdir -p %{buildroot}/usr/bin
+mkdir -p %{buildroot}/usr/lib/@LINUX_FOLDER_NAME@
+mkdir -p %{buildroot}/usr/share/applications
+mkdir -p %{buildroot}/usr/share/icons/hicolor/scalable/apps
+cp -a @STAGING_DIR@/usr/bin/@LINUX_FOLDER_NAME@ %{buildroot}/usr/bin/@LINUX_FOLDER_NAME@
+cp -a @STAGING_DIR@/usr/lib/@LINUX_FOLDER_NAME@/. %{buildroot}/usr/lib/@LINUX_FOLDER_NAME@/
+cp -a @STAGING_DIR@/usr/share/applications/@LINUX_FOLDER_NAME@.desktop %{buildroot}/usr/share/applications/@LINUX_FOLDER_NAME@.desktop
+cp -a @STAGING_DIR@/usr/share/icons/hicolor/scalable/apps/@LINUX_FOLDER_NAME@.svg %{buildroot}/usr/share/icons/hicolor/scalable/apps/@LINUX_FOLDER_NAME@.svg
+
+%files
+%defattr(-,root,root,-)
+%attr(755,root,root) /usr/bin/@LINUX_FOLDER_NAME@
+/usr/lib/@LINUX_FOLDER_NAME@
+/usr/share/applications/@LINUX_FOLDER_NAME@.desktop
+/usr/share/icons/hicolor/scalable/apps/@LINUX_FOLDER_NAME@.svg
+
+%posttrans
+gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || :
+update-desktop-database /usr/share/applications 2>/dev/null || :
+
+%postun
+gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || :
+update-desktop-database /usr/share/applications 2>/dev/null || :

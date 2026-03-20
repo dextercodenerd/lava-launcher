@@ -1,5 +1,7 @@
-﻿using System.Collections.Generic;
+using System;
+using System.Collections.Generic;
 using System.Data;
+using System.IO;
 using System.Threading.Tasks;
 using GenericLauncher.Database.Orm;
 using Microsoft.Data.Sqlite;
@@ -27,9 +29,23 @@ public enum MinecraftInstanceState
     Ready,
 }
 
+public enum MinecraftInstanceModLoader
+{
+    Unknown,
+    Vanilla,
+    Fabric,
+    NeoForge,
+    Forge,
+}
+
 public record MinecraftInstance(
     string Id,
     string VersionId,
+    // Concrete resolved profile/version used at launch time. For VANILLA this is typically equal
+    // to VersionId, while modded launchers can resolve to a different id.
+    string LaunchVersionId,
+    MinecraftInstanceModLoader ModLoader,
+    string? ModLoaderVersion,
     MinecraftInstanceState State,
     string Type,
     string Folder,
@@ -103,6 +119,9 @@ public record MinecraftInstance(
             CREATE TABLE IF NOT EXISTS {Table} (
                 Id TEXT PRIMARY KEY,
                 VersionId TEXT NOT NULL,
+                LaunchVersionId TEXT NOT NULL,
+                ModLoader TEXT NOT NULL CHECK (ModLoader IN ('VANILLA', 'FABRIC', 'NEOFORGE', 'FORGE')),
+                ModLoaderVersion TEXT,
                 State TEXT NOT NULL,
                 Type TEXT NOT NULL,
                 Folder TEXT NOT NULL,
@@ -119,6 +138,9 @@ public record MinecraftInstance(
     {
         var id = row.Get<string>(row.Ord("Id"));
         var versionId = row.Get<string>(row.Ord("VersionId"));
+        var launchVersionId = row.Get<string>(row.Ord("LaunchVersionId"));
+        var modLoader = row.Get<string>(row.Ord("ModLoader"));
+        var modLoaderVersion = row.Get<string?>(row.Ord("ModLoaderVersion"));
         var state = row.Get<string>(row.Ord("State"));
         var type = row.Get<string>(row.Ord("Type"));
         var folder = row.Get<string>(row.Ord("Folder"));
@@ -132,6 +154,9 @@ public record MinecraftInstance(
 
         return new MinecraftInstance(id,
             versionId,
+            launchVersionId,
+            ModLoaderFromString(modLoader),
+            modLoaderVersion,
             StateFromString(state),
             type,
             folder,
@@ -149,6 +174,9 @@ public record MinecraftInstance(
         cmd.Parameters.Clear();
         cmd.AddParam("@Id", v.Id, handlers, DbType.String);
         cmd.AddParam("@VersionId", v.VersionId, handlers, DbType.String);
+        cmd.AddParam("@LaunchVersionId", v.LaunchVersionId, handlers, DbType.String);
+        cmd.AddParam("@ModLoader", ModLoaderToString(v.ModLoader), handlers, DbType.String);
+        cmd.AddParam("@ModLoaderVersion", v.ModLoaderVersion, handlers, DbType.String);
         cmd.AddParam("@State", StateToString(v.State), handlers, DbType.String);
         cmd.AddParam("@Type", v.Type, handlers, DbType.String);
         cmd.AddParam("@Folder", v.Folder, handlers, DbType.String);
@@ -160,6 +188,12 @@ public record MinecraftInstance(
         cmd.AddParam("@GameArguments", v.GameArguments, handlers, DbType.String);
         cmd.AddParam("@JvmArguments", v.JvmArguments, handlers, DbType.String);
     }
+
+    public string GetNativeLibrariesFolder(string instancesRoot) =>
+        GetNativeLibrariesFolder(instancesRoot, Folder);
+
+    public static string GetNativeLibrariesFolder(string instancesRoot, string instanceFolder) =>
+        Path.Combine(instancesRoot, instanceFolder, "natives");
 
     public static MinecraftInstanceState StateFromString(string raw) => raw switch
     {
@@ -174,5 +208,23 @@ public record MinecraftInstance(
         MinecraftInstanceState.Installing => "INSTALLING",
         MinecraftInstanceState.Ready => "READY",
         _ => "UNKNOWN",
+    };
+
+    public static MinecraftInstanceModLoader ModLoaderFromString(string raw) => raw switch
+    {
+        "VANILLA" => MinecraftInstanceModLoader.Vanilla,
+        "FABRIC" => MinecraftInstanceModLoader.Fabric,
+        "NEOFORGE" => MinecraftInstanceModLoader.NeoForge,
+        "FORGE" => MinecraftInstanceModLoader.Forge,
+        _ => MinecraftInstanceModLoader.Unknown,
+    };
+
+    public static string ModLoaderToString(MinecraftInstanceModLoader modLoader) => modLoader switch
+    {
+        MinecraftInstanceModLoader.Vanilla => "VANILLA",
+        MinecraftInstanceModLoader.Fabric => "FABRIC",
+        MinecraftInstanceModLoader.NeoForge => "NEOFORGE",
+        MinecraftInstanceModLoader.Forge => "FORGE",
+        _ => throw new ArgumentOutOfRangeException(nameof(modLoader), modLoader, "Unsupported mod loader"),
     };
 }

@@ -1,4 +1,4 @@
-﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -9,9 +9,15 @@ using Avalonia.Data.Core.Plugins;
 using Avalonia.Markup.Xaml;
 using GenericLauncher.Auth;
 using GenericLauncher.Database;
+using GenericLauncher.Database.Model;
 using GenericLauncher.Http;
 using GenericLauncher.Java;
 using GenericLauncher.Minecraft;
+using GenericLauncher.Minecraft.ModLoaders;
+using GenericLauncher.Minecraft.ModLoaders.Fabric;
+using GenericLauncher.Minecraft.ModLoaders.Forge;
+using GenericLauncher.Minecraft.ModLoaders.NeoForge;
+using GenericLauncher.Minecraft.ModLoaders.Vanilla;
 using GenericLauncher.Misc;
 using GenericLauncher.Modrinth;
 using LavaLauncher;
@@ -22,15 +28,14 @@ namespace GenericLauncher;
 public partial class App : Application
 {
     public static ILoggerFactory? LoggerFactory;
+    private static readonly LauncherPlatform Platform = LauncherPlatform.CreateCurrent();
 
-    // TODO: Inject the sub-folder/assembly name via constructor?
-    private static readonly string BaseFolder = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        Product.AssemblyName);
-
-    private static readonly string BaseMinecraftInstallFolder = "mc";
-    private static readonly string BaseJavaInstallFolder = "java";
-    private static readonly string BaseInstancesFolder = "instances";
+    private static readonly string BaseMinecraftLibrariesFolder = "libraries";
+    private static readonly string BaseMcFolder = "mc";
+    private static readonly string BaseModLoadersFolder = "modloaders";
+    private static readonly string FabricModLoaderFolder = "fabric";
+    private static readonly string NeoForgeModLoaderFolder = "neoforge";
+    private static readonly string ForgeModLoaderFolder = "forge";
 
     // Manual DI, no runtime magic, ever!
     private static readonly HttpClient HttpClient = HttpRetry.CreateHttpClient(4);
@@ -43,18 +48,45 @@ public partial class App : Application
             LoggerFactory?.CreateLogger(typeof(Authenticator)));
 
     private readonly MinecraftVersionManager _minecraftVersionManager =
-        new(Path.Combine(BaseFolder, BaseMinecraftInstallFolder),
+        new(Platform,
             HttpClient,
             FileDownloader,
             LoggerFactory?.CreateLogger(typeof(MinecraftVersionManager)));
 
     private readonly JavaVersionManager _javaVersionManager =
-        new(Path.Combine(BaseFolder, BaseJavaInstallFolder),
+        new(Platform,
             HttpClient,
             FileDownloader,
             LoggerFactory?.CreateLogger(typeof(JavaVersionManager)));
 
-    private readonly LauncherRepository _launcherRepository = new(BaseFolder);
+    private readonly FabricModLoaderService _fabricModLoaderService =
+        new(Path.Combine(Platform.AppDataPath, BaseMcFolder, BaseModLoadersFolder, FabricModLoaderFolder),
+            Path.Combine(Platform.AppDataPath, BaseMcFolder, BaseModLoadersFolder, FabricModLoaderFolder,
+                BaseMinecraftLibrariesFolder),
+            HttpClient,
+            FileDownloader,
+            LoggerFactory?.CreateLogger(typeof(FabricModLoaderService)));
+
+    private readonly NeoForgeModLoaderService _neoForgeModLoaderService =
+        new(Path.Combine(Platform.AppDataPath, BaseMcFolder, BaseModLoadersFolder, NeoForgeModLoaderFolder),
+            Path.Combine(Platform.AppDataPath, BaseMcFolder, BaseModLoadersFolder, NeoForgeModLoaderFolder,
+                BaseMinecraftLibrariesFolder),
+            HttpClient,
+            FileDownloader,
+            LoggerFactory?.CreateLogger(typeof(NeoForgeModLoaderService)));
+
+    private readonly ForgeModLoaderService _forgeModLoaderService =
+        new(Path.Combine(Platform.AppDataPath, BaseMcFolder, BaseModLoadersFolder, ForgeModLoaderFolder),
+            Path.Combine(Platform.AppDataPath, BaseMcFolder, BaseModLoadersFolder, ForgeModLoaderFolder,
+                BaseMinecraftLibrariesFolder),
+            HttpClient,
+            FileDownloader,
+            LoggerFactory?.CreateLogger(typeof(ForgeModLoaderService)));
+
+    private readonly VanillaModLoaderService _vanillaModLoaderService =
+        new();
+
+    private readonly LauncherRepository _launcherRepository = new(Platform);
     private readonly AuthService _authService;
     private readonly MinecraftLauncher _minecraftLauncher;
 
@@ -69,13 +101,19 @@ public partial class App : Application
             LoggerFactory?.CreateLogger(typeof(AuthService)));
 
         _minecraftLauncher = new MinecraftLauncher(
-            Product.CurrentOs,
+            Platform,
             Product.Name,
             Product.Version,
-            Path.Combine(BaseFolder, BaseInstancesFolder),
             _launcherRepository,
             _minecraftVersionManager,
             _javaVersionManager,
+            new Dictionary<MinecraftInstanceModLoader, IModLoaderService>
+            {
+                [MinecraftInstanceModLoader.Vanilla] = _vanillaModLoaderService,
+                [MinecraftInstanceModLoader.Fabric] = _fabricModLoaderService,
+                [MinecraftInstanceModLoader.NeoForge] = _neoForgeModLoaderService,
+                [MinecraftInstanceModLoader.Forge] = _forgeModLoaderService,
+            },
             LoggerFactory?.CreateLogger(typeof(MinecraftLauncher)));
     }
 

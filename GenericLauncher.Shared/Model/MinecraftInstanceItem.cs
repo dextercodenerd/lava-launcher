@@ -1,4 +1,7 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
+﻿using System;
+using System.Threading.Tasks;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using GenericLauncher.Database.Model;
 using GenericLauncher.Minecraft;
 
@@ -21,6 +24,8 @@ public partial class MinecraftInstanceItem : ObservableObject
 
     [ObservableProperty] private ThreadSafeInstallProgressReporter.InstallProgress? _progress;
 
+    public IAsyncRelayCommand PlayCommand { get; }
+
     public string ProgressMessage
     {
         get
@@ -31,17 +36,22 @@ public partial class MinecraftInstanceItem : ObservableObject
             }
 
             var average = (long)Progress.Value.MinecraftDownloadProgress * Progress.Value.AssetsDownloadProgress *
-                Progress.Value.LibrariesDownloadProgress * Progress.Value.JavaDownloadProgress / 1000000;
+                Progress.Value.LibrariesDownloadProgress * Progress.Value.JavaDownloadProgress *
+                Progress.Value.ModLoaderInstallProgress / 100000000;
 
             return average.ToString();
         }
     }
 
     public MinecraftInstanceItem(MinecraftInstance instance,
-        ThreadSafeInstallProgressReporter.InstallProgress? progress)
+        ThreadSafeInstallProgressReporter.InstallProgress? progress,
+        Func<MinecraftInstanceItem, Task>? playAction = null)
     {
         Instance = instance;
         Progress = progress;
+        PlayCommand = new AsyncRelayCommand(
+            () => playAction?.Invoke(this) ?? Task.CompletedTask,
+            CanPlay);
     }
 
     partial void OnProgressChanged(ThreadSafeInstallProgressReporter.InstallProgress? value)
@@ -51,4 +61,13 @@ public partial class MinecraftInstanceItem : ObservableObject
         // the change, and update their UI.
         OnPropertyChanged(nameof(ProgressMessage));
     }
+
+    partial void OnRunningStateChanged(MinecraftLauncher.RunningState value)
+    {
+        PlayCommand.NotifyCanExecuteChanged();
+    }
+
+    private bool CanPlay() =>
+        RunningState == MinecraftLauncher.RunningState.Stopped &&
+        Instance.State == MinecraftInstanceState.Ready;
 }

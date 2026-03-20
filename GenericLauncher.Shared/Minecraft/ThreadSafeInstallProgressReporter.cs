@@ -32,7 +32,8 @@ public sealed class ThreadSafeInstallProgressReporter : IAsyncDisposable
         uint MinecraftDownloadProgress = 0,
         uint AssetsDownloadProgress = 0,
         uint LibrariesDownloadProgress = 0,
-        uint JavaDownloadProgress = 0
+        uint JavaDownloadProgress = 0,
+        uint ModLoaderInstallProgress = 0
     );
 
     private enum UpdateTarget : byte
@@ -42,6 +43,7 @@ public sealed class ThreadSafeInstallProgressReporter : IAsyncDisposable
         Assets,
         Libraries,
         Java,
+        ModLoader,
     }
 
     // Struct-based message passing for zero-allocation and not stressing GC.
@@ -110,6 +112,11 @@ public sealed class ThreadSafeInstallProgressReporter : IAsyncDisposable
         EnqueueUpdate(new ProgressUpdate(UpdateTarget.Java, progress));
     }
 
+    public void ReportModLoaderInstallProgress(uint progress)
+    {
+        EnqueueUpdate(new ProgressUpdate(UpdateTarget.ModLoader, progress));
+    }
+
     private void EnqueueUpdate(ProgressUpdate update)
     {
         try
@@ -142,6 +149,7 @@ public sealed class ThreadSafeInstallProgressReporter : IAsyncDisposable
                             AssetsDownloadProgress = 0,
                             LibrariesDownloadProgress = 0,
                             JavaDownloadProgress = 0,
+                            ModLoaderInstallProgress = 0,
                         };
                         break;
 
@@ -163,6 +171,11 @@ public sealed class ThreadSafeInstallProgressReporter : IAsyncDisposable
                     case UpdateTarget.Java:
                         var newJava = Math.Max(_currentProgress.JavaDownloadProgress, msg.Value);
                         _currentProgress = _currentProgress with { JavaDownloadProgress = newJava };
+                        break;
+
+                    case UpdateTarget.ModLoader:
+                        var newModLoader = Math.Max(_currentProgress.ModLoaderInstallProgress, msg.Value);
+                        _currentProgress = _currentProgress with { ModLoaderInstallProgress = newModLoader };
                         break;
 
                     default:
