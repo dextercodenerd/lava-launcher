@@ -2,6 +2,7 @@ using System;
 using System.Collections.Immutable;
 using System.Threading;
 using System.Threading.Tasks;
+using GenericLauncher.Misc;
 
 namespace GenericLauncher.Minecraft.ModLoaders.Vanilla;
 
@@ -12,9 +13,11 @@ public sealed class VanillaModLoaderService : IModLoaderService
     public string DisplayName => "Vanilla";
 
     public Task<ImmutableList<ModLoaderVersionInfo>> GetLoaderVersionsAsync(
+        string minecraftVersionId,
         bool reload,
         CancellationToken cancellationToken = default)
     {
+        _ = minecraftVersionId;
         _ = reload;
         _ = cancellationToken;
         return Task.FromResult(ImmutableList.Create(new ModLoaderVersionInfo(VanillaLoaderVersionId, "STABLE")));
@@ -23,10 +26,10 @@ public sealed class VanillaModLoaderService : IModLoaderService
     public Task<ResolvedModLoaderVersion> ResolveAsync(
         string minecraftVersionId,
         string? preferredLoaderVersion,
-        string currentOs,
+        LauncherPlatform platform,
         CancellationToken cancellationToken = default)
     {
-        _ = currentOs;
+        _ = platform;
         _ = cancellationToken;
 
         if (string.IsNullOrWhiteSpace(minecraftVersionId))
@@ -47,16 +50,20 @@ public sealed class VanillaModLoaderService : IModLoaderService
             VanillaLoaderVersionId,
             "",
             null,
+            null,
+            null,
             [],
             [],
             []));
     }
 
-    public Task DownloadAsync(
+    public Task InstallAsync(
         ResolvedModLoaderVersion resolved,
+        ModLoaderInstallContext context,
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        _ = context;
         _ = cancellationToken;
 
         if (!string.Equals(resolved.DisplayName, DisplayName, StringComparison.OrdinalIgnoreCase))

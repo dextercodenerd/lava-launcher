@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using GenericLauncher.Http;
 using GenericLauncher.Minecraft.ModLoaders.Fabric.Json;
+using GenericLauncher.Misc;
 using Microsoft.Extensions.Logging;
 
 namespace GenericLauncher.Minecraft.ModLoaders.Fabric;
@@ -45,9 +46,11 @@ public sealed class FabricModLoaderService : IModLoaderService
     }
 
     public async Task<ImmutableList<ModLoaderVersionInfo>> GetLoaderVersionsAsync(
+        string minecraftVersionId,
         bool reload,
         CancellationToken cancellationToken = default)
     {
+        _ = minecraftVersionId;
         Directory.CreateDirectory(_metadataFolder);
 
         var cachePath = Path.Combine(_metadataFolder, "loader_versions.json");
@@ -70,7 +73,7 @@ public sealed class FabricModLoaderService : IModLoaderService
     public async Task<ResolvedModLoaderVersion> ResolveAsync(
         string minecraftVersionId,
         string? preferredLoaderVersion,
-        string currentOs,
+        LauncherPlatform platform,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(minecraftVersionId))
@@ -78,9 +81,9 @@ public sealed class FabricModLoaderService : IModLoaderService
             throw new ArgumentException("Minecraft version id cannot be empty", nameof(minecraftVersionId));
         }
 
-        _ = currentOs;
+        _ = platform;
 
-        var loaderVersions = await GetLoaderVersionsAsync(false, cancellationToken);
+        var loaderVersions = await GetLoaderVersionsAsync(minecraftVersionId, false, cancellationToken);
         if (loaderVersions.Count == 0)
         {
             throw new InvalidOperationException("No Fabric loader versions available");
@@ -124,17 +127,21 @@ public sealed class FabricModLoaderService : IModLoaderService
             launchVersionId,
             selectedLoader.VersionId,
             profilePath,
+            null,
+            null,
             string.IsNullOrWhiteSpace(profile.MainClass) ? null : profile.MainClass,
             extraJvmArgs,
             extraGameArgs,
             libraries);
     }
 
-    public async Task DownloadAsync(
+    public async Task InstallAsync(
         ResolvedModLoaderVersion resolved,
+        ModLoaderInstallContext context,
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        _ = context;
         if (!string.Equals(resolved.DisplayName, DisplayName, StringComparison.OrdinalIgnoreCase))
         {
             throw new ArgumentException("Resolved version does not belong to Fabric loader", nameof(resolved));
@@ -161,6 +168,13 @@ public sealed class FabricModLoaderService : IModLoaderService
             parallelOptions,
             async (lib, token) =>
             {
+                if (string.IsNullOrWhiteSpace(lib.Url))
+                {
+                    var skipped = Interlocked.Increment(ref done);
+                    progress?.Report(skipped / count);
+                    return;
+                }
+
                 await _fileDownloader.DownloadFileAsync(
                     lib.Url,
                     lib.FilePath,
@@ -247,33 +261,5 @@ public sealed class FabricModLoaderService : IModLoaderService
             .ToImmutableList();
     }
 
-    private static string MavenToRelativePath(string maven)
-    {
-        // Format: group:artifact:version[:classifier][@ext]
-        var extension = "jar";
-        var coordinate = maven;
-        var at = coordinate.IndexOf('@');
-        if (at >= 0 && at + 1 < coordinate.Length)
-        {
-            extension = coordinate[(at + 1)..];
-            coordinate = coordinate[..at];
-        }
-
-        var parts = coordinate.Split(':');
-        if (parts.Length < 3)
-        {
-            throw new ArgumentException($"Invalid maven coordinate '{maven}'", nameof(maven));
-        }
-
-        var group = parts[0].Replace('.', '/');
-        var artifact = parts[1];
-        var version = parts[2];
-        var classifier = parts.Length >= 4 ? parts[3] : null;
-
-        var fileName = classifier is null
-            ? $"{artifact}-{version}.{extension}"
-            : $"{artifact}-{version}-{classifier}.{extension}";
-
-        return $"{group}/{artifact}/{version}/{fileName}";
-    }
+    private static string MavenToRelativePath(string maven) => MavenCoordinate.ToRelativePath(maven);
 }

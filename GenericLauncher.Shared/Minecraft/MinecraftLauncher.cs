@@ -18,7 +18,7 @@ using Microsoft.Extensions.Logging;
 
 namespace GenericLauncher.Minecraft;
 
-public sealed class MinecraftLauncher : IDisposable
+public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
 {
     public enum RunningState
     {
@@ -42,8 +42,8 @@ public sealed class MinecraftLauncher : IDisposable
     private readonly ILogger? _logger;
 
     private readonly SemaphoreSlim _lock = new(1, 1);
-    public ImmutableList<VersionInfo> AvailableVersions = [];
-    public ImmutableList<MinecraftInstance> Instances = [];
+    public ImmutableList<VersionInfo> AvailableVersions { get; private set; } = [];
+    public ImmutableList<MinecraftInstance> Instances { get; private set; } = [];
 
     public ImmutableList<MinecraftInstanceModLoader> AvailableModLoaders =>
         _modLoaderServices.Keys
@@ -148,10 +148,11 @@ public sealed class MinecraftLauncher : IDisposable
 
     public async Task<ImmutableList<ModLoaderVersionInfo>> GetLoaderVersionsAsync(
         MinecraftInstanceModLoader modLoader,
+        string minecraftVersionId,
         bool reload)
     {
         var service = GetModLoaderService(modLoader);
-        return await service.GetLoaderVersionsAsync(reload);
+        return await service.GetLoaderVersionsAsync(minecraftVersionId, reload);
     }
 
     public async Task CreateInstance(
@@ -201,7 +202,7 @@ public sealed class MinecraftLauncher : IDisposable
         var resolvedModLoader = await modLoaderService.ResolveAsync(
             version.Id,
             preferredModLoaderVersion,
-            _platform.CurrentOs);
+            _platform);
 
         ////////////////////////////////////////////////////////////////////////////////////////////
         // Download basic information about specific Minecraft version i.e., its client.json file
@@ -297,10 +298,6 @@ public sealed class MinecraftLauncher : IDisposable
             })
         );
 
-        var downloadModLoaderTask = modLoaderService.DownloadAsync(
-            resolvedModLoader,
-            null);
-
         ////////////////////////////////////////////////////////////////////////
         // Download Java
         var javaVersion = minecraft.RequiredJavaVersion;
@@ -322,7 +319,28 @@ public sealed class MinecraftLauncher : IDisposable
                 progressReporter.ReportJavaDownloadProgress(pp);
             }));
 
-        await Task.WhenAll(downloadMinecraftTask, downloadJavaTask, downloadModLoaderTask);
+        await Task.WhenAll(downloadMinecraftTask, downloadJavaTask);
+
+        var javaExecutablePath = _javaManager.GetJavaExecutablePath(javaVersion) ??
+                                 throw new ArgumentException($"Java {javaVersion} is missing");
+        var lastModLoaderInstallProgress = (uint)0;
+        await modLoaderService.InstallAsync(
+            resolvedModLoader,
+            new ModLoaderInstallContext(_platform, javaExecutablePath, minecraft.ClientJarPath),
+            new Progress<double>(p =>
+            {
+                var pp = p < 1.0
+                    ? Math.Min((uint)(100.0 * p), 99)
+                    : 100;
+
+                var v = Interlocked.Exchange(ref lastModLoaderInstallProgress, pp);
+                if (v != pp)
+                {
+                    // ReSharper disable once AccessToDisposedClosure
+                    progressReporter.ReportModLoaderInstallProgress(pp);
+                }
+            }));
+
         MaterializeInstanceNativeLibraries(cachedVanillaNativeLibrariesFolder, instanceNativeLibrariesFolder);
 
         _logger?.LogInformation("Successfully download Minecraft instance '{InstanceId}'", name);

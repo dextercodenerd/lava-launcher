@@ -38,7 +38,8 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
             }
 
             var average = (long)Progress.Value.MinecraftDownloadProgress * Progress.Value.AssetsDownloadProgress *
-                Progress.Value.LibrariesDownloadProgress * Progress.Value.JavaDownloadProgress / 1000000;
+                Progress.Value.LibrariesDownloadProgress * Progress.Value.JavaDownloadProgress *
+                Progress.Value.ModLoaderInstallProgress / 100000000;
 
             return average.ToString();
         }

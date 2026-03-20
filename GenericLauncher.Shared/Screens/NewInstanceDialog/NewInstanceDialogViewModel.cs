@@ -17,7 +17,8 @@ namespace GenericLauncher.Screens.NewInstanceDialog;
 public partial class NewInstanceDialogViewModel : ViewModelBase
 {
     private readonly ILogger? _logger;
-    private readonly MinecraftLauncher? _minecraftLauncher;
+    private readonly IMinecraftLauncherFacade? _minecraftLauncher;
+    private int _modLoaderVersionsRequestId;
 
     [ObservableProperty] private bool _showNewMinecraftInstanceDialog = false;
     [ObservableProperty] private bool _canCloseOnClickAway = true;
@@ -30,7 +31,15 @@ public partial class NewInstanceDialogViewModel : ViewModelBase
     [ObservableProperty] private ModLoaderVersionInfo? _selectedModLoaderVersion = null;
     [ObservableProperty] private string? _newInstanceName = null;
     [ObservableProperty] private bool _preparingInstance = false;
-    [ObservableProperty] private string _instanceNameWatermark = "Vanilla"; // prepared for mod launchers e.g., Fabric
+    [ObservableProperty] private bool _loadingModLoaderVersions = false;
+    [ObservableProperty] private string _modLoaderVersionStatusText = "";
+    [ObservableProperty] private string _instanceNameWatermark = "Vanilla";
+
+    public bool CanInstall =>
+        !PreparingInstance
+        && !LoadingModLoaderVersions
+        && SelectedMinecraftVersion is not null
+        && SelectedModLoaderVersion is not null;
 
     public DialogOpenedEventHandler DialogOpenedHandler { get; }
     public DialogClosingEventHandler DialogClosingHandler { get; }
@@ -40,7 +49,7 @@ public partial class NewInstanceDialogViewModel : ViewModelBase
     }
 
     public NewInstanceDialogViewModel(
-        MinecraftLauncher? minecraftLauncher = null,
+        IMinecraftLauncherFacade? minecraftLauncher = null,
         ILogger? logger = null)
     {
         _logger = logger;
@@ -58,10 +67,9 @@ public partial class NewInstanceDialogViewModel : ViewModelBase
 
         AvailableMinecraftVersions = _minecraftLauncher.AvailableVersions;
         AvailableModLoaders = _minecraftLauncher.AvailableModLoaders;
+        SelectedMinecraftVersion = AvailableMinecraftVersions.FirstOrDefault();
         SelectedModLoader = AvailableModLoaders.FirstOrDefault();
         _minecraftLauncher.AvailableVersionsChanged += OnAvailableVersionsChanged;
-
-        _ = LoadModLoaderVersionsAsync(SelectedModLoader, false);
     }
 
     private void OnDialogOpened(object sender, DialogOpenedEventArgs args)
@@ -81,6 +89,7 @@ public partial class NewInstanceDialogViewModel : ViewModelBase
         CanCloseOnClickAway = true;
         NewInstanceName = null;
         PreparingInstance = false;
+        LoadingModLoaderVersions = false;
     }
 
     [RelayCommand]
@@ -92,7 +101,7 @@ public partial class NewInstanceDialogViewModel : ViewModelBase
     [RelayCommand]
     private void OnClickInstall()
     {
-        if (_minecraftLauncher is null)
+        if (_minecraftLauncher is null || !CanInstall)
         {
             return;
         }
@@ -107,7 +116,6 @@ public partial class NewInstanceDialogViewModel : ViewModelBase
         var preferredModLoaderVersion = SelectedModLoaderVersion?.VersionId;
 
         NewInstanceName = null;
-        SelectedMinecraftVersion = null;
 
         if (versionInfo is null)
         {
@@ -153,8 +161,11 @@ public partial class NewInstanceDialogViewModel : ViewModelBase
                     // TODO: show error
                 }
 
-                PreparingInstance = false;
-                CanCloseOnClickAway = true;
+                Dispatcher.UIThread.Post(() =>
+                {
+                    PreparingInstance = false;
+                    CanCloseOnClickAway = true;
+                });
             });
     }
 
@@ -174,11 +185,6 @@ public partial class NewInstanceDialogViewModel : ViewModelBase
 
     partial void OnSelectedModLoaderChanged(MinecraftInstanceModLoader value)
     {
-        if (_minecraftLauncher is null)
-        {
-            return;
-        }
-
         InstanceNameWatermark = value switch
         {
             MinecraftInstanceModLoader.Fabric => "Fabric",
@@ -187,10 +193,100 @@ public partial class NewInstanceDialogViewModel : ViewModelBase
             _ => "Vanilla",
         };
 
-        _ = LoadModLoaderVersionsAsync(value, false);
+        _ = LoadSelectedModLoaderVersionsAsync(false);
+        OnPropertyChanged(nameof(CanInstall));
     }
 
-    private async Task LoadModLoaderVersionsAsync(MinecraftInstanceModLoader modLoader, bool reload)
+    partial void OnSelectedMinecraftVersionChanged(VersionInfo? value)
+    {
+        _ = LoadSelectedModLoaderVersionsAsync(false);
+        OnPropertyChanged(nameof(CanInstall));
+    }
+
+    partial void OnSelectedModLoaderVersionChanged(ModLoaderVersionInfo? value)
+    {
+        OnPropertyChanged(nameof(CanInstall));
+    }
+
+    partial void OnPreparingInstanceChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanInstall));
+    }
+
+    partial void OnLoadingModLoaderVersionsChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanInstall));
+    }
+
+    private async Task LoadSelectedModLoaderVersionsAsync(bool reload)
+    {
+        if (_minecraftLauncher is null || SelectedMinecraftVersion is null)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                AvailableModLoaderVersions = [];
+                SelectedModLoaderVersion = null;
+                ModLoaderVersionStatusText = "";
+                LoadingModLoaderVersions = false;
+            });
+            return;
+        }
+
+        var currentRequestId = ++_modLoaderVersionsRequestId;
+        var modLoader = SelectedModLoader;
+        var minecraftVersionId = SelectedMinecraftVersion.Id;
+        var preferredVersionId = SelectedModLoaderVersion?.VersionId;
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            LoadingModLoaderVersions = true;
+            ModLoaderVersionStatusText = "Loading compatible loader versions...";
+        });
+
+        try
+        {
+            var versions = await _minecraftLauncher.GetLoaderVersionsAsync(modLoader, minecraftVersionId, reload);
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (currentRequestId != _modLoaderVersionsRequestId)
+                {
+                    return;
+                }
+
+                AvailableModLoaderVersions = versions;
+                SelectedModLoaderVersion =
+                    AvailableModLoaderVersions.FirstOrDefault(v => v.VersionId == preferredVersionId)
+                    ?? AvailableModLoaderVersions.FirstOrDefault();
+                ModLoaderVersionStatusText = AvailableModLoaderVersions.Count == 0
+                    ? "No compatible loader versions for the selected Minecraft version."
+                    : "";
+                LoadingModLoaderVersions = false;
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex,
+                "Problem loading mod loader versions for {ModLoader} and Minecraft {MinecraftVersion}",
+                modLoader,
+                minecraftVersionId);
+
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (currentRequestId != _modLoaderVersionsRequestId)
+                {
+                    return;
+                }
+
+                AvailableModLoaderVersions = [];
+                SelectedModLoaderVersion = null;
+                ModLoaderVersionStatusText = "Failed to load compatible loader versions.";
+                LoadingModLoaderVersions = false;
+            });
+        }
+    }
+
+    private async Task LoadModLoaderVersionsAsync(MinecraftInstanceModLoader modLoader, string minecraftVersionId,
+        bool reload)
     {
         if (_minecraftLauncher is null)
         {
@@ -199,7 +295,7 @@ public partial class NewInstanceDialogViewModel : ViewModelBase
 
         try
         {
-            var versions = await _minecraftLauncher.GetLoaderVersionsAsync(modLoader, reload);
+            var versions = await _minecraftLauncher.GetLoaderVersionsAsync(modLoader, minecraftVersionId, reload);
             Dispatcher.UIThread.Post(() =>
             {
                 AvailableModLoaderVersions = versions;
