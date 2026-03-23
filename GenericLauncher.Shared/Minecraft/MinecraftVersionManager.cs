@@ -83,8 +83,7 @@ public sealed class MinecraftVersionManager : IDisposable
             try
             {
                 // TODO: Use a Lazy<> property to cache the parsed manifest
-                await using var manifestStream = File.OpenRead(manifestJsonPath);
-                var manifest = await JsonSerializer.DeserializeAsync(manifestStream,
+                var manifest = await File.DeserializeJsonAsync(manifestJsonPath,
                     MinecraftJsonContext.Default.MinecraftManifest, cancellationToken);
                 if (manifest is not null)
                 {
@@ -133,8 +132,7 @@ public sealed class MinecraftVersionManager : IDisposable
         // TODO: Use Lazy<> or somehow cache these
         var installationFolder = GetInstallationFolder(versionId);
         var clientJsonPath = GetClientJsonPath(versionId);
-        await using var clientJsonStream = File.OpenRead(clientJsonPath);
-        var versionDetails = await JsonSerializer.DeserializeAsync(clientJsonStream,
+        var versionDetails = await File.DeserializeJsonAsync(clientJsonPath,
                                  MinecraftJsonContext.Default.VersionDetails, cancellationToken)
                              ?? throw new InvalidOperationException($"Failed to get details for version '{versionId}'");
 
@@ -382,8 +380,7 @@ public sealed class MinecraftVersionManager : IDisposable
             cancellationToken);
 
         // Parse assets index and download assets
-        await using var assetsStream = File.OpenRead(assetsIndexPath);
-        var assetsManifest = await JsonSerializer.DeserializeAsync(assetsStream,
+        var assetsManifest = await File.DeserializeJsonAsync(assetsIndexPath,
                                  MinecraftJsonContext.Default.AssetsManifest, cancellationToken)
                              ?? throw new InvalidOperationException("Failed to deserialize assets manifest");
 

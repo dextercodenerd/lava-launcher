@@ -5,7 +5,6 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -114,13 +113,11 @@ public sealed partial class NeoForgeModLoaderService : IModLoaderService
         await EnsureInstallerMetadataAsync(selected, installerJarPath, installProfilePath, profilePath,
             cancellationToken);
 
-        await using var installProfileStream = File.OpenRead(installProfilePath);
-        var installProfile = await JsonSerializer.DeserializeAsync(installProfileStream,
+        var installProfile = await File.DeserializeJsonAsync(installProfilePath,
                                  NeoForgeJsonContext.Default.NeoForgeInstallProfile, cancellationToken)
                              ?? throw new InvalidOperationException(
                                  $"Failed to deserialize {DisplayName} install profile");
-        await using var versionProfileStream = File.OpenRead(profilePath);
-        var versionProfile = await JsonSerializer.DeserializeAsync(versionProfileStream,
+        var versionProfile = await File.DeserializeJsonAsync(profilePath,
                                  NeoForgeJsonContext.Default.NeoForgeVersionProfile, cancellationToken)
                              ?? throw new InvalidOperationException(
                                  $"Failed to deserialize {DisplayName} launcher profile");
@@ -169,13 +166,11 @@ public sealed partial class NeoForgeModLoaderService : IModLoaderService
         Directory.CreateDirectory(_loaderRootFolder);
         Directory.CreateDirectory(_librariesFolder);
 
-        await using var installProfileStream = File.OpenRead(resolved.InstallProfileJsonPath);
-        var installProfile = await JsonSerializer.DeserializeAsync(installProfileStream,
+        var installProfile = await File.DeserializeJsonAsync(resolved.InstallProfileJsonPath,
                                  NeoForgeJsonContext.Default.NeoForgeInstallProfile, cancellationToken)
                              ?? throw new InvalidOperationException(
                                  $"Failed to deserialize {DisplayName} install profile");
-        await using var versionProfileStream = File.OpenRead(resolved.ProfileJsonPath);
-        var versionProfile = await JsonSerializer.DeserializeAsync(versionProfileStream,
+        var versionProfile = await File.DeserializeJsonAsync(resolved.ProfileJsonPath,
                                  NeoForgeJsonContext.Default.NeoForgeVersionProfile, cancellationToken)
                              ?? throw new InvalidOperationException(
                                  $"Failed to deserialize {DisplayName} launcher profile");

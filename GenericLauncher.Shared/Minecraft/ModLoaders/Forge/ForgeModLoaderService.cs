@@ -117,13 +117,11 @@ public sealed partial class ForgeModLoaderService : IModLoaderService
         await EnsureInstallerMetadataAsync(selected, installerJarPath, installProfilePath, profilePath,
             cancellationToken);
 
-        await using var installProfileStream = File.OpenRead(installProfilePath);
-        var installProfile = await JsonSerializer.DeserializeAsync(installProfileStream,
+        var installProfile = await File.DeserializeJsonAsync(installProfilePath,
                                  ForgeJsonContext.Default.ForgeInstallProfile, cancellationToken)
                              ?? throw new InvalidOperationException(
                                  $"Failed to deserialize {DisplayName} install profile");
-        await using var versionProfileStream = File.OpenRead(profilePath);
-        var versionProfile = await JsonSerializer.DeserializeAsync(versionProfileStream,
+        var versionProfile = await File.DeserializeJsonAsync(profilePath,
                                  ForgeJsonContext.Default.ForgeVersionProfile, cancellationToken)
                              ?? throw new InvalidOperationException(
                                  $"Failed to deserialize {DisplayName} launcher profile");
@@ -172,13 +170,11 @@ public sealed partial class ForgeModLoaderService : IModLoaderService
         Directory.CreateDirectory(_loaderRootFolder);
         Directory.CreateDirectory(_librariesFolder);
 
-        await using var installProfileStream = File.OpenRead(resolved.InstallProfileJsonPath);
-        var installProfile = await JsonSerializer.DeserializeAsync(installProfileStream,
+        var installProfile = await File.DeserializeJsonAsync(resolved.InstallProfileJsonPath,
                                  ForgeJsonContext.Default.ForgeInstallProfile, cancellationToken)
                              ?? throw new InvalidOperationException(
                                  $"Failed to deserialize {DisplayName} install profile");
-        await using var versionProfileStream = File.OpenRead(resolved.ProfileJsonPath);
-        var versionProfile = await JsonSerializer.DeserializeAsync(versionProfileStream,
+        var versionProfile = await File.DeserializeJsonAsync(resolved.ProfileJsonPath,
                                  ForgeJsonContext.Default.ForgeVersionProfile, cancellationToken)
                              ?? throw new InvalidOperationException(
                                  $"Failed to deserialize {DisplayName} launcher profile");
