@@ -184,40 +184,28 @@ public class FileDownloader
         return fileName;
     }
 
-    private async Task<bool> VerifyFileHashAsync(string filePath, string expectedHash)
+    public static async Task<bool> VerifyFileHashAsync(
+        string filePath,
+        string expectedHash,
+        CancellationToken cancellationToken = default)
     {
         if (!File.Exists(filePath))
         {
             return false;
         }
 
-        try
+        await using var fileStream = File.OpenRead(filePath);
+        var hash = expectedHash.Length switch
         {
-            await using var fileStream = File.OpenRead(filePath);
+            40 => await SHA1.HashDataAsync(fileStream, cancellationToken),
+            64 => await SHA256.HashDataAsync(fileStream, cancellationToken),
+            _ => throw new ArgumentException(
+                $"Unsupported hash length: {expectedHash.Length}. Expected 40 (SHA1) or 64 (SHA256) characters.",
+                nameof(expectedHash)),
+        };
 
-            byte[] hash;
-            if (expectedHash.Length == 64) // SHA-256
-            {
-                hash = await SHA256.HashDataAsync(fileStream);
-            }
-            else if (expectedHash.Length == 40) // SHA-1
-            {
-                hash = await SHA1.HashDataAsync(fileStream);
-            }
-            else
-            {
-                throw new ArgumentException(
-                    $"Unsupported hash length: {expectedHash.Length}. Expected 40 (SHA1) or 64 (SHA256) characters.");
-            }
-
-            var actualHash = Convert.ToHexString(hash).ToLowerInvariant();
-            return string.Equals(actualHash, expectedHash, StringComparison.OrdinalIgnoreCase);
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "Failed to verify hash for {FilePath}", filePath);
-            return false;
-        }
+        var actualHash = Convert.ToHexString(hash).ToLowerInvariant();
+        return string.Equals(actualHash, expectedHash, StringComparison.OrdinalIgnoreCase);
     }
 
     public void Dispose()

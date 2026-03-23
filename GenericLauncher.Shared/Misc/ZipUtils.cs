@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -40,5 +41,27 @@ public static class ZipUtils
                                       ?? throw new InvalidOperationException("Missing destination folder"));
             entry.ExtractToFile(request.DestinationPath, true);
         }
+    }
+
+    public static string? ReadJarMainClass(string jarPath)
+    {
+        using var archive = ZipFile.OpenRead(jarPath);
+        var manifestEntry = archive.GetEntry("META-INF/MANIFEST.MF");
+        if (manifestEntry is null)
+        {
+            return null;
+        }
+
+        using var reader = new StreamReader(manifestEntry.Open(), Encoding.UTF8, false, leaveOpen: false);
+        while (!reader.EndOfStream)
+        {
+            var line = reader.ReadLine();
+            if (line?.StartsWith("Main-Class:", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return line["Main-Class:".Length..].Trim();
+            }
+        }
+
+        return null;
     }
 }

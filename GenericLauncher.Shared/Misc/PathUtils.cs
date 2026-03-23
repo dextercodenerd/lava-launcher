@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -78,22 +77,45 @@ public static class PathUtils
         '\u0098', '\u0099', '\u009A', '\u009B', '\u009C', '\u009D', '\u009E', '\u009F'
     ];
 
-    // Characters that are illegal on *any* of the three OSes. Let's start with .NET's useless APIs.
-    // Path.GetInvalidPathChars() and Path.GetInvalidFileNameChars() are funny and docs say they are
-    // broken. They return different results on different platforms, but we use them to be extra
-    // sure. Even though we are doubly adding some of their characters.
-    private static readonly char[] IllegalChars =
-        Path.GetInvalidPathChars()
-            .Concat(Path.GetInvalidFileNameChars())
-            // ' ' (space), | (pipe) and slashes are common sense; NUL is illegal everywhere; '\u007F' is DEL and ':'
-            // is sometimes illegal; There are others, which we want to remove to be sure.
-            .Concat([' ', '|', '/', '\\', '\0', '\u007F', ':', '"', '<', '>', '!', '?', '$', '&', '~', '#', '%', '^'])
-            // all ASCII control characters (0x00-0x1F) -- this also contains the '\0' again, but it is more readable
-            .Concat(Enumerable.Range(0, 32).Select(i => (char)i)) // C0 controls
-            .Concat(C1ControlCharacters)
-            .Concat(ProblematicUnicodeChars)
-            .Distinct()
-            .ToArray();
+    // We intentionally do NOT use Path.GetInvalidFileNameChars() or Path.GetInvalidPathChars()
+    // because they return different sets per OS (e.g., macOS returns only ['\0', '/'], missing
+    // '*', '?', ':', etc.). Instance directories are stored in the database and must be valid
+    // when exported and imported across Windows, macOS, and Linux. This hardcoded superset
+    // covers NTFS, ReFS, FAT16/32, exFAT, ext4, Btrfs, XFS, ZFS, APFS, and HFS+.
+    //
+    // Note on CJK locale display: On Japanese Windows (code page 932), U+005C (backslash) is
+    // rendered as ¥ (yen sign). On Korean Windows (code page 949), it is rendered as ₩ (won
+    // sign). These are display artifacts of the same byte 0x5C — the backslash entry below
+    // already covers them. U+00A5 and U+20A9 themselves are NOT filesystem-forbidden.
+    private static readonly char[] IllegalChars = new char[]
+        {
+            // Forbidden on NTFS, ReFS, FAT16/32, exFAT (Windows filesystems)
+            '<', // U+003C
+            '>', // U+003E
+            ':', // U+003A — also legacy HFS+ path separator on macOS
+            '"', // U+0022
+            '|', // U+007C
+            '?', // U+003F
+            '*', // U+002A
+
+            // Path separators — forbidden on all filesystems
+            '/', // U+002F — POSIX separator (ext4, Btrfs, XFS, ZFS, APFS, HFS+)
+            '\\', // U+005C — Windows separator (NTFS, ReFS, FAT, exFAT)
+
+            // Control characters
+            '\0', // U+0000 — forbidden on every filesystem
+            '\u007F', // U+007F (DEL) — not filesystem-forbidden but problematic everywhere
+
+            // Extra characters we disallow for portability and safety
+            ' ', // trailing/leading spaces break Windows; we strip them entirely
+            '!', '$', '&', '~', '#', '%', '^',
+        }
+        // All C0 control characters (U+0000–U+001F) — forbidden on NTFS, ReFS, FAT, exFAT
+        .Concat(Enumerable.Range(0, 32).Select(i => (char)i))
+        .Concat(C1ControlCharacters)
+        .Concat(ProblematicUnicodeChars)
+        .Distinct()
+        .ToArray();
 
     // Regex that matches any illegal char (fast pre-filter)
     private static readonly Regex IllegalCharRegex = new(

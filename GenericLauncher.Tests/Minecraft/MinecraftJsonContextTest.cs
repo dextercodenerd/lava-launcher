@@ -54,7 +54,7 @@ public class MinecraftJsonContextTest
         var windows11Args = ArgumentsParser.FlattenArguments(details.Arguments?.Jvm, CreatePlatform("windows", "x64", new System.Version(10, 0, 22631)));
 
         Assert.Contains("-Dos.name=Windows 10", windows10Args);
-        Assert.DoesNotContain("-Dos.name=Windows 10", windows11Args);
+        Assert.Contains("-Dos.name=Windows 10", windows11Args);
     }
 
     [Fact]

@@ -246,7 +246,7 @@ public sealed class FabricModLoaderService : IModLoaderService
             .DistinctBy(l => l.Name)
             .Select(lib =>
             {
-                var relativePath = MavenToRelativePath(lib.Name);
+                var relativePath = MavenCoordinate.ToRelativePath(lib.Name);
                 var baseUrl = string.IsNullOrWhiteSpace(lib.Url) ? FabricMavenBaseUrl : lib.Url!;
                 var normalizedBaseUrl = baseUrl.EndsWith('/') ? baseUrl : $"{baseUrl}/";
                 var url = $"{normalizedBaseUrl}{relativePath}";
@@ -260,6 +260,4 @@ public sealed class FabricModLoaderService : IModLoaderService
             })
             .ToImmutableList();
     }
-
-    private static string MavenToRelativePath(string maven) => MavenCoordinate.ToRelativePath(maven);
 }

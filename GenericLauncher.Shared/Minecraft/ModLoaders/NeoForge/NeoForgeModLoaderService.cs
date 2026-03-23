@@ -5,13 +5,10 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Xml.Linq;
 using CliWrap;
 using CliWrap.Buffered;
 using GenericLauncher.Http;
@@ -106,7 +103,7 @@ public sealed partial class NeoForgeModLoaderService : IModLoaderService
         Directory.CreateDirectory(_versionsFolder);
         Directory.CreateDirectory(_librariesFolder);
 
-        var launchVersionId = CreateLaunchVersionId(selected);
+        var launchVersionId = $"neoforge-{selected.LoaderVersionId}";
         var versionFolder = Path.Combine(_versionsFolder, launchVersionId);
         Directory.CreateDirectory(versionFolder);
 
@@ -117,8 +114,16 @@ public sealed partial class NeoForgeModLoaderService : IModLoaderService
         await EnsureInstallerMetadataAsync(selected, installerJarPath, installProfilePath, profilePath,
             cancellationToken);
 
-        var installProfile = await ReadInstallProfileAsync(installProfilePath, cancellationToken);
-        var versionProfile = await ReadVersionProfileAsync(profilePath, cancellationToken);
+        await using var installProfileStream = File.OpenRead(installProfilePath);
+        var installProfile = await JsonSerializer.DeserializeAsync(installProfileStream,
+                                 NeoForgeJsonContext.Default.NeoForgeInstallProfile, cancellationToken)
+                             ?? throw new InvalidOperationException(
+                                 $"Failed to deserialize {DisplayName} install profile");
+        await using var versionProfileStream = File.OpenRead(profilePath);
+        var versionProfile = await JsonSerializer.DeserializeAsync(versionProfileStream,
+                                 NeoForgeJsonContext.Default.NeoForgeVersionProfile, cancellationToken)
+                             ?? throw new InvalidOperationException(
+                                 $"Failed to deserialize {DisplayName} launcher profile");
 
         ValidateResolvedVersion(minecraftVersionId, selected, installProfile, versionProfile);
 
@@ -164,8 +169,16 @@ public sealed partial class NeoForgeModLoaderService : IModLoaderService
         Directory.CreateDirectory(_loaderRootFolder);
         Directory.CreateDirectory(_librariesFolder);
 
-        var installProfile = await ReadInstallProfileAsync(resolved.InstallProfileJsonPath, cancellationToken);
-        var versionProfile = await ReadVersionProfileAsync(resolved.ProfileJsonPath, cancellationToken);
+        await using var installProfileStream = File.OpenRead(resolved.InstallProfileJsonPath);
+        var installProfile = await JsonSerializer.DeserializeAsync(installProfileStream,
+                                 NeoForgeJsonContext.Default.NeoForgeInstallProfile, cancellationToken)
+                             ?? throw new InvalidOperationException(
+                                 $"Failed to deserialize {DisplayName} install profile");
+        await using var versionProfileStream = File.OpenRead(resolved.ProfileJsonPath);
+        var versionProfile = await JsonSerializer.DeserializeAsync(versionProfileStream,
+                                 NeoForgeJsonContext.Default.NeoForgeVersionProfile, cancellationToken)
+                             ?? throw new InvalidOperationException(
+                                 $"Failed to deserialize {DisplayName} launcher profile");
         var versionFolder = Path.GetDirectoryName(resolved.ProfileJsonPath)
                             ?? throw new InvalidOperationException("Resolved profile path does not have a folder");
 
@@ -179,17 +192,19 @@ public sealed partial class NeoForgeModLoaderService : IModLoaderService
         }
 
         var completed = 0;
-        foreach (var item in downloadItems)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (!string.IsNullOrWhiteSpace(item.Url))
+        await Parallel.ForEachAsync(
+            downloadItems,
+            new ParallelOptions { MaxDegreeOfParallelism = 10, CancellationToken = cancellationToken },
+            async (item, token) =>
             {
-                await _fileDownloader.DownloadFileAsync(item.Url!, item.FilePath, item.Sha1, null, cancellationToken);
-            }
+                if (!string.IsNullOrWhiteSpace(item.Url))
+                {
+                    await _fileDownloader.DownloadFileAsync(item.Url!, item.FilePath, item.Sha1, null, token);
+                }
 
-            completed++;
-            progress?.Report((double)completed / totalSteps);
-        }
+                var done = Interlocked.Increment(ref completed);
+                progress?.Report((double)done / totalSteps);
+            });
 
         foreach (var processor in processors)
         {
@@ -228,18 +243,12 @@ public sealed partial class NeoForgeModLoaderService : IModLoaderService
             reload,
             cancellationToken);
 
-        return ParseMavenMetadataVersions(xml)
+        return MavenCoordinate.ParseMetadataVersions(xml)
             .Where(v => v.Equals(prefix, StringComparison.Ordinal) ||
                         v.StartsWith($"{prefix}.", StringComparison.Ordinal))
             .Select(v => new NeoForgeVersionCandidate(v, v))
             .ToImmutableList();
     }
-
-    private static string BuildInstallerUrl(NeoForgeVersionCandidate candidate) =>
-        $"https://maven.neoforged.net/releases/net/neoforged/neoforge/{candidate.ArtifactVersionId}/neoforge-{candidate.ArtifactVersionId}-installer.jar";
-
-    private static string CreateLaunchVersionId(NeoForgeVersionCandidate candidate) =>
-        $"neoforge-{candidate.LoaderVersionId}";
 
     private async Task<string> GetCachedOrDownloadTextAsync(
         string cachePath,
@@ -266,13 +275,6 @@ public sealed partial class NeoForgeModLoaderService : IModLoaderService
         return payload;
     }
 
-    private static ImmutableList<string> ParseMavenMetadataVersions(string xml) => XDocument.Parse(xml)
-        .Descendants("version")
-        .Select(v => v.Value.Trim())
-        .Where(v => !string.IsNullOrWhiteSpace(v))
-        .Reverse()
-        .ToImmutableList();
-
     private async Task EnsureInstallerMetadataAsync(
         NeoForgeVersionCandidate candidate,
         string installerJarPath,
@@ -285,7 +287,8 @@ public sealed partial class NeoForgeModLoaderService : IModLoaderService
             return;
         }
 
-        var installerUrl = BuildInstallerUrl(candidate);
+        var installerUrl =
+            $"https://maven.neoforged.net/releases/net/neoforged/neoforge/{candidate.ArtifactVersionId}/neoforge-{candidate.ArtifactVersionId}-installer.jar";
         await _fileDownloader.DownloadFileAsync(installerUrl, installerJarPath, null, null, cancellationToken);
 
         await using var installerStream = File.OpenRead(installerJarPath);
@@ -297,20 +300,6 @@ public sealed partial class NeoForgeModLoaderService : IModLoaderService
                 new ZipExtractionRequest("version.json", profilePath),
             ],
             cancellationToken);
-    }
-
-    private async Task<NeoForgeInstallProfile> ReadInstallProfileAsync(string path, CancellationToken cancellationToken)
-    {
-        var json = await File.ReadAllTextAsync(path, cancellationToken);
-        return JsonSerializer.Deserialize(json, NeoForgeJsonContext.Default.NeoForgeInstallProfile)
-               ?? throw new InvalidOperationException($"Failed to deserialize {DisplayName} install profile");
-    }
-
-    private async Task<NeoForgeVersionProfile> ReadVersionProfileAsync(string path, CancellationToken cancellationToken)
-    {
-        var json = await File.ReadAllTextAsync(path, cancellationToken);
-        return JsonSerializer.Deserialize(json, NeoForgeJsonContext.Default.NeoForgeVersionProfile)
-               ?? throw new InvalidOperationException($"Failed to deserialize {DisplayName} launcher profile");
     }
 
     private void ValidateResolvedVersion(
@@ -460,7 +449,7 @@ public sealed partial class NeoForgeModLoaderService : IModLoaderService
 
             try
             {
-                if (!await VerifyFileHashAsync(outputPath, expectedHash, cancellationToken))
+                if (!await FileDownloader.VerifyFileHashAsync(outputPath, expectedHash, cancellationToken))
                 {
                     return false;
                 }
@@ -490,7 +479,7 @@ public sealed partial class NeoForgeModLoaderService : IModLoaderService
             processorClassPathEntries.AddRange(processor.Classpath.Select(ResolveCoordinatePath));
         }
 
-        var mainClass = ReadJarMainClass(processorJarPath)
+        var mainClass = ZipUtils.ReadJarMainClass(processorJarPath)
                         ?? throw new InvalidOperationException(
                             $"Processor jar '{processorJarPath}' is missing Main-Class");
 
@@ -668,45 +657,6 @@ public sealed partial class NeoForgeModLoaderService : IModLoaderService
     {
         return Path.Combine(_librariesFolder,
             MavenCoordinate.ToRelativePath(coordinate).Replace('/', Path.DirectorySeparatorChar));
-    }
-
-    private static string? ReadJarMainClass(string jarPath)
-    {
-        using var archive = ZipFile.OpenRead(jarPath);
-        var manifestEntry = archive.GetEntry("META-INF/MANIFEST.MF");
-        if (manifestEntry is null)
-        {
-            return null;
-        }
-
-        using var reader = new StreamReader(manifestEntry.Open(), Encoding.UTF8, false, leaveOpen: false);
-        while (!reader.EndOfStream)
-        {
-            var line = reader.ReadLine();
-            if (line?.StartsWith("Main-Class:", StringComparison.OrdinalIgnoreCase) == true)
-            {
-                return line["Main-Class:".Length..].Trim();
-            }
-        }
-
-        return null;
-    }
-
-    private static async Task<bool> VerifyFileHashAsync(
-        string filePath,
-        string expectedHash,
-        CancellationToken cancellationToken)
-    {
-        await using var fileStream = File.OpenRead(filePath);
-        var hash = expectedHash.Length switch
-        {
-            40 => await SHA1.HashDataAsync(fileStream, cancellationToken),
-            64 => await SHA256.HashDataAsync(fileStream, cancellationToken),
-            _ => throw new ArgumentException($"Unsupported hash length {expectedHash.Length}", nameof(expectedHash)),
-        };
-
-        var actualHash = Convert.ToHexString(hash).ToLowerInvariant();
-        return string.Equals(actualHash, expectedHash, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? NormalizeMinecraftVersionPrefix(string minecraftVersionId)
