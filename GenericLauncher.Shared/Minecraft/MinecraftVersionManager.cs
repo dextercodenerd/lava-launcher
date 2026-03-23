@@ -83,8 +83,8 @@ public sealed class MinecraftVersionManager : IDisposable
             try
             {
                 // TODO: Use a Lazy<> property to cache the parsed manifest
-                var manifestJson = await File.ReadAllTextAsync(manifestJsonPath, cancellationToken);
-                var manifest = JsonSerializer.Deserialize(manifestJson, MinecraftJsonContext.Default.MinecraftManifest);
+                var manifest = await File.DeserializeJsonAsync(manifestJsonPath,
+                    MinecraftJsonContext.Default.MinecraftManifest, cancellationToken);
                 if (manifest is not null)
                 {
                     return manifest.Versions.Where(v => v.Type == VersionInfo.TypeRelease);
@@ -132,9 +132,8 @@ public sealed class MinecraftVersionManager : IDisposable
         // TODO: Use Lazy<> or somehow cache these
         var installationFolder = GetInstallationFolder(versionId);
         var clientJsonPath = GetClientJsonPath(versionId);
-        var versionDetailsJson = await File.ReadAllTextAsync(clientJsonPath, cancellationToken);
-
-        var versionDetails = JsonSerializer.Deserialize(versionDetailsJson, MinecraftJsonContext.Default.VersionDetails)
+        var versionDetails = await File.DeserializeJsonAsync(clientJsonPath,
+                                 MinecraftJsonContext.Default.VersionDetails, cancellationToken)
                              ?? throw new InvalidOperationException($"Failed to get details for version '{versionId}'");
 
         return new Version(
@@ -381,8 +380,8 @@ public sealed class MinecraftVersionManager : IDisposable
             cancellationToken);
 
         // Parse assets index and download assets
-        var assetsJson = await File.ReadAllTextAsync(assetsIndexPath, cancellationToken);
-        var assetsManifest = JsonSerializer.Deserialize(assetsJson, MinecraftJsonContext.Default.AssetsManifest)
+        var assetsManifest = await File.DeserializeJsonAsync(assetsIndexPath,
+                                 MinecraftJsonContext.Default.AssetsManifest, cancellationToken)
                              ?? throw new InvalidOperationException("Failed to deserialize assets manifest");
 
         // Minecraft assets can contain duplicate file URLs/hashes e.g., in 1.18, so we take just the unique values.

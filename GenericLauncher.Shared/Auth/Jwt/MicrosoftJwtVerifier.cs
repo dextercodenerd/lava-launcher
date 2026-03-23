@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
 using System.Net.Http;
+using System.Net.Http.Json;
 using System.Security.Authentication;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -167,10 +168,10 @@ public sealed class MicrosoftJwtVerifier : IDisposable
             using var configResponse = await _httpClient.GetAsync(openIdConfigUrl, cancellationToken);
             configResponse.EnsureSuccessStatusCode();
 
-            var config = await JsonSerializer.DeserializeAsync(
-                await configResponse.Content.ReadAsStreamAsync(cancellationToken),
-                AuthJsonContext.Default.OpenIdConfiguration,
-                cancellationToken) ?? throw new InvalidOperationException("Failed to parse OpenID configuration");
+            var config =
+                await configResponse.Content.ReadFromJsonAsync(AuthJsonContext.Default.OpenIdConfiguration,
+                    cancellationToken)
+                ?? throw new InvalidOperationException("Failed to parse OpenID configuration");
 
             // Get JWKS
             using var jwksResponse = await _httpClient.GetAsync(config.JwksUri, cancellationToken);

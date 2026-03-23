@@ -1,9 +1,19 @@
 using System;
+using System.Collections.Immutable;
+using System.Linq;
+using System.Xml.Linq;
 
 namespace GenericLauncher.Minecraft.ModLoaders;
 
 internal static class MavenCoordinate
 {
+    internal static ImmutableList<string> ParseMetadataVersions(string xml) => XDocument.Parse(xml)
+        .Descendants("version")
+        .Select(v => v.Value.Trim())
+        .Where(v => !string.IsNullOrWhiteSpace(v))
+        .Reverse()
+        .ToImmutableList();
+
     internal static string ToRelativePath(string maven)
     {
         // Format: group:artifact:version[:classifier][@ext]
