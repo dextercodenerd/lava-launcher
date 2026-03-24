@@ -199,8 +199,9 @@ public class FileDownloader
         {
             40 => await SHA1.HashDataAsync(fileStream, cancellationToken),
             64 => await SHA256.HashDataAsync(fileStream, cancellationToken),
+            128 => await SHA512.HashDataAsync(fileStream, cancellationToken),
             _ => throw new ArgumentException(
-                $"Unsupported hash length: {expectedHash.Length}. Expected 40 (SHA1) or 64 (SHA256) characters.",
+                $"Unsupported hash length: {expectedHash.Length}. Expected 40 (SHA1), 64 (SHA256), or 128 (SHA512) characters.",
                 nameof(expectedHash)),
         };
 

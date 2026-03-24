@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using System.Collections.Generic;
 
 namespace GenericLauncher.Modrinth.Json;
 
@@ -10,5 +11,15 @@ namespace GenericLauncher.Modrinth.Json;
 [JsonSerializable(typeof(ModrinthLicense))]
 [JsonSerializable(typeof(ModrinthGalleryItem))]
 [JsonSerializable(typeof(ModrinthGalleryItem[]))]
+[JsonSerializable(typeof(ModrinthVersion))]
+[JsonSerializable(typeof(ModrinthVersion[]))]
+[JsonSerializable(typeof(ModrinthDependency))]
+[JsonSerializable(typeof(ModrinthDependency[]))]
+[JsonSerializable(typeof(ModrinthVersionFile))]
+[JsonSerializable(typeof(ModrinthVersionFile[]))]
+[JsonSerializable(typeof(ModrinthFileHashes))]
+[JsonSerializable(typeof(ModrinthVersionFilesUpdateRequest))]
+[JsonSerializable(typeof(Dictionary<string, ModrinthVersion>))]
 [JsonSerializable(typeof(string[][]))]
+[JsonSerializable(typeof(string[]))]
 public partial class ModrinthJsonContext : JsonSerializerContext;

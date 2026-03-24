@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
@@ -71,6 +73,70 @@ public class ModrinthApiClient
         {
             // TODO: rethrow and handle on the caller's side
             _logger?.LogError(ex, "Failed to get Modrinth project: {IdOrSlug}", idOrSlug);
+            return null;
+        }
+    }
+
+    public async Task<ModrinthVersion[]?> GetProjectVersionsAsync(
+        string idOrSlug,
+        string? minecraftVersion = null,
+        string? loader = null,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var parameters = HttpUtility.ParseQueryString(string.Empty);
+            if (!string.IsNullOrWhiteSpace(minecraftVersion))
+            {
+                parameters["game_versions"] = JsonSerializer.Serialize(
+                    new[] { minecraftVersion },
+                    typeof(string[]),
+                    ModrinthJsonContext.Default);
+            }
+
+            if (!string.IsNullOrWhiteSpace(loader))
+            {
+                parameters["loaders"] = JsonSerializer.Serialize(
+                    new[] { loader },
+                    typeof(string[]),
+                    ModrinthJsonContext.Default);
+            }
+
+            var queryString = parameters.ToString();
+            var url = string.IsNullOrWhiteSpace(queryString)
+                ? $"{BaseUrl}/project/{Uri.EscapeDataString(idOrSlug)}/version"
+                : $"{BaseUrl}/project/{Uri.EscapeDataString(idOrSlug)}/version?{queryString}";
+            _logger?.LogInformation("Fetching Modrinth project versions: {IdOrSlug}", idOrSlug);
+
+            var response = await _httpClient.GetAsync(url, cancellationToken);
+            response.EnsureSuccessStatusCode();
+
+            return await response.Content.ReadFromJsonAsync(ModrinthJsonContext.Default.ModrinthVersionArray,
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to get Modrinth project versions: {IdOrSlug}", idOrSlug);
+            return null;
+        }
+    }
+
+    public async Task<ModrinthVersion?> GetVersionAsync(string versionId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var url = $"{BaseUrl}/version/{Uri.EscapeDataString(versionId)}";
+            _logger?.LogInformation("Fetching Modrinth version: {VersionId}", versionId);
+
+            var response = await _httpClient.GetAsync(url, cancellationToken);
+            response.EnsureSuccessStatusCode();
+
+            return await response.Content.ReadFromJsonAsync(ModrinthJsonContext.Default.ModrinthVersion,
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to get Modrinth version: {VersionId}", versionId);
             return null;
         }
     }

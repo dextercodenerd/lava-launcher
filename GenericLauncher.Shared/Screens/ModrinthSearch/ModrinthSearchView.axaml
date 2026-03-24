@@ -3,6 +3,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:modrinthSearch="clr-namespace:GenericLauncher.Screens.ModrinthSearch"
+             xmlns:instanceMods="clr-namespace:GenericLauncher.InstanceMods"
              xmlns:asyncImageLoader="clr-namespace:AsyncImageLoader;assembly=AsyncImageLoader.Avalonia"
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="600"
              x:Class="GenericLauncher.Screens.ModrinthSearch.ModrinthSearchView"
@@ -12,13 +13,13 @@
         <modrinthSearch:ModrinthSearchViewModel />
     </Design.DataContext>
 
-    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="16">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" Margin="16">
         <!-- Search Bar -->
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0 0 0 16">
             <TextBox
                 Grid.Column="0"
                 Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
-                Watermark="Search for mods, modpacks, shaders..."
+                Watermark="Search Modrinth"
                 Margin="0 0 8 0">
                 <TextBox.KeyBindings>
                     <KeyBinding Gesture="Enter" Command="{Binding SearchCommand}" />
@@ -30,12 +31,32 @@
                 Command="{Binding SearchCommand}" />
         </Grid>
 
+        <Border Grid.Row="1"
+                IsVisible="{Binding HasLockedFilters}"
+                Background="#E6F2FF"
+                CornerRadius="8"
+                Padding="12"
+                Margin="0 0 0 16">
+            <TextBlock Text="{Binding LockedFiltersSummary, StringFormat='{}Fixed filters: {0}'}"
+                       TextWrapping="Wrap" />
+        </Border>
+
+        <Border Grid.Row="2"
+                IsVisible="{Binding InstallMessage, Converter={x:Static ObjectConverters.IsNotNull}}"
+                Background="#EAF8EC"
+                CornerRadius="8"
+                Padding="12"
+                Margin="0 0 0 16">
+            <TextBlock Text="{Binding InstallMessage}" TextWrapping="Wrap" />
+        </Border>
+
         <!-- Filters -->
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" Margin="0 0 0 16">
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8" Margin="0 0 0 16">
             <TextBlock Text="Type:" VerticalAlignment="Center" />
             <ComboBox
                 SelectedIndex="{Binding SelectedProjectType}"
-                MinWidth="120">
+                MinWidth="120"
+                IsEnabled="{Binding !HasLockedFilters}">
                 <!-- TODO: These need to be in the same order as the enum values, because we are using SelectedIndex binding, fix this -->
                 <ComboBoxItem Content="All" />
                 <ComboBoxItem Content="Mods" />
@@ -58,7 +79,7 @@
         </StackPanel>
 
         <!-- Results List -->
-        <Border Grid.Row="2" Background="LightGray" CornerRadius="8" Padding="8">
+        <Border Grid.Row="4" Background="LightGray" CornerRadius="8" Padding="8">
             <Grid>
                 <!-- Loading Overlay -->
                 <Border
@@ -98,82 +119,146 @@
                 <ScrollViewer IsVisible="{Binding !IsLoading}">
                     <ItemsControl ItemsSource="{Binding SearchResults}">
                         <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Button
-                                    Command="{Binding $parent[ItemsControl].((modrinthSearch:ModrinthSearchViewModel)DataContext).OpenProjectDetailsCommand}"
-                                    CommandParameter="{Binding}"
-                                    Margin="0 0 0 8"
-                                    HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Stretch"
-                                    Padding="0"
-                                    BorderThickness="0"
-                                    Background="Transparent">
-                                    <Button.Styles>
-                                        <Style Selector="Button:pointerover /template/ ContentPresenter">
-                                            <Setter Property="Background" Value="Transparent" />
-                                        </Style>
-                                        <Style Selector="Button">
-                                            <Setter Property="Template">
-                                                <ControlTemplate>
-                                                    <Border
-                                                        Background="White"
-                                                        CornerRadius="4"
-                                                        Padding="12"
-                                                        Cursor="Hand">
-                                                        <ContentPresenter Content="{TemplateBinding Content}" />
-                                                    </Border>
-                                                </ControlTemplate>
-                                            </Setter>
-                                        </Style>
-                                    </Button.Styles>
-
-                                    <Grid ColumnDefinitions="48,*">
-                                        <!-- Icon -->
-                                        <Image
+                            <DataTemplate x:DataType="modrinthSearch:ModrinthSearchResultItemViewModel">
+                                <Border
+                                    Background="{DynamicResource ThemeControlLowBrush}"
+                                    BorderBrush="{DynamicResource ThemeControlMidBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="4"
+                                    Padding="12"
+                                    Margin="0 0 0 8">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <Button
                                             Grid.Column="0"
-                                            Width="48"
-                                            Height="48"
-                                            Margin="0 0 12 0"
-                                            asyncImageLoader:ImageLoader.Source="{Binding IconUrl}"
-                                            Stretch="UniformToFill" />
+                                            Command="{Binding $parent[ItemsControl].((modrinthSearch:ModrinthSearchViewModel)DataContext).OpenProjectDetailsCommand}"
+                                            CommandParameter="{Binding}"
+                                            HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Stretch"
+                                            Padding="0"
+                                            BorderThickness="0"
+                                            Background="Transparent">
+                                            <Button.Styles>
+                                                <Style Selector="Button:pointerover /template/ ContentPresenter">
+                                                    <Setter Property="Background" Value="Transparent" />
+                                                </Style>
+                                            </Button.Styles>
+                                            <Grid ColumnDefinitions="48,*">
+                                                <Image
+                                                    Width="48"
+                                                    Height="48"
+                                                    Margin="0 0 12 0"
+                                                    asyncImageLoader:ImageLoader.Source="{Binding IconUrl}"
+                                                    Stretch="UniformToFill" />
 
-                                        <!-- Project Info -->
-                                        <StackPanel Grid.Column="1" Spacing="4">
-                                            <TextBlock
-                                                Text="{Binding Title}"
-                                                FontWeight="Bold"
-                                                FontSize="14"
-                                                Foreground="Black" />
-                                            <TextBlock
-                                                Text="{Binding Description}"
-                                                TextWrapping="Wrap"
-                                                MaxLines="2"
-                                                FontSize="12"
-                                                Foreground="#666" />
-                                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                                <TextBlock
-                                                    Text="{Binding Downloads, StringFormat='⬇ {0:N0}'}"
-                                                    FontSize="11"
-                                                    Foreground="#999" />
-                                                <TextBlock
-                                                    Text="{Binding ProjectType}"
-                                                    FontSize="11"
-                                                    Foreground="#f76806"
-                                                    FontWeight="Bold" />
-                                            </StackPanel>
+                                                <StackPanel Grid.Column="1" Spacing="4">
+                                                    <TextBlock
+                                                        Text="{Binding Title}"
+                                                        FontWeight="Bold"
+                                                        FontSize="14"
+                                                        Foreground="{DynamicResource ThemeForegroundBrush}" />
+                                                    <TextBlock
+                                                        Text="{Binding Description}"
+                                                        TextWrapping="Wrap"
+                                                        MaxLines="2"
+                                                        FontSize="12"
+                                                        Foreground="{DynamicResource ThemeForegroundBrush}"
+                                                        Opacity="0.72" />
+                                                    <StackPanel Orientation="Horizontal" Spacing="12">
+                                                        <TextBlock
+                                                            Text="{Binding Downloads, StringFormat='⬇ {0:N0}'}"
+                                                            FontSize="11"
+                                                            Foreground="{DynamicResource ThemeForegroundBrush}"
+                                                            Opacity="0.62" />
+                                                        <TextBlock
+                                                            Text="{Binding ProjectType}"
+                                                            FontSize="11"
+                                                            Foreground="#f76806"
+                                                            FontWeight="Bold" />
+                                                    </StackPanel>
+                                                    <TextBlock
+                                                        Text="{Binding StatusText}"
+                                                        IsVisible="{Binding HasStatusText}"
+                                                        FontSize="11"
+                                                        Foreground="{DynamicResource ThemeForegroundBrush}"
+                                                        Opacity="0.72" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Button>
+
+                                        <StackPanel
+                                            Grid.Column="1"
+                                            Margin="12 0 0 0"
+                                            VerticalAlignment="Center"
+                                            Spacing="8">
+                                            <Button
+                                                Content="Install"
+                                                MinWidth="72"
+                                                IsVisible="{Binding ShowInstallButton}"
+                                                Command="{Binding $parent[ItemsControl].((modrinthSearch:ModrinthSearchViewModel)DataContext).InstallCommand}"
+                                                CommandParameter="{Binding}" />
+                                            <Button
+                                                Content="Update"
+                                                MinWidth="72"
+                                                IsVisible="{Binding ShowUpdateButton}"
+                                                Command="{Binding $parent[ItemsControl].((modrinthSearch:ModrinthSearchViewModel)DataContext).UpdateCommand}"
+                                                CommandParameter="{Binding}" />
                                         </StackPanel>
                                     </Grid>
-                                </Button>
+                                </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </ScrollViewer>
+
+                <Border
+                    Background="#DD000000"
+                    IsVisible="{Binding InstallTargetPicker.IsOpen}"
+                    ZIndex="12">
+                    <Border
+                        Width="420"
+                        Background="White"
+                        CornerRadius="12"
+                        Padding="16"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+                        <StackPanel Spacing="12">
+                            <TextBlock Text="{Binding InstallTargetPicker.Title}" FontWeight="Bold" FontSize="18" />
+                            <TextBlock Text="{Binding InstallTargetPicker.Message}"
+                                       IsVisible="{Binding InstallTargetPicker.Message, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Text="Loading..."
+                                       IsVisible="{Binding InstallTargetPicker.IsLoading}" />
+                            <ItemsControl ItemsSource="{Binding InstallTargetPicker.Targets}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="instanceMods:CompatibleInstanceInstallTarget">
+                                        <Button
+                                            Command="{Binding $parent[ItemsControl].((modrinthSearch:ModrinthSearchViewModel)DataContext).InstallToInstanceCommand}"
+                                            CommandParameter="{Binding}"
+                                            HorizontalContentAlignment="Stretch">
+                                            <Button.Content>
+                                                <StackPanel Spacing="2">
+                                                    <TextBlock Text="{Binding Instance.Id}" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding Instance.VersionId, StringFormat='MC {0}'}" FontSize="12" />
+                                                    <TextBlock Text="{Binding Instance.ModLoader}" FontSize="12" />
+                                                </StackPanel>
+                                            </Button.Content>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Button
+                                Content="Close"
+                                Command="{Binding CloseInstallPickerCommand}"
+                                HorizontalAlignment="Right" />
+                        </StackPanel>
+                    </Border>
+                </Border>
             </Grid>
         </Border>
 
         <!-- Pagination -->
         <StackPanel
-            Grid.Row="3"
+            Grid.Row="5"
             Orientation="Horizontal"
             HorizontalAlignment="Center"
             Spacing="8"

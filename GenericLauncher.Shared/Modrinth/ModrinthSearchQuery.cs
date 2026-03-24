@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Collections.Generic;
+using System.Linq;
 using GenericLauncher.Modrinth.Json;
 
 namespace GenericLauncher.Modrinth;
@@ -11,7 +13,8 @@ public record ModrinthSearchQuery(
     ModrinthProjectType ProjectType = ModrinthProjectType.All,
     string SortOrder = "relevance",
     int Offset = 0,
-    int Limit = 20)
+    int Limit = 20,
+    IReadOnlyList<IReadOnlyList<string>>? FacetGroups = null)
 {
     /// <summary>
     /// Builds the facets JSON string for the API request.
@@ -28,18 +31,25 @@ public record ModrinthSearchQuery(
             _ => "",
         };
 
-        if (string.IsNullOrEmpty(projectTypeValue))
+        var facets = new List<string[]>();
+        if (!string.IsNullOrEmpty(projectTypeValue))
+        {
+            facets.Add([$"project_type:{projectTypeValue}"]);
+        }
+
+        if (FacetGroups is not null)
+        {
+            facets.AddRange(FacetGroups
+                .Where(group => group.Count > 0)
+                .Select(group => group.ToArray()));
+        }
+
+        if (facets.Count == 0)
         {
             return "";
         }
 
-        // Facets format: [["project_type:mod"]]
-        var facets = new string[][]
-        {
-            [$"project_type:{projectTypeValue}",],
-        };
-
-        return JsonSerializer.Serialize(facets, typeof(string[][]), ModrinthJsonContext.Default);
+        return JsonSerializer.Serialize(facets.ToArray(), typeof(string[][]), ModrinthJsonContext.Default);
     }
 }
 

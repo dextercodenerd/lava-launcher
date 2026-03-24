@@ -3,35 +3,225 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:instanceDetails="clr-namespace:GenericLauncher.Screens.InstanceDetails"
+             xmlns:modrinthSearch="clr-namespace:GenericLauncher.Screens.ModrinthSearch"
+             xmlns:instanceMods="clr-namespace:GenericLauncher.InstanceMods"
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
              x:Class="GenericLauncher.Screens.InstanceDetails.InstanceDetailsView"
              x:DataType="instanceDetails:InstanceDetailsViewModel">
 
 
-    <Grid RowDefinitions="Auto, *">
-        <!-- Header -->
+    <Grid RowDefinitions="Auto,*">
+        <StackPanel Grid.Row="0"
+                    Orientation="Horizontal"
+                    Spacing="8"
+                    Margin="16 16 16 0">
+            <Button Content="Content"
+                    Command="{Binding SelectContentTabCommand}" />
+            <Button Content="Mods"
+                    Command="{Binding SelectModsTabCommand}" />
+        </StackPanel>
 
-        <!-- Content -->
-        <StackPanel Grid.Row="1" Margin="16" Spacing="16">
+        <Grid Grid.Row="1">
+            <StackPanel Margin="16" Spacing="16" IsVisible="{Binding IsContentTab}">
+                <StackPanel IsVisible="{Binding IsInstalling}" Spacing="8">
+                    <TextBlock Text="Installing..." FontWeight="SemiBold" />
+                    <ProgressBar Value="{Binding ProgressMessage}" Maximum="100" Height="20" />
+                    <TextBlock Text="{Binding ProgressMessage, StringFormat='{}Progress: {0}%'}"
+                               HorizontalAlignment="Center" FontSize="12" />
+                </StackPanel>
 
-            <!-- Install Status / Progress -->
-            <StackPanel IsVisible="{Binding IsInstalling}" Spacing="8">
-                <TextBlock Text="Installing..." FontWeight="SemiBold" />
-                <ProgressBar Value="{Binding ProgressMessage}" Maximum="100" Height="20" />
-                <TextBlock Text="{Binding ProgressMessage, StringFormat='{}Progress: {0}%'}"
-                           HorizontalAlignment="Center" FontSize="12" />
+                <Button Command="{Binding ClickPlayCommand}"
+                        Content="Play"
+                        FontSize="18"
+                        Padding="32, 12"
+                        HorizontalAlignment="Left"
+                        IsEnabled="{Binding RunningState, Converter={StaticResource IsStoppedConverter}}"
+                        IsVisible="{Binding !IsInstalling}" />
             </StackPanel>
 
-            <!-- Play Button -->
-            <Button Command="{Binding ClickPlayCommand}"
-                    Content="Play"
-                    FontSize="18"
-                    Padding="32, 12"
-                    HorizontalAlignment="Left"
-                    IsEnabled="{Binding RunningState, Converter={StaticResource IsStoppedConverter}}"
-                    IsVisible="{Binding !IsInstalling}" />
+            <ScrollViewer Margin="16" IsVisible="{Binding IsModsTab}">
+                <StackPanel Spacing="16">
+                    <StackPanel Spacing="16">
+                        <StackPanel IsVisible="{Binding !CanManageMods}" Spacing="8">
+                            <TextBlock Text="Mods are available only for Fabric, Forge, and NeoForge instances."
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
 
-        </StackPanel>
+                        <StackPanel IsVisible="{Binding CanManageMods}" Spacing="16">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Content="Add Mods"
+                                        Command="{Binding ShowAddModsCommand}" />
+                                <Button Content="Update All"
+                                        Command="{Binding UpdateAllModsCommand}"
+                                        IsEnabled="{Binding CanUpdateAll}" />
+                                <Button Content="Refresh"
+                                        Command="{Binding RefreshModsCommand}" />
+                            </StackPanel>
+
+                            <TextBlock Text="{Binding ModsStatusMessage}"
+                                       IsVisible="{Binding ModsStatusMessage, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding ModsErrorMessage}"
+                                       IsVisible="{Binding ModsErrorMessage, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                       TextWrapping="Wrap"
+                                       Foreground="IndianRed" />
+                            <TextBlock Text="Loading..."
+                                       IsVisible="{Binding IsModsLoading}" />
+
+                            <StackPanel IsVisible="{Binding IsSearchVisible}" Spacing="8">
+                                <Button Content="Back to Mods"
+                                        Command="{Binding CloseInlineSearchCommand}"
+                                        HorizontalAlignment="Left" />
+                                <modrinthSearch:ModrinthSearchView
+                                    DataContext="{Binding InlineSearchViewModel}" />
+                            </StackPanel>
+
+                            <StackPanel IsVisible="{Binding !IsSearchVisible}" Spacing="16">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Installed Mods" FontWeight="Bold" FontSize="16" />
+                                    <ItemsControl ItemsSource="{Binding InstalledMods}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="instanceMods:InstanceModListItem">
+                                                <Border Background="{DynamicResource ThemeControlLowBrush}"
+                                                        BorderBrush="{DynamicResource ThemeControlMidBrush}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="6"
+                                                        Padding="12"
+                                                        Margin="0 0 0 8">
+                                                    <Grid ColumnDefinitions="*,Auto">
+                                                        <StackPanel Spacing="4">
+                                                            <TextBlock Text="{Binding DisplayName}"
+                                                                       FontWeight="SemiBold"
+                                                                       Foreground="{DynamicResource ThemeForegroundBrush}" />
+                                                            <TextBlock Text="{Binding SecondaryText}"
+                                                                       FontSize="12"
+                                                                       Foreground="{DynamicResource ThemeForegroundBrush}"
+                                                                       Opacity="0.72" />
+                                                            <TextBlock Text="{Binding FileName}"
+                                                                       FontSize="12"
+                                                                       Foreground="{DynamicResource ThemeForegroundBrush}"
+                                                                       Opacity="0.72" />
+                                                            <TextBlock Text="{Binding LatestVersionNumber, StringFormat='{}Update available: {0}'}"
+                                                                       IsVisible="{Binding HasUpdate}"
+                                                                       FontSize="12"
+                                                                       Foreground="{DynamicResource ThemeAccentBrush}" />
+                                                        </StackPanel>
+                                                        <StackPanel Grid.Column="1" Spacing="8">
+                                                            <Button Content="Update"
+                                                                    IsVisible="{Binding CanUpdate}"
+                                                                    Command="{Binding $parent[ItemsControl].((instanceDetails:InstanceDetailsViewModel)DataContext).UpdateModItemCommand}"
+                                                                    CommandParameter="{Binding}" />
+                                                            <Button Content="Delete"
+                                                                    IsVisible="{Binding CanDelete}"
+                                                                    Command="{Binding $parent[ItemsControl].((instanceDetails:InstanceDetailsViewModel)DataContext).DeleteModItemCommand}"
+                                                                    CommandParameter="{Binding}" />
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Required Dependencies" FontWeight="Bold" FontSize="16" />
+                                    <ItemsControl ItemsSource="{Binding RequiredDependencies}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="instanceMods:InstanceModListItem">
+                                                <Border Background="{DynamicResource ThemeControlLowBrush}"
+                                                        BorderBrush="{DynamicResource ThemeControlMidBrush}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="6"
+                                                        Padding="12"
+                                                        Margin="0 0 0 8">
+                                                    <StackPanel Spacing="4">
+                                                        <TextBlock Text="{Binding DisplayName}"
+                                                                   FontWeight="SemiBold"
+                                                                   Foreground="{DynamicResource ThemeForegroundBrush}" />
+                                                        <TextBlock Text="{Binding SecondaryText}"
+                                                                   FontSize="12"
+                                                                   Foreground="{DynamicResource ThemeForegroundBrush}"
+                                                                   Opacity="0.72" />
+                                                        <TextBlock Text="{Binding RequiredByDisplay, StringFormat='{}Required by: {0}'}"
+                                                                   FontSize="12"
+                                                                   Foreground="{DynamicResource ThemeForegroundBrush}"
+                                                                   Opacity="0.72" />
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Manual Mods" FontWeight="Bold" FontSize="16" />
+                                    <ItemsControl ItemsSource="{Binding ManualMods}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="instanceMods:InstanceModListItem">
+                                                <Border Background="{DynamicResource ThemeControlLowBrush}"
+                                                        BorderBrush="{DynamicResource ThemeControlMidBrush}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="6"
+                                                        Padding="12"
+                                                        Margin="0 0 0 8">
+                                                    <Grid ColumnDefinitions="*,Auto">
+                                                        <StackPanel Spacing="4">
+                                                            <TextBlock Text="{Binding DisplayName}"
+                                                                       FontWeight="SemiBold"
+                                                                       Foreground="{DynamicResource ThemeForegroundBrush}" />
+                                                            <TextBlock Text="{Binding FileName}"
+                                                                       FontSize="12"
+                                                                       Foreground="{DynamicResource ThemeForegroundBrush}"
+                                                                       Opacity="0.72" />
+                                                        </StackPanel>
+                                                        <Button Grid.Column="1"
+                                                                Content="Delete"
+                                                                IsVisible="{Binding CanDelete}"
+                                                                Command="{Binding $parent[ItemsControl].((instanceDetails:InstanceDetailsViewModel)DataContext).DeleteModItemCommand}"
+                                                                CommandParameter="{Binding}" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Broken" FontWeight="Bold" FontSize="16" />
+                                    <ItemsControl ItemsSource="{Binding BrokenMods}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="instanceMods:InstanceModListItem">
+                                                <Border Background="{DynamicResource ThemeControlLowBrush}"
+                                                        BorderBrush="{DynamicResource ThemeControlMidBrush}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="6"
+                                                        Padding="12"
+                                                        Margin="0 0 0 8">
+                                                    <Grid ColumnDefinitions="*,Auto">
+                                                        <StackPanel Spacing="4">
+                                                            <TextBlock Text="{Binding DisplayName}"
+                                                                       FontWeight="SemiBold"
+                                                                       Foreground="{DynamicResource ThemeForegroundBrush}" />
+                                                            <TextBlock Text="{Binding FileName, StringFormat='{}Missing file: {0}'}"
+                                                                       FontSize="12"
+                                                                       Foreground="IndianRed" />
+                                                        </StackPanel>
+                                                        <Button Grid.Column="1"
+                                                                Content="Delete"
+                                                                IsVisible="{Binding CanDelete}"
+                                                                Command="{Binding $parent[ItemsControl].((instanceDetails:InstanceDetailsViewModel)DataContext).DeleteModItemCommand}"
+                                                                CommandParameter="{Binding}" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
     </Grid>
 </UserControl>
-

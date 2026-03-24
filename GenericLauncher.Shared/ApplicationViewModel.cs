@@ -2,6 +2,7 @@
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using GenericLauncher.Auth;
+using GenericLauncher.InstanceMods;
 using GenericLauncher.Minecraft;
 using GenericLauncher.Modrinth;
 using GenericLauncher.Screens.MainWindow;
@@ -16,21 +17,25 @@ public class ApplicationViewModel : ViewModelBase
     private readonly AuthService _auth;
     private readonly MinecraftLauncher _minecraftLauncher;
     private readonly ModrinthApiClient _modrinthApiClient;
+    private readonly InstanceModsManager _instanceModsManager;
 
     public ApplicationViewModel(
         AuthService authService,
         MinecraftLauncher minecraftLauncher,
-        ModrinthApiClient modrinthApiClient)
+        ModrinthApiClient modrinthApiClient,
+        InstanceModsManager instanceModsManager)
     {
         _auth = authService;
         _minecraftLauncher = minecraftLauncher;
         _modrinthApiClient = modrinthApiClient;
+        _instanceModsManager = instanceModsManager;
 
         _mainWindowViewModel =
             new MainWindowViewModel(
                 _auth,
                 _minecraftLauncher,
                 _modrinthApiClient,
+                _instanceModsManager,
                 // TODO: inject the logger factory into here?
                 App.LoggerFactory?.CreateLogger(typeof(MainWindowViewModel).FullName ?? ""));
         _mainWindow = new MainWindow

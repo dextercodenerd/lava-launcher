@@ -3,6 +3,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:details="clr-namespace:GenericLauncher.Screens.ModrinthProjectDetails"
+             xmlns:instanceMods="clr-namespace:GenericLauncher.InstanceMods"
              xmlns:asyncImageLoader="clr-namespace:AsyncImageLoader;assembly=AsyncImageLoader.Avalonia"
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="600"
              x:Class="GenericLauncher.Screens.ModrinthProjectDetails.ModrinthProjectDetailsView"
@@ -70,7 +71,31 @@
                         <TextBlock
                             Text="{Binding Project.Description}"
                             FontSize="14"
-                            Foreground="#666"
+                            Foreground="{DynamicResource ThemeForegroundBrush}"
+                            Opacity="0.72"
+                            TextWrapping="Wrap" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button
+                                Content="Install"
+                                IsVisible="{Binding ShowInstallAction}"
+                                Command="{Binding InstallCommand}"
+                                HorizontalAlignment="Left" />
+                            <Button
+                                Content="Update"
+                                IsVisible="{Binding ShowUpdateAction}"
+                                Command="{Binding UpdateCommand}"
+                                HorizontalAlignment="Left" />
+                        </StackPanel>
+                        <TextBlock
+                            Text="{Binding TargetStateText}"
+                            IsVisible="{Binding HasTargetStateText}"
+                            Foreground="{DynamicResource ThemeForegroundBrush}"
+                            Opacity="0.72"
+                            TextWrapping="Wrap" />
+                        <TextBlock
+                            Text="{Binding InstallMessage}"
+                            IsVisible="{Binding InstallMessage, Converter={x:Static ObjectConverters.IsNotNull}}"
+                            Foreground="#0b6b2f"
                             TextWrapping="Wrap" />
                     </StackPanel>
                 </Grid>
@@ -98,7 +123,7 @@
                 </Border>
 
                 <!-- Full Description -->
-                <Border Background="White" CornerRadius="8" Padding="16">
+                <Border Background="{DynamicResource ThemeControlLowBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="8">
                         <TextBlock Text="Description" FontSize="16" FontWeight="Bold" />
                         <TextBlock
@@ -110,7 +135,7 @@
                 </Border>
 
                 <!-- Supported Versions -->
-                <Border Background="White" CornerRadius="8" Padding="16"
+                <Border Background="{DynamicResource ThemeControlLowBrush}" CornerRadius="8" Padding="16"
                         IsVisible="{Binding Project.GameVersions.Length, Converter={StaticResource IsGreaterThanZeroConverter}}">
                     <StackPanel Spacing="8">
                         <TextBlock Text="Supported Minecraft Versions" FontSize="16" FontWeight="Bold" />
@@ -118,12 +143,26 @@
                             Text="{Binding Project.GameVersions, Converter={StaticResource JoinStringsConverter}}"
                             TextWrapping="Wrap"
                             FontSize="12"
-                            Foreground="#666" />
+                            Foreground="{DynamicResource ThemeForegroundBrush}"
+                            Opacity="0.72" />
+                    </StackPanel>
+                </Border>
+
+                <Border Background="{DynamicResource ThemeControlLowBrush}" CornerRadius="8" Padding="16"
+                        IsVisible="{Binding Project.Loaders.Length, Converter={StaticResource IsGreaterThanZeroConverter}}">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Supported Loaders" FontSize="16" FontWeight="Bold" />
+                        <TextBlock
+                            Text="{Binding Project.Loaders, Converter={StaticResource JoinStringsConverter}}"
+                            TextWrapping="Wrap"
+                            FontSize="12"
+                            Foreground="{DynamicResource ThemeForegroundBrush}"
+                            Opacity="0.72" />
                     </StackPanel>
                 </Border>
 
                 <!-- Links -->
-                <Border Background="White" CornerRadius="8" Padding="16">
+                <Border Background="{DynamicResource ThemeControlLowBrush}" CornerRadius="8" Padding="16">
                     <StackPanel Spacing="8">
                         <TextBlock Text="Links" FontSize="16" FontWeight="Bold" />
                         <StackPanel Spacing="4">
@@ -152,7 +191,7 @@
                 </Border>
 
                 <!-- License -->
-                <Border Background="White" CornerRadius="8" Padding="16"
+                <Border Background="{DynamicResource ThemeControlLowBrush}" CornerRadius="8" Padding="16"
                         IsVisible="{Binding Project.License, Converter={x:Static ObjectConverters.IsNotNull}}">
                     <StackPanel Spacing="8">
                         <TextBlock Text="License" FontSize="16" FontWeight="Bold" />
@@ -161,5 +200,45 @@
                 </Border>
             </StackPanel>
         </ScrollViewer>
+
+        <Border
+            Background="#DD000000"
+            IsVisible="{Binding InstallTargetPicker.IsOpen}"
+            ZIndex="20">
+            <Border
+                Width="420"
+                Background="White"
+                CornerRadius="12"
+                Padding="16"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="{Binding InstallTargetPicker.Title}" FontWeight="Bold" FontSize="18" />
+                    <TextBlock Text="{Binding InstallTargetPicker.Message}"
+                               IsVisible="{Binding InstallTargetPicker.Message, Converter={x:Static ObjectConverters.IsNotNull}}"
+                               TextWrapping="Wrap" />
+                    <TextBlock Text="Loading..."
+                               IsVisible="{Binding InstallTargetPicker.IsLoading}" />
+                    <ItemsControl ItemsSource="{Binding InstallTargetPicker.Targets}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="instanceMods:CompatibleInstanceInstallTarget">
+                                <Button
+                                    Command="{Binding $parent[ItemsControl].((details:ModrinthProjectDetailsViewModel)DataContext).InstallToInstanceCommand}"
+                                    CommandParameter="{Binding}">
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Text="{Binding Instance.Id}" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding Instance.VersionId, StringFormat='MC {0}'}" FontSize="12" />
+                                        <TextBlock Text="{Binding Instance.ModLoader}" FontSize="12" />
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Button Content="Close"
+                            Command="{Binding CloseInstallPickerCommand}"
+                            HorizontalAlignment="Right" />
+                </StackPanel>
+            </Border>
+        </Border>
     </Grid>
 </UserControl>

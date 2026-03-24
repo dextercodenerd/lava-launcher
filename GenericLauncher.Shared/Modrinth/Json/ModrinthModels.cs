@@ -80,6 +80,8 @@ public record ModrinthProject(
     ModrinthGalleryItem[]? Gallery,
     [property: JsonPropertyName("game_versions")]
     string[] GameVersions,
+    [property: JsonPropertyName("loaders")]
+    string[]? Loaders,
     [property: JsonPropertyName("versions")]
     string[] Versions
 );
@@ -97,4 +99,67 @@ public record ModrinthGalleryItem(
     [property: JsonPropertyName("title")] string? Title,
     [property: JsonPropertyName("description")]
     string? Description
+);
+
+public record ModrinthVersion(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("project_id")] string ProjectId,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("version_number")]
+    string VersionNumber,
+    [property: JsonPropertyName("version_type")]
+    string VersionType,
+    [property: JsonPropertyName("date_published")]
+    string DatePublished,
+    [property: JsonPropertyName("loaders")]
+    string[] Loaders,
+    [property: JsonPropertyName("game_versions")]
+    string[] GameVersions,
+    [property: JsonPropertyName("dependencies")]
+    ModrinthDependency[] Dependencies,
+    [property: JsonPropertyName("files")]
+    ModrinthVersionFile[] Files
+);
+
+public record ModrinthDependency(
+    [property: JsonPropertyName("version_id")]
+    string? VersionId,
+    [property: JsonPropertyName("project_id")]
+    string? ProjectId,
+    [property: JsonPropertyName("file_name")]
+    string? FileName,
+    [property: JsonPropertyName("dependency_type")]
+    string DependencyType
+);
+
+public record ModrinthVersionFile(
+    [property: JsonPropertyName("hashes")]
+    ModrinthFileHashes Hashes,
+    [property: JsonPropertyName("url")] string Url,
+    [property: JsonPropertyName("filename")]
+    string Filename,
+    [property: JsonPropertyName("primary")]
+    bool Primary,
+    [property: JsonPropertyName("size")]
+    long Size,
+    [property: JsonPropertyName("file_type")]
+    string? FileType
+);
+
+public record ModrinthFileHashes(
+    [property: JsonPropertyName("sha512")]
+    string? Sha512,
+    [property: JsonPropertyName("sha1")]
+    string? Sha1
+);
+
+public record ModrinthVersionFilesUpdateRequest(
+    [property: JsonPropertyName("hashes")]
+    string[] Hashes,
+    [property: JsonPropertyName("algorithm")]
+    string Algorithm,
+    [property: JsonPropertyName("loaders")]
+    string[] Loaders,
+    [property: JsonPropertyName("game_versions")]
+    string[] GameVersions
 );
