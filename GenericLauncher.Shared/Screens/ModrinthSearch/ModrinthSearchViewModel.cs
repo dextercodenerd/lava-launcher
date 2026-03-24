@@ -20,13 +20,14 @@ public partial class ModrinthSearchViewModel : ViewModelBase, IPageViewModel, ID
     private readonly ModrinthApiClient? _apiClient;
     private readonly InstanceModsManager? _instanceModsManager;
     private readonly Action<ModrinthSearchResult, ModrinthSearchContext>? _openProjectDetails;
-    private readonly Func<Task>? _onInstalled;
     private readonly ILogger? _logger;
 
     private readonly DispatcherTimer _debounceTimer;
     private CancellationTokenSource? _currentSearchCts;
     private readonly ModrinthSearchContext _searchContext;
     private InstanceModsSnapshot? _targetSnapshot;
+    private IReadOnlyDictionary<string, LatestCompatibleVersionInfo> _latestCompatibleVersions =
+        new Dictionary<string, LatestCompatibleVersionInfo>(StringComparer.OrdinalIgnoreCase);
 
     [ObservableProperty] private string _searchQuery = "";
     [ObservableProperty] private ModrinthProjectType _selectedProjectType = ModrinthProjectType.All;
@@ -61,17 +62,13 @@ public partial class ModrinthSearchViewModel : ViewModelBase, IPageViewModel, ID
         InstanceModsManager? instanceModsManager,
         ModrinthSearchContext searchContext,
         Action<ModrinthSearchResult, ModrinthSearchContext>? openProjectDetails,
-        Func<Task>? onInstalled = null,
-        ILogger? logger = null,
-        InstanceModsSnapshot? initialSnapshot = null)
+        ILogger? logger = null)
     {
         _apiClient = apiClient;
         _instanceModsManager = instanceModsManager;
         _searchContext = searchContext;
         _openProjectDetails = openProjectDetails;
-        _onInstalled = onInstalled;
         _logger = logger;
-        _targetSnapshot = initialSnapshot;
 
         if (_searchContext.LockProjectTypeToMods)
         {
@@ -173,10 +170,6 @@ public partial class ModrinthSearchViewModel : ViewModelBase, IPageViewModel, ID
             {
                 await _instanceModsManager.InstallProjectAsync(_searchContext.TargetInstance, result.ProjectId);
                 InstallMessage = $"Installed into {_searchContext.TargetInstance.Id}.";
-                if (_onInstalled is not null)
-                {
-                    await _onInstalled();
-                }
                 return;
             }
 
@@ -224,10 +217,6 @@ public partial class ModrinthSearchViewModel : ViewModelBase, IPageViewModel, ID
             InstallMessage = "";
             await _instanceModsManager.UpdateModAsync(_searchContext.TargetInstance, result.ProjectId);
             InstallMessage = $"Updated in {_searchContext.TargetInstance.Id}.";
-            if (_onInstalled is not null)
-            {
-                await _onInstalled();
-            }
         }
         catch (Exception ex)
         {
@@ -261,10 +250,6 @@ public partial class ModrinthSearchViewModel : ViewModelBase, IPageViewModel, ID
             await _instanceModsManager.InstallProjectAsync(target.Instance, PendingInstallProjectId);
             InstallMessage = $"Installed into {target.Instance.Id}.";
             InstallTargetPicker.IsOpen = false;
-            if (_onInstalled is not null)
-            {
-                await _onInstalled();
-            }
         }
         catch (Exception ex)
         {
@@ -331,7 +316,7 @@ public partial class ModrinthSearchViewModel : ViewModelBase, IPageViewModel, ID
                 SearchResults.Add(item);
             }
 
-            ApplyTargetSnapshot(_targetSnapshot);
+            ApplyTargetState(_targetSnapshot, _latestCompatibleVersions);
 
             TotalPages = Math.Max(1, (int)Math.Ceiling(response.TotalHits / (double)PageSize));
 
@@ -437,9 +422,16 @@ public partial class ModrinthSearchViewModel : ViewModelBase, IPageViewModel, ID
         GC.SuppressFinalize(this);
     }
 
-    public void ApplyTargetSnapshot(InstanceModsSnapshot? snapshot)
+    public void ApplyTargetState(
+        InstanceModsSnapshot? snapshot,
+        IReadOnlyDictionary<string, LatestCompatibleVersionInfo>? latestCompatibleVersions = null)
     {
         _targetSnapshot = snapshot;
+        if (latestCompatibleVersions is not null)
+        {
+            _latestCompatibleVersions = latestCompatibleVersions;
+        }
+
         var isInstanceScopedSearch = _searchContext.TargetInstance is not null;
 
         foreach (var result in SearchResults)
@@ -450,7 +442,8 @@ public partial class ModrinthSearchViewModel : ViewModelBase, IPageViewModel, ID
                 snapshot.ProjectsById.TryGetValue(result.ProjectId, out state);
             }
 
-            result.ApplyInstallState(isInstanceScopedSearch, state);
+            _latestCompatibleVersions.TryGetValue(result.ProjectId, out var latestCompatibleVersion);
+            result.ApplyInstallState(isInstanceScopedSearch, state, latestCompatibleVersion);
         }
     }
 }

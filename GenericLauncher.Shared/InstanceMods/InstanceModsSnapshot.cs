@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Immutable;
+using System.Linq;
 
 namespace GenericLauncher.InstanceMods;
 
@@ -9,9 +10,13 @@ public sealed record InstanceInstalledProjectState(
     string InstalledVersionId,
     string InstalledVersionNumber,
     InstanceModItemKind InstallKind,
-    bool IsBroken,
-    bool HasUpdate,
-    string? LatestVersionNumber
+    bool IsBroken
+);
+
+public sealed record LatestCompatibleVersionInfo(
+    string ProjectId,
+    string VersionId,
+    string VersionNumber
 );
 
 public sealed record InstanceModsSnapshot(
@@ -30,9 +35,10 @@ public sealed record InstanceModsSnapshot(
 
     public ImmutableList<InstanceModListItem> AllItems =>
         InstalledMods
-            .AddRange(RequiredDependencies)
-            .AddRange(ManualMods)
-            .AddRange(BrokenMods);
+            .Concat(RequiredDependencies)
+            .Concat(ManualMods)
+            .Concat(BrokenMods)
+            .ToImmutableList();
 }
 
 public sealed class InstanceModsSnapshotChangedEventArgs(string instanceId, InstanceModsSnapshot snapshot) : EventArgs

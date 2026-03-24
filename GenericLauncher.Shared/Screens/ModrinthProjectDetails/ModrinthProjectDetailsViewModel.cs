@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -19,6 +20,7 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
     private readonly string _projectId;
     private readonly ModrinthSearchContext _searchContext;
     private readonly ILogger? _logger;
+    private int _targetStateRefreshGeneration;
 
     [ObservableProperty] private ModrinthProject _project;
     [ObservableProperty] private bool _isLoading;
@@ -27,13 +29,19 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
     [ObservableProperty] private bool _isInstalling;
     [ObservableProperty] private string _installMessage = "";
     [ObservableProperty] private InstanceInstalledProjectState? _targetProjectState;
+    [ObservableProperty] private LatestCompatibleVersionInfo? _targetLatestCompatibleVersion;
 
     public ModrinthInstallTargetPickerViewModel InstallTargetPicker { get; } = new();
     public bool CanInstall => string.Equals(Project?.ProjectType, "mod", StringComparison.OrdinalIgnoreCase);
     public bool ShowInstallAction => CanInstall && (_searchContext.TargetInstance is null || TargetProjectState is null);
     public bool ShowUpdateAction => CanInstall
                                     && _searchContext.TargetInstance is not null
-                                    && TargetProjectState is { InstallKind: InstanceModItemKind.Direct, HasUpdate: true };
+                                    && TargetProjectState is { InstallKind: InstanceModItemKind.Direct, IsBroken: false }
+                                    && TargetLatestCompatibleVersion is not null
+                                    && !string.Equals(
+                                        TargetLatestCompatibleVersion.VersionId,
+                                        TargetProjectState.InstalledVersionId,
+                                        StringComparison.Ordinal);
     public bool HasTargetStateText => !string.IsNullOrWhiteSpace(TargetStateText);
 
     public string TargetStateText
@@ -57,8 +65,8 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
                 return $"Installed as a required dependency ({TargetProjectState.InstalledVersionNumber}).";
             }
 
-            return TargetProjectState.HasUpdate && !string.IsNullOrWhiteSpace(TargetProjectState.LatestVersionNumber)
-                ? $"Installed {TargetProjectState.InstalledVersionNumber}. Update available: {TargetProjectState.LatestVersionNumber}."
+            return ShowUpdateAction && !string.IsNullOrWhiteSpace(TargetLatestCompatibleVersion?.VersionNumber)
+                ? $"Installed {TargetProjectState.InstalledVersionNumber}. Update available: {TargetLatestCompatibleVersion.VersionNumber}."
                 : $"Installed {TargetProjectState.InstalledVersionNumber}.";
         }
     }
@@ -116,7 +124,14 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
         if (_instanceModsManager is not null && _searchContext.TargetInstance is not null)
         {
             _instanceModsManager.InstanceModsChanged += OnInstanceModsChanged;
-            _ = LoadTargetProjectStateAsync();
+            LoadTargetProjectStateAsync()
+                .ContinueWith(t =>
+                {
+                    if (t.IsFaulted)
+                    {
+                        _logger?.LogError(t.Exception, "Failed to load installed mod state");
+                    }
+                });
         }
 
         if (apiClient is not null)
@@ -139,7 +154,17 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
             return;
         }
 
-        Dispatcher.UIThread.Post(() => ApplySnapshot(e.Snapshot));
+        var generation = BeginTargetStateRefresh();
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!IsCurrentTargetStateRefresh(generation))
+            {
+                return;
+            }
+
+            ApplySnapshot(e.Snapshot);
+        });
+        _ = RefreshTargetLatestCompatibleVersionAsync(forceRefresh: false, generation);
     }
 
     private async Task LoadTargetProjectStateAsync()
@@ -149,14 +174,33 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
             return;
         }
 
+        var generation = BeginTargetStateRefresh();
+
         try
         {
             var snapshot = await _instanceModsManager.GetSnapshotAsync(_searchContext.TargetInstance);
-            Dispatcher.UIThread.Post(() => ApplySnapshot(snapshot));
+            if (!IsCurrentTargetStateRefresh(generation))
+            {
+                return;
+            }
+
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!IsCurrentTargetStateRefresh(generation))
+                {
+                    return;
+                }
+
+                ApplySnapshot(snapshot);
+            });
+            await RefreshTargetLatestCompatibleVersionAsync(forceRefresh: false, generation);
         }
         catch (Exception ex)
         {
-            _logger?.LogWarning(ex, "Failed to load installed mod state for {ProjectId}", _projectId);
+            if (IsCurrentTargetStateRefresh(generation))
+            {
+                _logger?.LogWarning(ex, "Failed to load installed mod state for {ProjectId}", _projectId);
+            }
         }
     }
 
@@ -165,6 +209,49 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
         snapshot.ProjectsById.TryGetValue(_projectId, out var projectState);
         TargetProjectState = projectState;
     }
+
+    private async Task RefreshTargetLatestCompatibleVersionAsync(bool forceRefresh, int generation)
+    {
+        if (_instanceModsManager is null || _searchContext.TargetInstance is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var latestCompatibleVersions = await _instanceModsManager.GetLatestCompatibleVersionsAsync(
+                _searchContext.TargetInstance,
+                [_projectId],
+                forceRefresh);
+            if (!IsCurrentTargetStateRefresh(generation))
+            {
+                return;
+            }
+
+            latestCompatibleVersions.TryGetValue(_projectId, out var latestCompatibleVersion);
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!IsCurrentTargetStateRefresh(generation))
+                {
+                    return;
+                }
+
+                TargetLatestCompatibleVersion = latestCompatibleVersion;
+            });
+        }
+        catch (Exception ex)
+        {
+            if (IsCurrentTargetStateRefresh(generation))
+            {
+                _logger?.LogWarning(ex, "Failed to refresh available update for {ProjectId}", _projectId);
+            }
+        }
+    }
+
+    private int BeginTargetStateRefresh() => Interlocked.Increment(ref _targetStateRefreshGeneration);
+
+    private bool IsCurrentTargetStateRefresh(int generation) =>
+        generation == Volatile.Read(ref _targetStateRefreshGeneration);
 
     private async Task LoadProjectAsync()
     {
@@ -228,11 +315,6 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
             {
                 await _instanceModsManager.InstallProjectAsync(_searchContext.TargetInstance, _projectId);
                 InstallMessage = $"Installed into {_searchContext.TargetInstance.Id}.";
-                if (_searchContext.OnInstalled is not null)
-                {
-                    await _searchContext.OnInstalled();
-                }
-
                 return;
             }
 
@@ -279,10 +361,6 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
             InstallMessage = "";
             await _instanceModsManager.UpdateModAsync(_searchContext.TargetInstance, _projectId);
             InstallMessage = $"Updated in {_searchContext.TargetInstance.Id}.";
-            if (_searchContext.OnInstalled is not null)
-            {
-                await _searchContext.OnInstalled();
-            }
         }
         catch (Exception ex)
         {
@@ -309,10 +387,6 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
             await _instanceModsManager.InstallProjectAsync(target.Instance, _projectId);
             InstallMessage = $"Installed into {target.Instance.Id}.";
             InstallTargetPicker.IsOpen = false;
-            if (_searchContext.OnInstalled is not null)
-            {
-                await _searchContext.OnInstalled();
-            }
         }
         catch (Exception ex)
         {
@@ -343,6 +417,13 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
     partial void OnTargetProjectStateChanged(InstanceInstalledProjectState? value)
     {
         OnPropertyChanged(nameof(ShowInstallAction));
+        OnPropertyChanged(nameof(ShowUpdateAction));
+        OnPropertyChanged(nameof(TargetStateText));
+        OnPropertyChanged(nameof(HasTargetStateText));
+    }
+
+    partial void OnTargetLatestCompatibleVersionChanged(LatestCompatibleVersionInfo? value)
+    {
         OnPropertyChanged(nameof(ShowUpdateAction));
         OnPropertyChanged(nameof(TargetStateText));
         OnPropertyChanged(nameof(HasTargetStateText));

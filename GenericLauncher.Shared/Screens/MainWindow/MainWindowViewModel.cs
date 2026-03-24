@@ -97,7 +97,6 @@ public partial class MainWindowViewModel : ViewModelBase
             instanceModsManager,
             ModrinthSearchContext.CreateRoot(),
             GoToModrinthProjectDetails,
-            null,
             App.LoggerFactory?.CreateLogger(nameof(ModrinthSearchViewModel)));
 
         if (_minecraftLauncher is null || _auth is null)

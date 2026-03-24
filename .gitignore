@@ -457,3 +457,4 @@ $RECYCLE.BIN/
 Data/secret.json
 user.props
 *.user.props
+/.claude/settings.local.json

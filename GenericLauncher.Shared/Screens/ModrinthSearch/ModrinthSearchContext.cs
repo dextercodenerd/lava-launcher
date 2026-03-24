@@ -1,5 +1,4 @@
 using System;
-using System.Threading.Tasks;
 using GenericLauncher.Database.Model;
 
 namespace GenericLauncher.Screens.ModrinthSearch;
@@ -9,8 +8,7 @@ public sealed record ModrinthSearchContext(
     MinecraftInstance? TargetInstance,
     string? LockedMinecraftVersion,
     string? LockedLoader,
-    bool LockProjectTypeToMods,
-    Func<Task>? OnInstalled = null)
+    bool LockProjectTypeToMods)
 {
     public bool IsInstanceInstall => TargetInstance is not null;
 
@@ -30,12 +28,11 @@ public sealed record ModrinthSearchContext(
     public static ModrinthSearchContext CreateRoot() =>
         new("Modrinth Search", null, null, null, false);
 
-    public static ModrinthSearchContext CreateForInstance(MinecraftInstance instance, Func<Task>? onInstalled = null) =>
+    public static ModrinthSearchContext CreateForInstance(MinecraftInstance instance) =>
         new(
             $"Add Mods to {instance.Id}",
             instance,
             instance.VersionId,
             instance.ModLoader.ToString(),
-            true,
-            onInstalled);
+            true);
 }

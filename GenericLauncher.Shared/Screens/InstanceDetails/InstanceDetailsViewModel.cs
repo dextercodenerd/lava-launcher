@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -34,8 +35,9 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
     private readonly ILogger? _logger;
 
     private InstanceModsSnapshot _modsSnapshot = InstanceModsSnapshot.Empty;
-    private readonly Dictionary<string, InstanceInstalledProjectState> _projectStates =
-        new(StringComparer.OrdinalIgnoreCase);
+    private IReadOnlyDictionary<string, LatestCompatibleVersionInfo> _latestCompatibleVersions =
+        new Dictionary<string, LatestCompatibleVersionInfo>(StringComparer.OrdinalIgnoreCase);
+    private int _modsRefreshGeneration;
     private bool _modsLoaded;
 
     [ObservableProperty] private MinecraftInstance _instance;
@@ -191,7 +193,17 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
             return;
         }
 
-        Dispatcher.UIThread.Post(() => ApplyModsSnapshot(e.Snapshot));
+        var generation = BeginModsRefresh();
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!IsCurrentModsRefresh(generation))
+            {
+                return;
+            }
+
+            ApplyModsSnapshot(e.Snapshot);
+        });
+        _ = RefreshUpdateStatusesAsync(e.Snapshot, forceRefresh: false, generation);
     }
 
     partial void OnProgressChanged(ThreadSafeInstallProgressReporter.InstallProgress? value)
@@ -227,7 +239,7 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
     [RelayCommand]
     private async Task RefreshModsAsync()
     {
-        await LoadModsSnapshotAsync(forceRefresh: true);
+        await LoadModsStateAsync(forceRefresh: true);
     }
 
     [RelayCommand]
@@ -244,9 +256,8 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
             _instanceModsManager,
             ModrinthSearchContext.CreateForInstance(Instance),
             _openProjectDetails,
-            logger: _logger,
-            initialSnapshot: _modsSnapshot);
-        InlineSearchViewModel.ApplyTargetSnapshot(_modsSnapshot);
+            _logger);
+        InlineSearchViewModel.ApplyTargetState(_modsSnapshot, _latestCompatibleVersions);
         IsSearchVisible = true;
     }
 
@@ -394,31 +405,63 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
             return;
         }
 
-        await LoadModsSnapshotAsync(forceRefresh: false);
+        await LoadModsStateAsync(false);
     }
 
-    private async Task LoadModsSnapshotAsync(bool forceRefresh)
+    private async Task LoadModsStateAsync(bool forceRefresh)
     {
         if (_instanceModsManager is null || !CanManageMods)
         {
             return;
         }
 
+        var generation = BeginModsRefresh();
+
         try
         {
             IsModsLoading = true;
             ModsErrorMessage = "";
             var snapshot = await _instanceModsManager.GetSnapshotAsync(Instance, forceRefresh);
-            Dispatcher.UIThread.Post(() => ApplyModsSnapshot(snapshot));
+            if (!IsCurrentModsRefresh(generation))
+            {
+                return;
+            }
+
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!IsCurrentModsRefresh(generation))
+                {
+                    return;
+                }
+
+                ApplyModsSnapshot(snapshot);
+            });
+            await RefreshUpdateStatusesAsync(snapshot, forceRefresh, generation);
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Failed to load mods for {InstanceId}", Instance.Id);
-            Dispatcher.UIThread.Post(() => ModsErrorMessage = "Failed to load mods.");
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!IsCurrentModsRefresh(generation))
+                {
+                    return;
+                }
+
+                ModsErrorMessage = "Failed to load mods.";
+            });
         }
         finally
         {
-            Dispatcher.UIThread.Post(() => IsModsLoading = false);
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!IsCurrentModsRefresh(generation))
+                {
+                    return;
+                }
+
+                IsModsLoading = false;
+            });
         }
     }
 
@@ -426,18 +469,107 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
     {
         _modsSnapshot = snapshot;
         _modsLoaded = true;
-        _projectStates.Clear();
-        foreach (var projectState in snapshot.ProjectsById)
+        RenderModLists();
+    }
+
+    private void ApplyLatestCompatibleVersions(IReadOnlyDictionary<string, LatestCompatibleVersionInfo> latestCompatibleVersions)
+    {
+        _latestCompatibleVersions = latestCompatibleVersions;
+        RenderModLists();
+    }
+
+    private void RenderModLists()
+    {
+        Replace(InstalledMods, _modsSnapshot.InstalledMods.Select(ApplyLatestCompatibleVersion));
+        Replace(RequiredDependencies, _modsSnapshot.RequiredDependencies);
+        Replace(ManualMods, _modsSnapshot.ManualMods);
+        Replace(BrokenMods, _modsSnapshot.BrokenMods);
+        InlineSearchViewModel?.ApplyTargetState(_modsSnapshot, _latestCompatibleVersions);
+        OnPropertyChanged(nameof(CanUpdateAll));
+    }
+
+    private async Task<IReadOnlyDictionary<string, LatestCompatibleVersionInfo>> GetLatestCompatibleVersionsAsync(
+        InstanceModsSnapshot snapshot,
+        bool forceRefresh)
+    {
+        if (_instanceModsManager is null)
         {
-            _projectStates[projectState.Key] = projectState.Value;
+            return new Dictionary<string, LatestCompatibleVersionInfo>(StringComparer.OrdinalIgnoreCase);
         }
 
-        Replace(InstalledMods, snapshot.InstalledMods);
-        Replace(RequiredDependencies, snapshot.RequiredDependencies);
-        Replace(ManualMods, snapshot.ManualMods);
-        Replace(BrokenMods, snapshot.BrokenMods);
-        InlineSearchViewModel?.ApplyTargetSnapshot(snapshot);
-        OnPropertyChanged(nameof(CanUpdateAll));
+        var directProjectIds = snapshot.ProjectsById.Values
+            .Where(project => project.InstallKind == InstanceModItemKind.Direct)
+            .Select(project => project.ProjectId)
+            .ToArray();
+        if (directProjectIds.Length == 0)
+        {
+            return new Dictionary<string, LatestCompatibleVersionInfo>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        return await _instanceModsManager.GetLatestCompatibleVersionsAsync(Instance, directProjectIds, forceRefresh);
+    }
+
+    private async Task RefreshUpdateStatusesAsync(InstanceModsSnapshot snapshot, bool forceRefresh)
+        => await RefreshUpdateStatusesAsync(snapshot, forceRefresh, Volatile.Read(ref _modsRefreshGeneration));
+
+    private async Task RefreshUpdateStatusesAsync(
+        InstanceModsSnapshot snapshot,
+        bool forceRefresh,
+        int generation)
+    {
+        try
+        {
+            var latestCompatibleVersions = await GetLatestCompatibleVersionsAsync(snapshot, forceRefresh);
+            if (!IsCurrentModsRefresh(generation))
+            {
+                return;
+            }
+
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!IsCurrentModsRefresh(generation))
+                {
+                    return;
+                }
+
+                ApplyLatestCompatibleVersions(latestCompatibleVersions);
+            });
+        }
+        catch (Exception ex)
+        {
+            if (IsCurrentModsRefresh(generation))
+            {
+                _logger?.LogWarning(ex, "Failed to refresh available updates for {InstanceId}", Instance.Id);
+            }
+        }
+    }
+
+    private int BeginModsRefresh() => Interlocked.Increment(ref _modsRefreshGeneration);
+
+    private bool IsCurrentModsRefresh(int generation) =>
+        generation == Volatile.Read(ref _modsRefreshGeneration);
+
+    private InstanceModListItem ApplyLatestCompatibleVersion(InstanceModListItem item)
+    {
+        if (string.IsNullOrWhiteSpace(item.ProjectId)
+            || !_modsSnapshot.ProjectsById.TryGetValue(item.ProjectId, out var installedProject)
+            || installedProject.InstallKind != InstanceModItemKind.Direct
+            || installedProject.IsBroken
+            || !_latestCompatibleVersions.TryGetValue(item.ProjectId, out var latestCompatibleVersion)
+            || string.Equals(latestCompatibleVersion.VersionId, installedProject.InstalledVersionId, StringComparison.Ordinal))
+        {
+            return item with
+            {
+                HasUpdate = false,
+                LatestVersionNumber = null,
+            };
+        }
+
+        return item with
+        {
+            HasUpdate = true,
+            LatestVersionNumber = latestCompatibleVersion.VersionNumber,
+        };
     }
 
     private static void Replace(

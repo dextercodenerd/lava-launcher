@@ -1,3 +1,4 @@
+using System;
 using CommunityToolkit.Mvvm.ComponentModel;
 using GenericLauncher.InstanceMods;
 using GenericLauncher.Modrinth.Json;
@@ -32,7 +33,10 @@ public partial class ModrinthSearchResultItemViewModel : ObservableObject
 
     public bool HasStatusText => !string.IsNullOrWhiteSpace(StatusText);
 
-    public void ApplyInstallState(bool isInstanceScopedSearch, InstanceInstalledProjectState? state)
+    public void ApplyInstallState(
+        bool isInstanceScopedSearch,
+        InstanceInstalledProjectState? state,
+        LatestCompatibleVersionInfo? latestCompatibleVersion)
     {
         if (!CanInstall)
         {
@@ -55,9 +59,12 @@ public partial class ModrinthSearchResultItemViewModel : ObservableObject
         }
 
         InstalledVersionNumber = state.InstalledVersionNumber;
-        AvailableUpdateVersionNumber = state.LatestVersionNumber;
+        AvailableUpdateVersionNumber = latestCompatibleVersion?.VersionNumber;
         ShowInstallButton = false;
-        ShowUpdateButton = state.InstallKind == InstanceModItemKind.Direct && state.HasUpdate;
+        ShowUpdateButton = state.InstallKind == InstanceModItemKind.Direct
+                           && !state.IsBroken
+                           && latestCompatibleVersion is not null
+                           && !string.Equals(latestCompatibleVersion.VersionId, state.InstalledVersionId, StringComparison.Ordinal);
 
         if (state.IsBroken)
         {
@@ -69,8 +76,8 @@ public partial class ModrinthSearchResultItemViewModel : ObservableObject
 
         StatusText = state.InstallKind == InstanceModItemKind.Dependency
             ? $"Installed as dependency {state.InstalledVersionNumber}"
-            : state.HasUpdate && !string.IsNullOrWhiteSpace(state.LatestVersionNumber)
-                ? $"Installed {state.InstalledVersionNumber}. Update {state.LatestVersionNumber}"
+            : ShowUpdateButton && !string.IsNullOrWhiteSpace(latestCompatibleVersion?.VersionNumber)
+                ? $"Installed {state.InstalledVersionNumber}. Update {latestCompatibleVersion.VersionNumber}"
                 : $"Installed {state.InstalledVersionNumber}";
     }
 

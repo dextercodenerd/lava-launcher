@@ -102,7 +102,7 @@ public class ModrinthInstallFlowTest
         Assert.NotNull(roundTrip);
         Assert.Equal("Family Pack", roundTrip!.DisplayName);
         Assert.Equal("1.21.1", roundTrip.MinecraftVersionId);
-        Assert.Contains("\"displayName\":\"Family Pack\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"display_name\":\"Family Pack\"", json, StringComparison.Ordinal);
         Assert.DoesNotContain(Path.GetTempPath(), json, StringComparison.OrdinalIgnoreCase);
         Assert.Equal("parent", roundTrip.Mods[0].RequiredByProjectIds[0]);
     }
@@ -114,7 +114,7 @@ public class ModrinthInstallFlowTest
             new ModrinthSearchResult("project", "slug", "Title", "Desc", [], "mod", 0, null, "", "", ""),
             canInstall: true);
 
-        item.ApplyInstallState(isInstanceScopedSearch: true, state: null);
+        item.ApplyInstallState(isInstanceScopedSearch: true, state: null, latestCompatibleVersion: null);
 
         Assert.True(item.ShowInstallButton);
         Assert.False(item.ShowUpdateButton);
@@ -136,13 +136,35 @@ public class ModrinthInstallFlowTest
                 "version-1",
                 "1.0.0",
                 InstanceModItemKind.Direct,
-                IsBroken: false,
-                HasUpdate: true,
-                LatestVersionNumber: "1.1.0"));
+                IsBroken: false),
+            new LatestCompatibleVersionInfo("project", "version-2", "1.1.0"));
 
         Assert.False(item.ShowInstallButton);
         Assert.True(item.ShowUpdateButton);
         Assert.Contains("1.1.0", item.StatusText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ModrinthSearchResultItemViewModel_ApplyInstallState_HidesUpdateForCurrentDirectMod()
+    {
+        var item = new ModrinthSearchResultItemViewModel(
+            new ModrinthSearchResult("project", "slug", "Title", "Desc", [], "mod", 0, null, "", "", ""),
+            canInstall: true);
+
+        item.ApplyInstallState(
+            isInstanceScopedSearch: true,
+            new InstanceInstalledProjectState(
+                "project",
+                "Title",
+                "version-1",
+                "1.0.0",
+                InstanceModItemKind.Direct,
+                IsBroken: false),
+            new LatestCompatibleVersionInfo("project", "version-1", "1.0.0"));
+
+        Assert.False(item.ShowInstallButton);
+        Assert.False(item.ShowUpdateButton);
+        Assert.Equal("Installed 1.0.0", item.StatusText);
     }
 
     [Fact]
@@ -160,9 +182,8 @@ public class ModrinthInstallFlowTest
                 "version-1",
                 "1.0.0",
                 InstanceModItemKind.Dependency,
-                IsBroken: false,
-                HasUpdate: false,
-                LatestVersionNumber: null));
+                IsBroken: false),
+            latestCompatibleVersion: null);
 
         Assert.False(item.ShowInstallButton);
         Assert.False(item.ShowUpdateButton);

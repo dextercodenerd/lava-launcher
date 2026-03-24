@@ -24,6 +24,7 @@ public sealed class InstanceModsManager
     private const int CurrentSchemaVersion = 1;
     private const int MaxDirectModResolutionConcurrency = 4;
     private const int MaxCompatibleInstanceResolutionConcurrency = 4;
+    private const int MaxLatestVersionResolutionConcurrency = 4;
     private const int MaxConcurrentInstanceStateReaders = 8;
     private const string InstallKindDirect = "Direct";
     private const string InstallKindDependency = "Dependency";
@@ -35,10 +36,16 @@ public sealed class InstanceModsManager
     private readonly ILogger? _logger;
     private readonly string _instancesRoot;
     private readonly Lock _snapshotLock = new();
+    private readonly Lock _latestCompatibleVersionCacheLock = new();
+
     private readonly ConcurrentDictionary<string, AsyncRwLock> _instanceStateLocks =
         new(StringComparer.OrdinalIgnoreCase);
 
     private readonly Dictionary<string, InstanceModsSnapshot> _snapshots =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    // TODO: Add cache eviction (size cap or TTL) to prevent unbounded growth across sessions.
+    private readonly Dictionary<string, LatestCompatibleVersionInfo?> _latestCompatibleVersionCache =
         new(StringComparer.OrdinalIgnoreCase);
 
     public event EventHandler<InstanceModsSnapshotChangedEventArgs>? InstanceModsChanged;
@@ -63,14 +70,14 @@ public sealed class InstanceModsManager
         CancellationToken cancellationToken = default)
     {
         var folderPath = GetInstanceFolder(instance.Folder);
-        await ExecuteWithInstanceWriteLockAsync(
+        var metadataChanged = await ExecuteWithInstanceWriteLockAsync(
             folderPath,
             async token =>
             {
                 Directory.CreateDirectory(folderPath);
 
                 var existing = await TryReadMetaUnlockedAsync(GetMetaPath(folderPath), token);
-                var meta = existing is null
+                var updated = existing is null
                     ? CreateEmptyMeta(instance)
                     : existing with
                     {
@@ -81,10 +88,20 @@ public sealed class InstanceModsManager
                         LaunchVersionId = instance.LaunchVersionId,
                     };
 
-                await WriteMetaUnlockedAsync(folderPath, meta, token);
+                if (existing == updated)
+                {
+                    return false;
+                }
+
+                await WriteMetaUnlockedAsync(folderPath, updated, token);
+                return true;
             },
             cancellationToken);
-        InvalidateSnapshot(instance.Id);
+
+        if (metadataChanged)
+        {
+            InvalidateSnapshot(instance.Id);
+        }
     }
 
     public async Task<InstanceModsSnapshot> GetSnapshotAsync(
@@ -97,10 +114,55 @@ public sealed class InstanceModsManager
             return cached;
         }
 
-        await EnsureInstanceMetadataAsync(instance, cancellationToken);
-        var snapshot = await BuildSnapshotAsync(instance, cancellationToken);
+        var folderPath = GetInstanceFolder(instance.Folder);
+        var localState = await ReadLocalStateAsync(instance, folderPath, cancellationToken);
+        var snapshot = BuildSnapshot(localState.Meta, localState.ScannedFiles);
         StoreSnapshot(instance.Id, snapshot, false);
         return snapshot;
+    }
+
+    public async Task<ImmutableDictionary<string, LatestCompatibleVersionInfo>> GetLatestCompatibleVersionsAsync(
+        MinecraftInstance instance,
+        IEnumerable<string> projectIds,
+        bool forceRefresh = false,
+        CancellationToken cancellationToken = default)
+    {
+        var distinctProjectIds = projectIds
+            .Where(projectId => !string.IsNullOrWhiteSpace(projectId))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (distinctProjectIds.Length == 0)
+        {
+            return ImmutableDictionary<string, LatestCompatibleVersionInfo>.Empty
+                .WithComparers(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var latestVersions = new LatestCompatibleVersionInfo?[distinctProjectIds.Length];
+        var parallelOptions = new ParallelOptions
+        {
+            MaxDegreeOfParallelism = MaxLatestVersionResolutionConcurrency,
+            CancellationToken = cancellationToken,
+        };
+
+        await Parallel.ForEachAsync(
+            Enumerable.Range(0, distinctProjectIds.Length),
+            parallelOptions,
+            async (index, token) =>
+            {
+                var latestVersion = await GetLatestCompatibleVersionAsync(
+                    instance,
+                    distinctProjectIds[index],
+                    forceRefresh,
+                    token);
+                if (latestVersion is not null)
+                {
+                    latestVersions[index] = latestVersion;
+                }
+            });
+
+        return latestVersions
+            .OfType<LatestCompatibleVersionInfo>()
+            .ToImmutableDictionary(version => version.ProjectId, StringComparer.OrdinalIgnoreCase);
     }
 
     public async Task<ImmutableList<PortableInstanceCandidate>> DiscoverPortableInstancesAsync(
@@ -151,21 +213,11 @@ public sealed class InstanceModsManager
         string projectId,
         CancellationToken cancellationToken = default)
     {
-        var folderPath = GetInstanceFolder(instance.Folder);
-        await ExecuteWithInstanceWriteLockAsync(
-            folderPath,
-            async token =>
-            {
-                await EnsureInstanceMetadataUnlockedAsync(instance, folderPath, token);
-                await ApplyDesiredDirectModsUnlockedAsync(
-                    instance,
-                    folderPath,
-                    await BuildDesiredDirectModsUnlockedAsync(instance, projectId, updateProject: false,
-                        removeProject: false, updateAll: false, token),
-                    token);
-            },
+        var snapshot = await ApplyManagedModChangeAsync(
+            instance,
+            (meta, token) => Task.FromResult(BuildDesiredDirectMods(meta, projectId, ModChangeKind.Install)),
             cancellationToken);
-        await RefreshSnapshotAsync(instance, cancellationToken);
+        PublishSnapshot(instance.Id, snapshot);
     }
 
     public async Task UpdateModAsync(
@@ -173,42 +225,22 @@ public sealed class InstanceModsManager
         string projectId,
         CancellationToken cancellationToken = default)
     {
-        var folderPath = GetInstanceFolder(instance.Folder);
-        await ExecuteWithInstanceWriteLockAsync(
-            folderPath,
-            async token =>
-            {
-                await EnsureInstanceMetadataUnlockedAsync(instance, folderPath, token);
-                await ApplyDesiredDirectModsUnlockedAsync(
-                    instance,
-                    folderPath,
-                    await BuildDesiredDirectModsUnlockedAsync(instance, projectId, updateProject: true,
-                        removeProject: false, updateAll: false, token),
-                    token);
-            },
+        var snapshot = await ApplyManagedModChangeAsync(
+            instance,
+            (meta, token) => Task.FromResult(BuildDesiredDirectMods(meta, projectId, ModChangeKind.Update)),
             cancellationToken);
-        await RefreshSnapshotAsync(instance, cancellationToken);
+        PublishSnapshot(instance.Id, snapshot);
     }
 
     public async Task UpdateAllAsync(
         MinecraftInstance instance,
         CancellationToken cancellationToken = default)
     {
-        var folderPath = GetInstanceFolder(instance.Folder);
-        await ExecuteWithInstanceWriteLockAsync(
-            folderPath,
-            async token =>
-            {
-                await EnsureInstanceMetadataUnlockedAsync(instance, folderPath, token);
-                await ApplyDesiredDirectModsUnlockedAsync(
-                    instance,
-                    folderPath,
-                    await BuildDesiredDirectModsUnlockedAsync(instance, null, updateProject: false,
-                        removeProject: false, updateAll: true, token),
-                    token);
-            },
+        var snapshot = await ApplyManagedModChangeAsync(
+            instance,
+            (meta, token) => Task.FromResult(BuildDesiredDirectMods(meta, null, ModChangeKind.UpdateAll)),
             cancellationToken);
-        await RefreshSnapshotAsync(instance, cancellationToken);
+        PublishSnapshot(instance.Id, snapshot);
     }
 
     public async Task DeleteModAsync(
@@ -218,60 +250,70 @@ public sealed class InstanceModsManager
     {
         var folderPath = GetInstanceFolder(instance.Folder);
         var modsFolder = Path.Combine(folderPath, ModsFolderName);
-        var changed = await ExecuteWithInstanceWriteLockAsync(
+        await EnsureInstanceMetadataAsync(instance, cancellationToken);
+
+        var deleteTarget = await ExecuteWithInstanceReadLockAsync(
             folderPath,
             async token =>
             {
-                Directory.CreateDirectory(modsFolder);
-
                 var meta = await ReadMetaUnlockedAsync(folderPath, token);
                 var managed = meta.Mods.FirstOrDefault(m =>
                     string.Equals(m.ProjectId, modKey, StringComparison.Ordinal));
                 if (managed is not null)
                 {
-                    if (managed.InstallKind.Equals(InstallKindDependency, StringComparison.OrdinalIgnoreCase))
-                    {
-                        throw new InvalidOperationException(
-                            "Required dependencies cannot be deleted manually in v1.");
-                    }
-
-                    var soleDependencies = meta.Mods
-                        .Where(m => m.InstallKind.Equals(InstallKindDependency, StringComparison.OrdinalIgnoreCase))
-                        .Where(m => m.RequiredByProjectIds.Length == 1
-                                    && string.Equals(m.RequiredByProjectIds[0], managed.ProjectId,
-                                        StringComparison.Ordinal))
-                        .Select(m => m.ProjectTitle)
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .OrderBy(v => v, StringComparer.OrdinalIgnoreCase)
-                        .ToArray();
-                    if (soleDependencies.Length > 0)
-                    {
-                        throw new InvalidOperationException(
-                            $"Delete blocked. '{managed.ProjectTitle}' is the only parent of: {string.Join(", ", soleDependencies)}.");
-                    }
-
-                    await ApplyDesiredDirectModsUnlockedAsync(
-                        instance,
-                        folderPath,
-                        await BuildDesiredDirectModsUnlockedAsync(instance, managed.ProjectId, updateProject: false,
-                            removeProject: true, updateAll: false, token),
-                        token);
-                    return true;
+                    return managed.InstallKind.Equals(InstallKindDependency, StringComparison.OrdinalIgnoreCase)
+                        ? DeleteTarget.Dependency
+                        : DeleteTarget.ManagedDirect;
                 }
 
                 var manualPath = Path.Combine(modsFolder, modKey);
-                if (!File.Exists(manualPath))
-                {
-                    return false;
-                }
-
-                File.Delete(manualPath);
-                return true;
+                return File.Exists(manualPath) ? DeleteTarget.Manual : DeleteTarget.Missing;
             },
             cancellationToken);
-        if (changed)
+
+        switch (deleteTarget)
         {
-            await RefreshSnapshotAsync(instance, cancellationToken);
+            case DeleteTarget.Dependency:
+                throw new InvalidOperationException("Required dependencies cannot be deleted manually in v1.");
+            case DeleteTarget.ManagedDirect:
+            {
+                var managedSnapshot = await ApplyManagedModChangeAsync(
+                    instance,
+                    (meta, token) => Task.FromResult(BuildDesiredDirectMods(meta, modKey, ModChangeKind.Remove)),
+                    cancellationToken);
+                PublishSnapshot(instance.Id, managedSnapshot);
+                return;
+            }
+            case DeleteTarget.Manual:
+            {
+                var manualSnapshot = await ExecuteWithInstanceWriteLockAsync(
+                    folderPath,
+                    async token =>
+                    {
+                        Directory.CreateDirectory(modsFolder);
+                        var manualPath = Path.Combine(modsFolder, modKey);
+                        if (!File.Exists(manualPath))
+                        {
+                            return null;
+                        }
+
+                        File.Delete(manualPath);
+                        var localState = await ReadLocalStateUnlockedAsync(folderPath, token);
+                        var snapshot = BuildSnapshot(localState.Meta, localState.ScannedFiles);
+                        StoreSnapshot(instance.Id, snapshot, raiseEvent: false);
+                        return snapshot;
+                    },
+                    cancellationToken);
+
+                if (manualSnapshot is not null)
+                {
+                    PublishSnapshot(instance.Id, manualSnapshot);
+                }
+
+                return;
+            }
+            default:
+                return;
         }
     }
 
@@ -308,13 +350,14 @@ public sealed class InstanceModsManager
             async (index, token) =>
             {
                 var instance = instances[index];
-                var version = await TryResolveLatestCompatibleVersionAsync(instance, projectId, token);
-                if (version is null)
+                var latestVersion =
+                    await GetLatestCompatibleVersionAsync(instance, projectId, forceRefresh: false, token);
+                if (latestVersion is null)
                 {
                     return;
                 }
 
-                targets[index] = new CompatibleInstanceInstallTarget(instance, version.VersionNumber);
+                targets[index] = new CompatibleInstanceInstallTarget(instance, latestVersion.VersionNumber);
             });
 
         return targets
@@ -356,32 +399,32 @@ public sealed class InstanceModsManager
         return jar ?? throw new InvalidOperationException($"No installable jar file found for {version.Id}");
     }
 
-    private async Task<Dictionary<string, string?>> BuildDesiredDirectModsUnlockedAsync(
-        MinecraftInstance instance,
+    private static Dictionary<string, string?> BuildDesiredDirectMods(
+        InstanceMeta meta,
         string? projectId,
-        bool updateProject,
-        bool removeProject,
-        bool updateAll,
-        CancellationToken cancellationToken)
+        ModChangeKind changeKind)
     {
-        var meta = await ReadMetaUnlockedAsync(GetInstanceFolder(instance.Folder), cancellationToken);
         var directMods = meta.Mods
             .Where(m => m.InstallKind.Equals(InstallKindDirect, StringComparison.OrdinalIgnoreCase))
             .ToDictionary(m => m.ProjectId, m => (string?)m.InstalledVersionId, StringComparer.OrdinalIgnoreCase);
 
         if (!string.IsNullOrWhiteSpace(projectId))
         {
-            if (removeProject)
+            switch (changeKind)
             {
-                directMods.Remove(projectId);
-            }
-            else if (updateProject || !directMods.ContainsKey(projectId))
-            {
-                directMods[projectId] = null;
+                case ModChangeKind.Remove:
+                    directMods.Remove(projectId);
+                    break;
+                case ModChangeKind.Update:
+                    directMods[projectId] = null;
+                    break;
+                case ModChangeKind.Install when !directMods.ContainsKey(projectId):
+                    directMods[projectId] = null;
+                    break;
             }
         }
 
-        if (updateAll)
+        if (changeKind == ModChangeKind.UpdateAll)
         {
             foreach (var key in directMods.Keys.ToArray())
             {
@@ -392,16 +435,50 @@ public sealed class InstanceModsManager
         return directMods;
     }
 
-    private async Task ApplyDesiredDirectModsUnlockedAsync(
+    private async Task<InstanceModsSnapshot> ApplyManagedModChangeAsync(
         MinecraftInstance instance,
-        string folderPath,
+        Func<InstanceMeta, CancellationToken, Task<Dictionary<string, string?>>> buildDesiredDirectModsAsync,
+        CancellationToken cancellationToken)
+    {
+        var folderPath = GetInstanceFolder(instance.Folder);
+        await EnsureInstanceMetadataAsync(instance, cancellationToken);
+
+        var observedLocalState = await ReadLocalStateAsync(instance, folderPath, cancellationToken);
+        var desiredDirectMods = await buildDesiredDirectModsAsync(observedLocalState.Meta, cancellationToken);
+        var resolution = await ResolveDesiredDirectModsAsync(instance, desiredDirectMods, cancellationToken);
+        var preparedDownloads = await PrepareDownloadsAsync(folderPath, resolution, cancellationToken);
+
+        try
+        {
+            return await ExecuteWithInstanceWriteLockAsync(
+                folderPath,
+                async token =>
+                {
+                    var currentLocalState = await ReadLocalStateUnlockedAsync(folderPath, token);
+                    EnsureExpectedMeta(observedLocalState.Meta, currentLocalState.Meta);
+                    var snapshot = await CommitPreparedResolutionUnlockedAsync(
+                        instance,
+                        folderPath,
+                        currentLocalState.Meta,
+                        resolution,
+                        preparedDownloads,
+                        token);
+                    StoreSnapshot(instance.Id, snapshot, raiseEvent: false);
+                    return snapshot;
+                },
+                cancellationToken);
+        }
+        finally
+        {
+            preparedDownloads.Dispose();
+        }
+    }
+
+    private async Task<ResolutionState> ResolveDesiredDirectModsAsync(
+        MinecraftInstance instance,
         Dictionary<string, string?> desiredDirectMods,
         CancellationToken cancellationToken)
     {
-        var modsFolder = Path.Combine(folderPath, ModsFolderName);
-        Directory.CreateDirectory(modsFolder);
-
-        var currentMeta = await ReadMetaUnlockedAsync(folderPath, cancellationToken);
         var desiredDirectModEntries = desiredDirectMods
             .OrderBy(desiredDirectMod => desiredDirectMod.Key, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -433,20 +510,57 @@ public sealed class InstanceModsManager
         var resolution = new ResolutionState();
         foreach (var resolvedDirectMod in resolvedDirectMods)
         {
-            if (resolvedDirectMod is null)
+            if (resolvedDirectMod is not null)
+            {
+                MergeResolutionState(resolution, resolvedDirectMod);
+            }
+        }
+
+        return resolution;
+    }
+
+    private async Task<PreparedDownloads> PrepareDownloadsAsync(
+        string folderPath,
+        ResolutionState resolution,
+        CancellationToken cancellationToken)
+    {
+        var preparedDownloads = new PreparedDownloads(folderPath);
+        var modsFolder = Path.Combine(folderPath, ModsFolderName);
+        Directory.CreateDirectory(modsFolder);
+
+        foreach (var resolved in resolution.Projects.Values)
+        {
+            var destinationPath = Path.Combine(modsFolder, resolved.File.Filename);
+            if (await IsCurrentFileValidAsync(destinationPath, resolved.File, cancellationToken))
             {
                 continue;
             }
 
-            MergeResolutionState(resolution, resolvedDirectMod);
+            var tempFilePath = Path.Combine(preparedDownloads.TempRoot, resolved.File.Filename);
+            await _fileDownloader.DownloadFileAsync(
+                resolved.File.Url,
+                tempFilePath,
+                resolved.File.Hashes.Sha512 ?? resolved.File.Hashes.Sha1,
+                cancellationToken: cancellationToken);
+            preparedDownloads.DownloadedFiles[resolved.Project.Id] = tempFilePath;
         }
 
-        var tempRoot = Path.Combine(folderPath, ".mod-tmp", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(tempRoot);
+        return preparedDownloads;
+    }
+
+    private async Task<InstanceModsSnapshot> CommitPreparedResolutionUnlockedAsync(
+        MinecraftInstance instance,
+        string folderPath,
+        InstanceMeta currentMeta,
+        ResolutionState resolution,
+        PreparedDownloads preparedDownloads,
+        CancellationToken cancellationToken)
+    {
+        var modsFolder = Path.Combine(folderPath, ModsFolderName);
+        Directory.CreateDirectory(modsFolder);
 
         var backups = new List<(string BackupPath, string DestinationPath)>();
         var movedNewFiles = new List<string>();
-        var downloadedFiles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var obsoleteFiles = CollectObsoleteManagedFiles(currentMeta, resolution);
 
         try
@@ -454,31 +568,20 @@ public sealed class InstanceModsManager
             foreach (var resolved in resolution.Projects.Values)
             {
                 var destinationPath = Path.Combine(modsFolder, resolved.File.Filename);
-                if (await IsCurrentFileValidAsync(destinationPath, resolved.File, cancellationToken))
+                if (!preparedDownloads.DownloadedFiles.TryGetValue(resolved.Project.Id, out var tempFilePath))
                 {
-                    continue;
+                    if (await IsCurrentFileValidAsync(destinationPath, resolved.File, cancellationToken))
+                    {
+                        continue;
+                    }
+
+                    throw new InvalidOperationException(
+                        "Instance mod files changed during the operation. Please try again.");
                 }
 
-                var tempFilePath = Path.Combine(tempRoot, resolved.File.Filename);
-                await _fileDownloader.DownloadFileAsync(
-                    resolved.File.Url,
-                    tempFilePath,
-                    resolved.File.Hashes.Sha512 ?? resolved.File.Hashes.Sha1,
-                    cancellationToken: cancellationToken);
-                downloadedFiles[resolved.Project.Id] = tempFilePath;
-            }
-
-            foreach (var resolved in resolution.Projects.Values)
-            {
-                if (!downloadedFiles.TryGetValue(resolved.Project.Id, out var tempFilePath))
-                {
-                    continue;
-                }
-
-                var destinationPath = Path.Combine(modsFolder, resolved.File.Filename);
                 if (File.Exists(destinationPath))
                 {
-                    var backupPath = Path.Combine(tempRoot, Guid.NewGuid().ToString("N") + ".bak");
+                    var backupPath = Path.Combine(preparedDownloads.TempRoot, Guid.NewGuid().ToString("N") + ".bak");
                     File.Move(destinationPath, backupPath, true);
                     backups.Add((backupPath, destinationPath));
                 }
@@ -506,6 +609,9 @@ public sealed class InstanceModsManager
                     File.Delete(backup.BackupPath);
                 }
             }
+
+            var localState = await ReadLocalStateUnlockedAsync(folderPath, cancellationToken);
+            return BuildSnapshot(localState.Meta, localState.ScannedFiles);
         }
         catch
         {
@@ -526,39 +632,30 @@ public sealed class InstanceModsManager
 
             throw;
         }
-        finally
+    }
+
+    private static void EnsureExpectedMeta(InstanceMeta expectedMeta, InstanceMeta currentMeta)
+    {
+        if (!AreEquivalent(expectedMeta, currentMeta))
         {
-            if (Directory.Exists(tempRoot))
-            {
-                Directory.Delete(tempRoot, true);
-            }
+            throw new InvalidOperationException(
+                "Instance mod state changed during the operation. Please try again.");
         }
     }
 
-    private async Task<InstanceModsSnapshot> BuildSnapshotAsync(
-        MinecraftInstance instance,
-        CancellationToken cancellationToken)
-    {
-        var folderPath = GetInstanceFolder(instance.Folder);
-        var snapshotSource = await ExecuteWithInstanceReadLockAsync(
-            folderPath,
-            async token =>
-            {
-                var modsFolder = Path.Combine(folderPath, ModsFolderName);
-                Directory.CreateDirectory(modsFolder);
+    // Record equality can't be used because arrays (Mods, RequiredByProjectIds) use reference equality.
+    // JSON comparison is simple, automatically covers new fields, and is fine here since this is not a hot path.
+    private static bool AreEquivalent(InstanceMeta left, InstanceMeta right) =>
+        string.Equals(
+            JsonSerializer.Serialize(left, InstanceMetaJsonContext.Default.InstanceMeta),
+            JsonSerializer.Serialize(right, InstanceMetaJsonContext.Default.InstanceMeta),
+            StringComparison.Ordinal);
 
-                var meta = await ReadMetaUnlockedAsync(folderPath, token);
-                var scannedFiles = Directory.GetFiles(modsFolder, "*.jar", SearchOption.TopDirectoryOnly)
-                    .Select(Path.GetFileName)
-                    .OfType<string>()
-                    .ToImmutableHashSet(StringComparer.OrdinalIgnoreCase);
-                return (Meta: meta, ScannedFiles: scannedFiles);
-            },
-            cancellationToken);
-        var meta = snapshotSource.Meta;
-        var scannedFiles = snapshotSource.ScannedFiles;
+    private static InstanceModsSnapshot BuildSnapshot(
+        InstanceMeta meta,
+        ImmutableHashSet<string> scannedFiles)
+    {
         var managedByFileName = meta.Mods.ToDictionary(m => m.InstalledFileName, StringComparer.OrdinalIgnoreCase);
-        var plannedUpdates = await ResolveUpdatesSafelyAsync(instance, meta, cancellationToken);
         var titleLookup = meta.Mods
             .ToDictionary(m => m.ProjectId, m => m.ProjectTitle, StringComparer.OrdinalIgnoreCase);
         var projectStates = ImmutableDictionary.CreateBuilder<string, InstanceInstalledProjectState>(
@@ -580,10 +677,6 @@ public sealed class InstanceModsManager
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(v => v, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            plannedUpdates.TryGetValue(managed.ProjectId, out var latestVersion);
-            var hasUpdate = installKind == InstanceModItemKind.Direct
-                            && latestVersion is not null
-                            && !string.Equals(latestVersion.Id, managed.InstalledVersionId, StringComparison.Ordinal);
 
             var item = new InstanceModListItem(
                 Key: managed.ProjectId,
@@ -593,10 +686,9 @@ public sealed class InstanceModsManager
                 ProjectId: managed.ProjectId,
                 Kind: displayKind,
                 RequiredByDisplay: parentTitles.Length == 0 ? null : string.Join(", ", parentTitles),
-                CanUpdate: exists && installKind == InstanceModItemKind.Direct,
                 CanDelete: installKind == InstanceModItemKind.Direct,
-                HasUpdate: exists && hasUpdate,
-                LatestVersionNumber: latestVersion?.VersionNumber);
+                HasUpdate: false,
+                LatestVersionNumber: null);
 
             switch (displayKind)
             {
@@ -617,9 +709,7 @@ public sealed class InstanceModsManager
                 managed.InstalledVersionId,
                 managed.InstalledVersionNumber,
                 installKind,
-                IsBroken: !exists,
-                HasUpdate: hasUpdate,
-                LatestVersionNumber: latestVersion?.VersionNumber);
+                !exists);
         }
 
         foreach (var scannedFile in scannedFiles)
@@ -637,7 +727,6 @@ public sealed class InstanceModsManager
                 ProjectId: null,
                 Kind: InstanceModItemKind.Manual,
                 RequiredByDisplay: null,
-                CanUpdate: false,
                 CanDelete: true,
                 HasUpdate: false,
                 LatestVersionNumber: null));
@@ -736,40 +825,6 @@ public sealed class InstanceModsManager
         }
     }
 
-    private async Task<Dictionary<string, ModrinthVersion?>> ResolveUpdatesAsync(
-        MinecraftInstance instance,
-        InstanceMeta meta,
-        CancellationToken cancellationToken)
-    {
-        var directMods = meta.Mods
-            .Where(m => m.InstallKind.Equals(InstallKindDirect, StringComparison.OrdinalIgnoreCase));
-
-        var tasks = directMods.Select(async mod =>
-        (
-            ProjectId: mod.ProjectId,
-            Version: await TryResolveLatestCompatibleVersionAsync(instance, mod.ProjectId, cancellationToken)
-        ));
-
-        return (await Task.WhenAll(tasks))
-            .ToDictionary(item => item.ProjectId, item => item.Version, StringComparer.OrdinalIgnoreCase);
-    }
-
-    private async Task<Dictionary<string, ModrinthVersion?>> ResolveUpdatesSafelyAsync(
-        MinecraftInstance instance,
-        InstanceMeta meta,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            return await ResolveUpdatesAsync(instance, meta, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogWarning(ex, "Failed to resolve available updates for instance {InstanceId}", instance.Id);
-            return new Dictionary<string, ModrinthVersion?>(StringComparer.OrdinalIgnoreCase);
-        }
-    }
-
     private static HashSet<string> CollectObsoleteManagedFiles(InstanceMeta currentMeta, ResolutionState resolution)
     {
         var plannedFiles = resolution.Projects.Values
@@ -804,6 +859,34 @@ public sealed class InstanceModsManager
             }
 
             existing.RequiredByProjectIds.UnionWith(resolvedProject.RequiredByProjectIds);
+        }
+    }
+
+    private async Task<LatestCompatibleVersionInfo?> GetLatestCompatibleVersionAsync(
+        MinecraftInstance instance,
+        string projectId,
+        bool forceRefresh,
+        CancellationToken cancellationToken)
+    {
+        var cacheKey = GetLatestCompatibleVersionCacheKey(instance, projectId);
+        if (!forceRefresh && TryGetLatestCompatibleVersionFromCache(cacheKey, out var cachedVersion))
+        {
+            return cachedVersion;
+        }
+
+        try
+        {
+            var latestVersion = await TryResolveLatestCompatibleVersionAsync(instance, projectId, cancellationToken);
+            var latestCompatibleVersion = latestVersion is null
+                ? null
+                : new LatestCompatibleVersionInfo(projectId, latestVersion.Id, latestVersion.VersionNumber);
+            StoreLatestCompatibleVersionInCache(cacheKey, latestCompatibleVersion);
+            return latestCompatibleVersion;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Failed to resolve latest compatible version for {ProjectId}", projectId);
+            return null;
         }
     }
 
@@ -870,29 +953,54 @@ public sealed class InstanceModsManager
             instance.LaunchVersionId,
             []);
 
-    private async Task EnsureInstanceMetadataUnlockedAsync(
+    private async Task<LocalInstanceState> ReadLocalStateAsync(
         MinecraftInstance instance,
         string folderPath,
         CancellationToken cancellationToken)
     {
-        Directory.CreateDirectory(folderPath);
+        var localState = await ExecuteWithInstanceReadLockAsync(
+            folderPath,
+            token => TryReadLocalStateUnlockedAsync(folderPath, token),
+            cancellationToken);
+        if (localState is not null)
+        {
+            return localState;
+        }
 
-        var existing = await TryReadMetaUnlockedAsync(GetMetaPath(folderPath), cancellationToken);
-        var meta = existing is null
-            ? CreateEmptyMeta(instance)
-            : existing with
-            {
-                DisplayName = instance.Id,
-                MinecraftVersionId = instance.VersionId,
-                ModLoader = MinecraftInstance.ModLoaderToString(instance.ModLoader),
-                ModLoaderVersion = instance.ModLoaderVersion,
-                LaunchVersionId = instance.LaunchVersionId,
-            };
-
-        await WriteMetaUnlockedAsync(folderPath, meta, cancellationToken);
+        await EnsureInstanceMetadataAsync(instance, cancellationToken);
+        return await ExecuteWithInstanceReadLockAsync(
+            folderPath,
+            token => ReadLocalStateUnlockedAsync(folderPath, token),
+            cancellationToken);
     }
 
-    private async Task<InstanceMeta> ReadMetaUnlockedAsync(string instanceFolder, CancellationToken cancellationToken) =>
+    private async Task<LocalInstanceState> ReadLocalStateUnlockedAsync(
+        string folderPath,
+        CancellationToken cancellationToken) =>
+        await TryReadLocalStateUnlockedAsync(folderPath, cancellationToken)
+        ?? throw new InvalidOperationException($"Missing metadata file in '{folderPath}'.");
+
+    private async Task<LocalInstanceState?> TryReadLocalStateUnlockedAsync(
+        string folderPath,
+        CancellationToken cancellationToken)
+    {
+        var meta = await TryReadMetaUnlockedAsync(GetMetaPath(folderPath), cancellationToken);
+        if (meta is null)
+        {
+            return null;
+        }
+
+        var modsFolder = Path.Combine(folderPath, ModsFolderName);
+        Directory.CreateDirectory(modsFolder);
+        var scannedFiles = Directory.GetFiles(modsFolder, "*.jar", SearchOption.TopDirectoryOnly)
+            .Select(Path.GetFileName)
+            .OfType<string>()
+            .ToImmutableHashSet(StringComparer.OrdinalIgnoreCase);
+        return new LocalInstanceState(meta, scannedFiles);
+    }
+
+    private async Task<InstanceMeta>
+        ReadMetaUnlockedAsync(string instanceFolder, CancellationToken cancellationToken) =>
         await TryReadMetaUnlockedAsync(GetMetaPath(instanceFolder), cancellationToken)
         ?? throw new InvalidOperationException($"Missing metadata file in '{instanceFolder}'.");
 
@@ -920,6 +1028,11 @@ public sealed class InstanceModsManager
     }
 
     private static string GetMetaPath(string instanceFolder) => Path.Combine(instanceFolder, MetaFileName);
+
+    private static string GetLatestCompatibleVersionCacheKey(
+        MinecraftInstance instance,
+        string projectId) =>
+        $"{instance.VersionId}|{instance.ModLoader}|{projectId}";
 
     private AsyncRwLock GetInstanceStateLock(string instanceFolder) =>
         _instanceStateLocks.GetOrAdd(instanceFolder, _ => new AsyncRwLock(MaxConcurrentInstanceStateReaders));
@@ -1033,10 +1146,27 @@ public sealed class InstanceModsManager
         }
     }
 
-    private async Task RefreshSnapshotAsync(MinecraftInstance instance, CancellationToken cancellationToken)
+    private void PublishSnapshot(string instanceId, InstanceModsSnapshot snapshot) =>
+        StoreSnapshot(instanceId, snapshot, raiseEvent: true);
+
+    private bool TryGetLatestCompatibleVersionFromCache(
+        string cacheKey,
+        out LatestCompatibleVersionInfo? latestCompatibleVersion)
     {
-        var snapshot = await BuildSnapshotAsync(instance, cancellationToken);
-        StoreSnapshot(instance.Id, snapshot, raiseEvent: true);
+        lock (_latestCompatibleVersionCacheLock)
+        {
+            return _latestCompatibleVersionCache.TryGetValue(cacheKey, out latestCompatibleVersion);
+        }
+    }
+
+    private void StoreLatestCompatibleVersionInCache(
+        string cacheKey,
+        LatestCompatibleVersionInfo? latestCompatibleVersion)
+    {
+        lock (_latestCompatibleVersionCacheLock)
+        {
+            _latestCompatibleVersionCache[cacheKey] = latestCompatibleVersion;
+        }
     }
 
     private static async Task<bool> IsCurrentFileValidAsync(
@@ -1053,6 +1183,54 @@ public sealed class InstanceModsManager
     {
         public Dictionary<string, ResolvedProjectInstall> Projects { get; } =
             new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private sealed record LocalInstanceState(
+        InstanceMeta Meta,
+        ImmutableHashSet<string> ScannedFiles
+    );
+
+    private sealed class PreparedDownloads : IDisposable
+    {
+        public PreparedDownloads(string instanceFolder)
+        {
+            TempRoot = Path.Combine(instanceFolder, ".mod-tmp", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(TempRoot);
+        }
+
+        public string TempRoot { get; }
+        public Dictionary<string, string> DownloadedFiles { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public void Dispose()
+        {
+            try
+            {
+                if (Directory.Exists(TempRoot))
+                {
+                    Directory.Delete(TempRoot, true);
+                }
+            }
+            catch
+            {
+                // Cleanup is best-effort; keep the original operation outcome.
+            }
+        }
+    }
+
+    private enum ModChangeKind
+    {
+        Install,
+        Update,
+        Remove,
+        UpdateAll,
+    }
+
+    private enum DeleteTarget
+    {
+        Missing,
+        Manual,
+        ManagedDirect,
+        Dependency,
     }
 
     private sealed class ResolvedProjectInstall(
@@ -1096,8 +1274,10 @@ public sealed record InstanceModListItem(
     string? ProjectId,
     InstanceModItemKind Kind,
     string? RequiredByDisplay,
-    bool CanUpdate,
     bool CanDelete,
     bool HasUpdate,
     string? LatestVersionNumber
-);
+)
+{
+    public bool CanUpdate => Kind == InstanceModItemKind.Direct;
+}
