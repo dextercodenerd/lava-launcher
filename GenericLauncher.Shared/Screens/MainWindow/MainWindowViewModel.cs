@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GenericLauncher.Auth;
 using GenericLauncher.Database.Model;
+using GenericLauncher.InstanceMods;
 using GenericLauncher.Minecraft;
 using GenericLauncher.Misc;
 using GenericLauncher.Model;
@@ -34,6 +35,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly AuthService? _auth;
     private readonly MinecraftLauncher? _minecraftLauncher;
     private readonly ModrinthApiClient? _modrinthApiClient;
+    private readonly InstanceModsManager? _instanceModsManager;
 
     [ObservableProperty] private string _appTitle = Product.Name;
 
@@ -60,12 +62,14 @@ public partial class MainWindowViewModel : ViewModelBase
         AuthService? authService = null,
         MinecraftLauncher? minecraftLauncher = null,
         ModrinthApiClient? modrinthApiClient = null,
+        InstanceModsManager? instanceModsManager = null,
         ILogger? logger = null)
     {
         _logger = logger;
         _auth = authService;
         _minecraftLauncher = minecraftLauncher;
         _modrinthApiClient = modrinthApiClient;
+        _instanceModsManager = instanceModsManager;
 
         Navigation = new StackNavigationViewModel();
 
@@ -90,7 +94,10 @@ public partial class MainWindowViewModel : ViewModelBase
 
         ModrinthSearchViewModel = new ModrinthSearchViewModel(
             modrinthApiClient,
+            instanceModsManager,
+            ModrinthSearchContext.CreateRoot(),
             GoToModrinthProjectDetails,
+            null,
             App.LoggerFactory?.CreateLogger(nameof(ModrinthSearchViewModel)));
 
         if (_minecraftLauncher is null || _auth is null)
@@ -234,16 +241,21 @@ public partial class MainWindowViewModel : ViewModelBase
             instance,
             _auth,
             _minecraftLauncher,
+            _instanceModsManager,
+            _modrinthApiClient,
+            GoToModrinthProjectDetails,
             App.LoggerFactory?.CreateLogger(nameof(InstanceDetailsViewModel)));
 
         Navigation.Push(vm);
     }
 
-    private void GoToModrinthProjectDetails(ModrinthSearchResult searchResult)
+    private void GoToModrinthProjectDetails(ModrinthSearchResult searchResult, ModrinthSearchContext searchContext)
     {
         var vm = new ModrinthProjectDetailsViewModel(
             searchResult,
             _modrinthApiClient,
+            _instanceModsManager,
+            searchContext,
             App.LoggerFactory?.CreateLogger(nameof(ModrinthProjectDetailsViewModel)));
 
         Navigation.Push(vm);

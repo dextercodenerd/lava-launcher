@@ -11,6 +11,7 @@ using GenericLauncher.Auth;
 using GenericLauncher.Database;
 using GenericLauncher.Database.Model;
 using GenericLauncher.Http;
+using GenericLauncher.InstanceMods;
 using GenericLauncher.Java;
 using GenericLauncher.Minecraft;
 using GenericLauncher.Minecraft.ModLoaders;
@@ -89,6 +90,7 @@ public partial class App : Application
     private readonly LauncherRepository _launcherRepository = new(Platform);
     private readonly AuthService _authService;
     private readonly MinecraftLauncher _minecraftLauncher;
+    private readonly InstanceModsManager _instanceModsManager;
 
     private readonly ModrinthApiClient _modrinthApiClient =
         new(HttpClient, LoggerFactory?.CreateLogger(typeof(ModrinthApiClient)));
@@ -100,6 +102,13 @@ public partial class App : Application
             _launcherRepository,
             LoggerFactory?.CreateLogger(typeof(AuthService)));
 
+        _instanceModsManager = new InstanceModsManager(
+            Platform,
+            _modrinthApiClient,
+            FileDownloader,
+            () => _minecraftLauncher!.Instances,
+            LoggerFactory?.CreateLogger(typeof(InstanceModsManager)));
+
         _minecraftLauncher = new MinecraftLauncher(
             Platform,
             Product.Name,
@@ -107,6 +116,7 @@ public partial class App : Application
             _launcherRepository,
             _minecraftVersionManager,
             _javaVersionManager,
+            _instanceModsManager,
             new Dictionary<MinecraftInstanceModLoader, IModLoaderService>
             {
                 [MinecraftInstanceModLoader.Vanilla] = _vanillaModLoaderService,
@@ -143,7 +153,7 @@ public partial class App : Application
         {
             desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;
             DataContext =
-                new ApplicationViewModel(_authService, _minecraftLauncher, _modrinthApiClient);
+                new ApplicationViewModel(_authService, _minecraftLauncher, _modrinthApiClient, _instanceModsManager);
         }
 
         base.OnFrameworkInitializationCompleted();

@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using CliWrap;
 using GenericLauncher.Database;
 using GenericLauncher.Database.Model;
+using GenericLauncher.InstanceMods;
 using GenericLauncher.Java;
 using GenericLauncher.Minecraft.Json;
 using GenericLauncher.Minecraft.ModLoaders;
@@ -38,6 +39,7 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
     private readonly LauncherRepository _repository;
     private readonly JavaVersionManager _javaManager;
     private readonly MinecraftVersionManager _minecraftManager;
+    private readonly InstanceModsManager _instanceModsManager;
     private readonly IReadOnlyDictionary<MinecraftInstanceModLoader, IModLoaderService> _modLoaderServices;
     private readonly ILogger? _logger;
 
@@ -68,6 +70,7 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
         LauncherRepository repository,
         MinecraftVersionManager minecraftVersionManager,
         JavaVersionManager javaVersionManager,
+        InstanceModsManager instanceModsManager,
         IReadOnlyDictionary<MinecraftInstanceModLoader, IModLoaderService> modLoaderServices,
         ILogger? logger = null)
     {
@@ -78,6 +81,7 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
         _repository = repository;
         _javaManager = javaVersionManager;
         _minecraftManager = minecraftVersionManager;
+        _instanceModsManager = instanceModsManager;
         _modLoaderServices = modLoaderServices;
         _logger = logger;
 
@@ -133,6 +137,8 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
     private async Task RefreshInstancesAsync()
     {
         var instances = (await _repository.GetAllMinecraftInstancesAsync()).ToImmutableList();
+        await ImportPortableInstancesAsync(instances);
+        instances = (await _repository.GetAllMinecraftInstancesAsync()).ToImmutableList();
 
         await _lock.WaitAsync();
         try
@@ -143,6 +149,35 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
         {
             _lock.Release();
             InstancesChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    private async Task ImportPortableInstancesAsync(ImmutableList<MinecraftInstance> existingInstances)
+    {
+        var knownFolders = existingInstances
+            .Select(instance => instance.Folder)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var knownIds = existingInstances
+            .Select(instance => instance.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var discovered = await _instanceModsManager.DiscoverPortableInstancesAsync();
+
+        foreach (var candidate in discovered)
+        {
+            if (knownFolders.Contains(candidate.FolderName))
+            {
+                continue;
+            }
+
+            try
+            {
+                await ImportPortableInstanceAsync(candidate, knownIds);
+                knownFolders.Add(candidate.FolderName);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Failed to import portable instance from {Folder}", candidate.FolderPath);
+            }
         }
     }
 
@@ -223,6 +258,24 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
             modLoader,
             resolvedModLoader.LaunchVersionId,
             resolvedModLoader.LoaderVersionId);
+
+        await _instanceModsManager.EnsureInstanceMetadataAsync(new MinecraftInstance(
+            name,
+            minecraft.VersionId,
+            resolvedModLoader.LaunchVersionId,
+            modLoader,
+            resolvedModLoader.LoaderVersionId,
+            MinecraftInstanceState.Installing,
+            minecraft.Type,
+            sanitizedAndNumberedInstanceFolderName,
+            minecraft.RequiredJavaVersion,
+            minecraft.ClientJarPath,
+            minecraft.MainClass,
+            minecraft.AssetIndex,
+            minecraft.ClassPath,
+            minecraft.GameArguments,
+            minecraft.JvmArguments));
+
         await RefreshInstancesAsync();
 
         // Now create a complex thread-safe progress reporter, that handles parallelism and
@@ -350,7 +403,99 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
         await _repository.SetMinecraftInstanceAsReadyAsync(name);
         _logger?.LogInformation("Minecraft instance '{InstanceId}' is ready to play", name);
 
+        await _instanceModsManager.EnsureInstanceMetadataAsync(new MinecraftInstance(
+            name,
+            minecraft.VersionId,
+            resolvedModLoader.LaunchVersionId,
+            modLoader,
+            resolvedModLoader.LoaderVersionId,
+            MinecraftInstanceState.Ready,
+            minecraft.Type,
+            sanitizedAndNumberedInstanceFolderName,
+            minecraft.RequiredJavaVersion,
+            minecraft.ClientJarPath,
+            minecraft.MainClass,
+            minecraft.AssetIndex,
+            minecraft.ClassPath,
+            minecraft.GameArguments,
+            minecraft.JvmArguments));
+
         await RefreshInstancesAsync();
+    }
+
+    private async Task ImportPortableInstanceAsync(
+        PortableInstanceCandidate candidate,
+        HashSet<string> knownIds)
+    {
+        var modLoader = MinecraftInstance.ModLoaderFromString(candidate.Meta.ModLoader);
+        if (modLoader == MinecraftInstanceModLoader.Unknown)
+        {
+            throw new InvalidOperationException($"Unsupported mod loader '{candidate.Meta.ModLoader}'.");
+        }
+
+        var version = AvailableVersions.FirstOrDefault(v => v.Id == candidate.Meta.MinecraftVersionId);
+        if (version is null)
+        {
+            throw new InvalidOperationException(
+                $"Minecraft version '{candidate.Meta.MinecraftVersionId}' is unavailable.");
+        }
+
+        var name = MakeUniqueInstanceName(candidate.Meta.DisplayName, knownIds);
+        var instanceNativeLibrariesFolder =
+            MinecraftInstance.GetNativeLibrariesFolder(_instancesFolder, candidate.FolderName);
+        var modLoaderService = GetModLoaderService(modLoader);
+        var resolvedModLoader = await modLoaderService.ResolveAsync(
+            version.Id,
+            candidate.Meta.ModLoaderVersion,
+            _platform);
+
+        var (versionDetails, minecraft) = await _minecraftManager.DownloadVersionAsync(version);
+        var cachedVanillaNativeLibrariesFolder = minecraft.NativeLibrariesFolder;
+        minecraft = ApplyModLoaderToVersion(minecraft, resolvedModLoader);
+
+        await _repository.AddInstallingMinecraftInstanceAsync(
+            name,
+            minecraft,
+            candidate.FolderName,
+            modLoader,
+            resolvedModLoader.LaunchVersionId,
+            resolvedModLoader.LoaderVersionId);
+
+        await _minecraftManager.DownloadAssetsAndLibraries(
+            versionDetails,
+            new Progress<double>(),
+            new Progress<double>(),
+            new Progress<double>());
+
+        var javaVersion = minecraft.RequiredJavaVersion;
+        await _javaManager.InstallJavaAsync(javaVersion, new Progress<double>());
+        var javaExecutablePath = _javaManager.GetJavaExecutablePath(javaVersion) ??
+                                 throw new ArgumentException($"Java {javaVersion} is missing");
+        await modLoaderService.InstallAsync(
+            resolvedModLoader,
+            new ModLoaderInstallContext(_platform, javaExecutablePath, minecraft.ClientJarPath),
+            new Progress<double>());
+
+        MaterializeInstanceNativeLibraries(cachedVanillaNativeLibrariesFolder, instanceNativeLibrariesFolder);
+
+        await _repository.SetMinecraftInstanceAsReadyAsync(name);
+        await _instanceModsManager.EnsureInstanceMetadataAsync(new MinecraftInstance(
+            name,
+            minecraft.VersionId,
+            resolvedModLoader.LaunchVersionId,
+            modLoader,
+            resolvedModLoader.LoaderVersionId,
+            MinecraftInstanceState.Ready,
+            minecraft.Type,
+            candidate.FolderName,
+            minecraft.RequiredJavaVersion,
+            minecraft.ClientJarPath,
+            minecraft.MainClass,
+            minecraft.AssetIndex,
+            minecraft.ClassPath,
+            minecraft.GameArguments,
+            minecraft.JvmArguments));
+        knownIds.Add(name);
     }
 
     public async Task<ImmutableList<string>> LaunchInstance(
@@ -636,6 +781,23 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
             }
 
             File.Copy(sourceFile, destinationPath, true);
+        }
+    }
+
+    private static string MakeUniqueInstanceName(string preferredName, HashSet<string> knownIds)
+    {
+        if (knownIds.Add(preferredName))
+        {
+            return preferredName;
+        }
+
+        for (var suffix = 2;; suffix++)
+        {
+            var candidate = $"{preferredName} ({suffix})";
+            if (knownIds.Add(candidate))
+            {
+                return candidate;
+            }
         }
     }
 
