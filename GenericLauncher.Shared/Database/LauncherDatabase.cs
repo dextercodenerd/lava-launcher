@@ -104,7 +104,7 @@ public sealed class LauncherDatabase
     public async Task<bool> RemoveAccountAsync(string accountId)
     {
         var count = await _rwLock.ExecuteWriteAsync(() =>
-            _conn.ExecuteScalarAsync<long>($"DELETE FROM {Account.Table} WHERE Id = @Id;",
+            _conn.ExecuteAsync($"DELETE FROM {Account.Table} WHERE Id = @Id;",
                 bind: cmd => { cmd.Parameters.AddWithValue("@Id", accountId); }));
         return count == 1;
     }
@@ -148,7 +148,7 @@ public sealed class LauncherDatabase
     public async Task<bool> DeleteMinecraftInstanceAsync(string instanceId)
     {
         var count = await _rwLock.ExecuteWriteAsync(() =>
-            _conn.ExecuteScalarAsync<long>(
+            _conn.ExecuteAsync(
                 $"DELETE FROM {MinecraftInstance.Table} WHERE Id = @Id;",
                 bind: cmd => { cmd.Parameters.AddWithValue("@Id", instanceId); }));
         return count == 1;

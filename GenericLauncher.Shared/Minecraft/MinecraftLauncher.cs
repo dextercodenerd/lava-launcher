@@ -28,7 +28,7 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
         RendererReady,
         SplashScreen,
         Running,
-        Stopped
+        Stopped,
     }
 
     private readonly LauncherPlatform _platform;
@@ -532,8 +532,9 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
                     $"Cannot delete instance '{instanceId}' because it is currently installing.");
             }
 
-            // Soft-delete: mark as Deleting in DB
-            await _repository.SetMinecraftInstanceStateAsync(instanceId, MinecraftInstanceState.Deleting);
+            // Move the DB I/O off the main thread
+            await Task.Run(() =>
+                _repository.SetMinecraftInstanceStateAsync(instanceId, MinecraftInstanceState.Deleting));
         }
         finally
         {
@@ -557,14 +558,16 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
             _logger?.LogError(ex, "Failed to delete instance folder '{Folder}'", instanceFolder);
 
             // Transition to DeleteFailed
-            await _repository.SetMinecraftInstanceStateAsync(instanceId, MinecraftInstanceState.DeleteFailed);
+            await Task.Run(() =>
+                _repository.SetMinecraftInstanceStateAsync(instanceId, MinecraftInstanceState.DeleteFailed));
             await RefreshInstancesAsync();
-            throw new InvalidOperationException("Failed to delete instance folder. The instance is marked for retry.",
+            throw new InvalidOperationException(
+                "Failed to delete instance folder. The instance is marked for retry.",
                 ex);
         }
 
         // Phase 3: Disk is gone -- now delete the DB record and clean the caches
-        await _repository.RemoveMinecraftInstanceAsync(instanceId);
+        await Task.Run(() => _repository.RemoveMinecraftInstanceAsync(instanceId));
         _instanceModsManager.EvictInstanceCaches(instance);
         CurrentInstallProgress.TryRemove(instanceId, out _);
 
@@ -625,7 +628,7 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
                     NativeLibrariesFolder = nativeLibrariesFolder,
                     ClassPath = instance.ClassPath,
                     GameArguments = instance.GameArguments,
-                    JvmArguments = instance.JvmArguments
+                    JvmArguments = instance.JvmArguments,
                 };
                 var workdir = Path.Combine(_instancesFolder, instance.Folder);
 
@@ -732,7 +735,7 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
         // basic JVM args
         arguments.AddRange([
             "-Xmx4G",
-            "-Xms2G"
+            "-Xms2G",
         ]);
 
         // version specific JVM args
@@ -823,7 +826,7 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
                 : modLoader.MainClassOverride,
             ClassPath = classPath,
             GameArguments = gameArgs,
-            JvmArguments = jvmArgs
+            JvmArguments = jvmArgs,
         };
     }
 
@@ -882,12 +885,11 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
         string playerName,
         string uuid,
         string xuid,
-        string accessToken)
-    {
+        string accessToken) =>
         // https://minecraft.wiki/w/Minecraft_Wiki:Projects/wiki.vg_merge/Launching_the_game
         // TODO: fill-in legacy values for veeery old versions based on the link above ^^^.
         //  I wouldn't go below 1.12, ideally not below 1.16/1.18?
-        return input
+        input
             .Replace("${version_name}", version.VersionId)
             .Replace("${game_directory}", workdir)
             .Replace("${assets_root}", version.AssetsFolder)
@@ -905,7 +907,6 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
             .Replace("${launcher_version}", _launcherVersion)
             .Replace("${classpath}", classPath)
             .Replace("${clientid}", _installationId);
-    }
 
     public void Dispose()
     {
