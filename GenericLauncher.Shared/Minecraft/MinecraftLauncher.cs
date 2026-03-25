@@ -28,7 +28,7 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
         RendererReady,
         SplashScreen,
         Running,
-        Stopped,
+        Stopped
     }
 
     private readonly LauncherPlatform _platform;
@@ -44,8 +44,18 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
     private readonly ILogger? _logger;
 
     private readonly SemaphoreSlim _lock = new(1, 1);
-    public ImmutableList<VersionInfo> AvailableVersions { get; private set; } = [];
-    public ImmutableList<MinecraftInstance> Instances { get; private set; } = [];
+
+    public ImmutableList<VersionInfo> AvailableVersions
+    {
+        get;
+        private set;
+    } = [];
+
+    public ImmutableList<MinecraftInstance> Instances
+    {
+        get;
+        private set;
+    } = [];
 
     public ImmutableList<MinecraftInstanceModLoader> AvailableModLoaders =>
         _modLoaderServices.Keys
@@ -498,6 +508,69 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
         knownIds.Add(name);
     }
 
+    public async Task DeleteInstanceAsync(string instanceId)
+    {
+        MinecraftInstance instance;
+
+        // Phase 1: Validate and set Deleting state (under lock)
+        await _lock.WaitAsync();
+        try
+        {
+            instance = Instances.Find(i => i.Id == instanceId)
+                       ?? throw new InvalidOperationException($"Instance '{instanceId}' not found.");
+
+            if (LaunchedInstances.ContainsKey(instanceId))
+            {
+                throw new InvalidOperationException(
+                    $"Cannot delete instance '{instanceId}' because it is currently running.");
+            }
+
+            if (instance.State == MinecraftInstanceState.Installing
+                || CurrentInstallProgress.ContainsKey(instanceId))
+            {
+                throw new InvalidOperationException(
+                    $"Cannot delete instance '{instanceId}' because it is currently installing.");
+            }
+
+            // Soft-delete: mark as Deleting in DB
+            await _repository.SetMinecraftInstanceStateAsync(instanceId, MinecraftInstanceState.Deleting);
+        }
+        finally
+        {
+            _lock.Release();
+        }
+
+        // Refresh so UI shows "Deleting" status
+        await RefreshInstancesAsync();
+
+        // Phase 2: Delete disk folder
+        var instanceFolder = Path.Combine(_instancesFolder, instance.Folder);
+        try
+        {
+            if (Directory.Exists(instanceFolder))
+            {
+                Directory.Delete(instanceFolder, true);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to delete instance folder '{Folder}'", instanceFolder);
+
+            // Transition to DeleteFailed
+            await _repository.SetMinecraftInstanceStateAsync(instanceId, MinecraftInstanceState.DeleteFailed);
+            await RefreshInstancesAsync();
+            throw new InvalidOperationException("Failed to delete instance folder. The instance is marked for retry.",
+                ex);
+        }
+
+        // Phase 3: Disk is gone -- now delete the DB record and clean the caches
+        await _repository.RemoveMinecraftInstanceAsync(instanceId);
+        _instanceModsManager.EvictInstanceCaches(instance);
+        CurrentInstallProgress.TryRemove(instanceId, out _);
+
+        await RefreshInstancesAsync();
+    }
+
     public async Task<ImmutableList<string>> LaunchInstance(
         MinecraftInstance instance,
         Func<Task<Account>> accountProvider)
@@ -552,7 +625,7 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
                     NativeLibrariesFolder = nativeLibrariesFolder,
                     ClassPath = instance.ClassPath,
                     GameArguments = instance.GameArguments,
-                    JvmArguments = instance.JvmArguments,
+                    JvmArguments = instance.JvmArguments
                 };
                 var workdir = Path.Combine(_instancesFolder, instance.Folder);
 
@@ -659,7 +732,7 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
         // basic JVM args
         arguments.AddRange([
             "-Xmx4G",
-            "-Xms2G",
+            "-Xms2G"
         ]);
 
         // version specific JVM args
@@ -750,7 +823,7 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
                 : modLoader.MainClassOverride,
             ClassPath = classPath,
             GameArguments = gameArgs,
-            JvmArguments = jvmArgs,
+            JvmArguments = jvmArgs
         };
     }
 
@@ -809,11 +882,12 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
         string playerName,
         string uuid,
         string xuid,
-        string accessToken) =>
+        string accessToken)
+    {
         // https://minecraft.wiki/w/Minecraft_Wiki:Projects/wiki.vg_merge/Launching_the_game
         // TODO: fill-in legacy values for veeery old versions based on the link above ^^^.
         //  I wouldn't go below 1.12, ideally not below 1.16/1.18?
-        input
+        return input
             .Replace("${version_name}", version.VersionId)
             .Replace("${game_directory}", workdir)
             .Replace("${assets_root}", version.AssetsFolder)
@@ -831,6 +905,7 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
             .Replace("${launcher_version}", _launcherVersion)
             .Replace("${classpath}", classPath)
             .Replace("${clientid}", _installationId);
+    }
 
     public void Dispose()
     {

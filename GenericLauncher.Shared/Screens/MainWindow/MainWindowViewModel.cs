@@ -243,6 +243,7 @@ public partial class MainWindowViewModel : ViewModelBase
             _instanceModsManager,
             _modrinthApiClient,
             GoToModrinthProjectDetails,
+            onDeleted: () => Navigation.Pop(),
             App.LoggerFactory?.CreateLogger(nameof(InstanceDetailsViewModel)));
 
         Navigation.Push(vm);

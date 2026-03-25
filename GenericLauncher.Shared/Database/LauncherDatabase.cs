@@ -145,6 +145,27 @@ public sealed class LauncherDatabase
             }));
     }
 
+    public Task SetMinecraftInstanceStateAsync(string instanceId, MinecraftInstanceState state)
+    {
+        return _rwLock.ExecuteWriteAsync(() => _conn.ExecuteAsync(
+            $"UPDATE {MinecraftInstance.Table} SET State = @State WHERE Id = @Id",
+            (instanceId, MinecraftInstance.StateToString(state)),
+            static (cmd, args) =>
+            {
+                cmd.Parameters.AddWithValue("@Id", args.instanceId);
+                cmd.Parameters.AddWithValue("@State", args.Item2);
+            }));
+    }
+
+    public async Task<bool> DeleteMinecraftInstanceAsync(string instanceId)
+    {
+        var count = await _rwLock.ExecuteWriteAsync(() =>
+            _conn.ExecuteScalarAsync<long>(
+                $"DELETE FROM {MinecraftInstance.Table} WHERE Id = @Id;",
+                bind: cmd => { cmd.Parameters.AddWithValue("@Id", instanceId); }));
+        return count == 1;
+    }
+
     public void Dispose()
     {
         _conn.Dispose();

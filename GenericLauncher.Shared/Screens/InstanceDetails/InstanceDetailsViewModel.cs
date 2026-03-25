@@ -32,6 +32,7 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
     private readonly InstanceModsManager? _instanceModsManager;
     private readonly ModrinthApiClient? _modrinthApiClient;
     private readonly Action<ModrinthSearchResult, ModrinthSearchContext>? _openProjectDetails;
+    private readonly Action? _onDeleted;
     private readonly ILogger? _logger;
 
     private InstanceModsSnapshot _modsSnapshot = InstanceModsSnapshot.Empty;
@@ -45,7 +46,11 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
     [ObservableProperty] private InstanceDetailsTab _selectedTab = InstanceDetailsTab.Content;
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ClickPlayCommand))]
+    [NotifyPropertyChangedFor(nameof(CanDelete))]
     private MinecraftLauncher.RunningState _runningState = MinecraftLauncher.RunningState.Stopped;
+
+    [ObservableProperty] private bool _isDeleteConfirmationVisible;
+    [ObservableProperty] private string _deleteErrorMessage = "";
 
     [ObservableProperty] private bool _isModsLoading;
     [ObservableProperty] private string _modsStatusMessage = "";
@@ -61,6 +66,10 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
     public bool IsContentTab => SelectedTab == InstanceDetailsTab.Content;
     public bool IsModsTab => SelectedTab == InstanceDetailsTab.Mods;
     public bool IsInstalling => Instance.State == MinecraftInstanceState.Installing;
+    public bool IsDeleting => Instance.State == MinecraftInstanceState.Deleting;
+    public bool IsDeleteFailed => Instance.State == MinecraftInstanceState.DeleteFailed;
+    public bool CanDelete => Instance.State == MinecraftInstanceState.Ready
+        && RunningState == MinecraftLauncher.RunningState.Stopped;
     public bool CanManageMods => Instance.ModLoader is MinecraftInstanceModLoader.Fabric
         or MinecraftInstanceModLoader.Forge
         or MinecraftInstanceModLoader.NeoForge;
@@ -111,7 +120,8 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
         InstanceModsManager? instanceModsManager,
         ModrinthApiClient? modrinthApiClient,
         Action<ModrinthSearchResult, ModrinthSearchContext>? openProjectDetails,
-        ILogger? logger)
+        Action? onDeleted = null,
+        ILogger? logger = null)
     {
         _instance = instance;
         _auth = auth;
@@ -119,6 +129,7 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
         _instanceModsManager = instanceModsManager;
         _modrinthApiClient = modrinthApiClient;
         _openProjectDetails = openProjectDetails;
+        _onDeleted = onDeleted;
         _logger = logger;
 
         if (_minecraftLauncher is not null)
@@ -151,16 +162,24 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
             return;
         }
 
-        // Check if our instance state changed (e.g. from Installing to Ready)
-        // We rely on the launcher's list to find the updated version of our instance
         Dispatcher.UIThread.Post(() =>
         {
             var updatedInstance = _minecraftLauncher.Instances.Find(i => i.Id == Instance.Id);
-            if (updatedInstance is not null && updatedInstance != Instance)
+            if (updatedInstance is null)
+            {
+                // Instance was fully deleted -- navigate back
+                _onDeleted?.Invoke();
+                return;
+            }
+
+            if (updatedInstance != Instance)
             {
                 Instance = updatedInstance;
                 OnPropertyChanged(nameof(IsInstalling));
                 OnPropertyChanged(nameof(CanManageMods));
+                OnPropertyChanged(nameof(IsDeleting));
+                OnPropertyChanged(nameof(IsDeleteFailed));
+                OnPropertyChanged(nameof(CanDelete));
                 ClickPlayCommand.NotifyCanExecuteChanged();
             }
         });
@@ -221,6 +240,9 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
     {
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(CanManageMods));
+        OnPropertyChanged(nameof(IsDeleting));
+        OnPropertyChanged(nameof(IsDeleteFailed));
+        OnPropertyChanged(nameof(CanDelete));
     }
 
     [RelayCommand]
@@ -347,6 +369,55 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
         finally
         {
             IsModsLoading = false;
+        }
+    }
+
+    [RelayCommand]
+    private void ShowDeleteConfirmation() => IsDeleteConfirmationVisible = true;
+
+    [RelayCommand]
+    private void CancelDelete()
+    {
+        IsDeleteConfirmationVisible = false;
+        DeleteErrorMessage = "";
+    }
+
+    [RelayCommand]
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_minecraftLauncher is null)
+        {
+            return;
+        }
+        try
+        {
+            DeleteErrorMessage = "";
+            await _minecraftLauncher.DeleteInstanceAsync(Instance.Id);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to delete instance {InstanceId}", Instance.Id);
+            DeleteErrorMessage = "Failed to delete instance files. You can retry.";
+            IsDeleteConfirmationVisible = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task RetryDeleteAsync()
+    {
+        if (_minecraftLauncher is null)
+        {
+            return;
+        }
+        try
+        {
+            DeleteErrorMessage = "";
+            await _minecraftLauncher.DeleteInstanceAsync(Instance.Id);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to retry delete for instance {InstanceId}", Instance.Id);
+            DeleteErrorMessage = "Failed to delete instance files. You can retry.";
         }
     }
 
