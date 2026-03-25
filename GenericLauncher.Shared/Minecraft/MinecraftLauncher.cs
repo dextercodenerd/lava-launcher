@@ -202,23 +202,23 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
 
     public async Task CreateInstance(
         VersionInfo version,
-        string name,
+        string instanceId,
         MinecraftInstanceModLoader modLoader,
         string? preferredModLoaderVersion,
         IProgress<ThreadSafeInstallProgressReporter.InstallProgress> progress)
     {
-        if (string.IsNullOrWhiteSpace(name))
+        if (string.IsNullOrWhiteSpace(instanceId))
         {
             throw new ArgumentException("Instance name cannot be empty or all whitespace!");
         }
 
         // WARN: This is a race condition, because we insert new record after a while, when we have the MC version info
         //  required to launch it. But we are blocking the app UI so it is "safe". Not the best UX, but good for now.
-        var exist = await _repository.MinecraftInstanceExists(name);
+        var exist = await _repository.MinecraftInstanceExists(instanceId);
         if (exist)
         {
             // TODO: Throw custom/specific exception e.g., create something like AlreadyExistsException? -- also below
-            throw new ArgumentException($"Instance '{name}' already exists");
+            throw new ArgumentException($"Instance '{instanceId}' already exists");
         }
 
 
@@ -230,13 +230,13 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
             .OfType<string>()
             .ToArray();
         var sanitizedAndNumberedInstanceFolderName =
-            PathUtils.IncrementNumberedFolderNameIfExistsAndSanitize(name, existingFolders);
+            PathUtils.IncrementNumberedFolderNameIfExistsAndSanitize(instanceId, existingFolders);
 
         var instanceFolder = Path.Combine(_instancesFolder, sanitizedAndNumberedInstanceFolderName);
         if (Directory.Exists(instanceFolder))
         {
             // TODO: Throw custom/specific exception e.g., create something like AlreadyExistsException? -- also above
-            throw new ArgumentException($"Instance '{name}' already exists");
+            throw new ArgumentException($"Instance '{instanceId}' already exists");
         }
 
         Directory.CreateDirectory(instanceFolder);
@@ -262,7 +262,7 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
         // TODO: Create a DB record as soon as possible, sooner then we have here...
         // Now we now, that such MC version exists, and we can save an "installing" state instance into DB
         await _repository.AddInstallingMinecraftInstanceAsync(
-            name,
+            instanceId,
             minecraft,
             sanitizedAndNumberedInstanceFolderName,
             modLoader,
@@ -270,7 +270,7 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
             resolvedModLoader.LoaderVersionId);
 
         await _instanceModsManager.EnsureInstanceMetadataAsync(new MinecraftInstance(
-            name,
+            instanceId,
             minecraft.VersionId,
             resolvedModLoader.LaunchVersionId,
             modLoader,
@@ -290,7 +290,7 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
 
         // Now create a complex thread-safe progress reporter, that handles parallelism and
         // combining of different progress sources.
-        await using var progressReporter = new ThreadSafeInstallProgressReporter(name,
+        await using var progressReporter = new ThreadSafeInstallProgressReporter(instanceId,
             new Progress<ThreadSafeInstallProgressReporter.InstallProgress>(p =>
             {
                 CurrentInstallProgress[p.InstanceId] = p;
@@ -406,15 +406,15 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
 
         MaterializeInstanceNativeLibraries(cachedVanillaNativeLibrariesFolder, instanceNativeLibrariesFolder);
 
-        _logger?.LogInformation("Successfully download Minecraft instance '{InstanceId}'", name);
+        _logger?.LogInformation("Successfully download Minecraft instance '{InstanceId}'", instanceId);
 
-        CurrentInstallProgress.TryRemove(name, out _);
+        CurrentInstallProgress.TryRemove(instanceId, out _);
 
-        await _repository.SetMinecraftInstanceAsReadyAsync(name);
-        _logger?.LogInformation("Minecraft instance '{InstanceId}' is ready to play", name);
+        await _repository.SetMinecraftInstanceStateAsync(instanceId, MinecraftInstanceState.Ready);
+        _logger?.LogInformation("Minecraft instance '{InstanceId}' is ready to play", instanceId);
 
         await _instanceModsManager.EnsureInstanceMetadataAsync(new MinecraftInstance(
-            name,
+            instanceId,
             minecraft.VersionId,
             resolvedModLoader.LaunchVersionId,
             modLoader,
@@ -450,7 +450,7 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
                 $"Minecraft version '{candidate.Meta.MinecraftVersionId}' is unavailable.");
         }
 
-        var name = MakeUniqueInstanceName(candidate.Meta.DisplayName, knownIds);
+        var instanceId = MakeUniqueInstanceName(candidate.Meta.DisplayName, knownIds);
         var instanceNativeLibrariesFolder =
             MinecraftInstance.GetNativeLibrariesFolder(_instancesFolder, candidate.FolderName);
         var modLoaderService = GetModLoaderService(modLoader);
@@ -464,7 +464,7 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
         minecraft = ApplyModLoaderToVersion(minecraft, resolvedModLoader);
 
         await _repository.AddInstallingMinecraftInstanceAsync(
-            name,
+            instanceId,
             minecraft,
             candidate.FolderName,
             modLoader,
@@ -488,9 +488,9 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
 
         MaterializeInstanceNativeLibraries(cachedVanillaNativeLibrariesFolder, instanceNativeLibrariesFolder);
 
-        await _repository.SetMinecraftInstanceAsReadyAsync(name);
+        await _repository.SetMinecraftInstanceStateAsync(instanceId, MinecraftInstanceState.Ready);
         await _instanceModsManager.EnsureInstanceMetadataAsync(new MinecraftInstance(
-            name,
+            instanceId,
             minecraft.VersionId,
             resolvedModLoader.LaunchVersionId,
             modLoader,
@@ -505,7 +505,7 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
             minecraft.ClassPath,
             minecraft.GameArguments,
             minecraft.JvmArguments));
-        knownIds.Add(name);
+        knownIds.Add(instanceId);
     }
 
     public async Task DeleteInstanceAsync(string instanceId)

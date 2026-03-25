@@ -115,11 +115,11 @@ public sealed class LauncherDatabase
             await _conn.QueryAsync<MinecraftInstance>($"SELECT * FROM {MinecraftInstance.Table}"));
     }
 
-    public async Task<bool> MinecraftInstanceExists(string name)
+    public async Task<bool> MinecraftInstanceExists(string instanceId)
     {
         var count = await _rwLock.ExecuteReadAsync(() =>
             _conn.ExecuteScalarAsync<long>($"SELECT COUNT(*) FROM {MinecraftInstance.Table} WHERE Id = @Id;",
-                bind: cmd => { cmd.Parameters.AddWithValue("@Id", name); }));
+                bind: cmd => { cmd.Parameters.AddWithValue("@Id", instanceId); }));
         return count == 1;
     }
 
@@ -133,23 +133,11 @@ public sealed class LauncherDatabase
             instance));
     }
 
-    public Task SetMinecraftInstanceAsReadyAsync(string name)
-    {
-        return _rwLock.ExecuteWriteAsync(() => _conn.ExecuteAsync(
-            $"UPDATE {MinecraftInstance.Table} SET State = @State WHERE Id = @Id",
-            (name, MinecraftInstance.StateToString(MinecraftInstanceState.Ready)),
-            static (cmd, args) =>
-            {
-                cmd.Parameters.AddWithValue("@Id", args.name);
-                cmd.Parameters.AddWithValue("@State", args.Item2);
-            }));
-    }
-
     public Task SetMinecraftInstanceStateAsync(string instanceId, MinecraftInstanceState state)
     {
         return _rwLock.ExecuteWriteAsync(() => _conn.ExecuteAsync(
             $"UPDATE {MinecraftInstance.Table} SET State = @State WHERE Id = @Id",
-            (instanceId, MinecraftInstance.StateToString(state)),
+            (instanceId: instanceId, MinecraftInstance.StateToString(state)),
             static (cmd, args) =>
             {
                 cmd.Parameters.AddWithValue("@Id", args.instanceId);
@@ -171,5 +159,8 @@ public sealed class LauncherDatabase
         _conn.Dispose();
     }
 
-    public ValueTask DisposeAsync() => _conn.DisposeAsync();
+    public ValueTask DisposeAsync()
+    {
+        return _conn.DisposeAsync();
+    }
 }

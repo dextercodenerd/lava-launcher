@@ -4,10 +4,12 @@ root = true
 
 # Always require braces for control blocks
 csharp_prefer_braces = true:error
+csharp_trailing_comma_in_multiline_lists = true
 
 # Prevent single-line statements that hide braces
 csharp_preserve_single_line_statements = false
-csharp_preserve_single_line_blocks = false
+csharp_preserve_single_line_blocks = true
+csharp_style_expression_bodied_properties = when_possible:silent
 
 # Consistent indentation
 indent_style = space
@@ -22,5 +24,6 @@ resharper_braces_for_dowhile = required
 resharper_braces_for_using = required
 resharper_braces_for_lock = required
 resharper_braces_for_fixed = required
+resharper_csharp_trailing_comma_in_multiline_lists = true
 resharper_csharp_indent_style = space
 resharper_csharp_indent_size = 4
