@@ -2,7 +2,9 @@
 
 This ExecPlan is a living document. The sections `Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: COMPLETE
+Status: COMPLETE AND CLOSED (2026-03-25)
+
+Postmortem: `docs/instance-deletion-postmortem.md`
 
 ## Purpose / big picture
 
@@ -30,6 +32,8 @@ Ready ──────→ Deleting ──────→ (DB record removed, i
 - No new external dependencies.
 - No public API signature changes to existing methods (only additions).
 
+Retrospective note: exceeded. The final branch from merge-base touched 14 files and included 1248 insertions / 226 deletions. The overage came from an unplanned database deletion fix, new regression tests, and unrelated formatting churn introduced during implementation.
+
 ## Risks
 
 - Risk: Disk deletion fails (permissions, file locks from antivirus, etc.).
@@ -54,11 +58,14 @@ Ready ──────→ Deleting ──────→ (DB record removed, i
 - [x] (2026-03-25) Stage 6: MainWindowViewModel — pass onDeleted callback
 - [x] (2026-03-25) Stage 7: InstanceDetailsView.axaml — add delete UI with confirmation and retry
 - [x] (2026-03-25) Stage 8: Home screen — show Deleting/DeleteFailed status correctly (verified: no changes needed)
-- [x] (2026-03-25) Stage 9: Validation — build succeeded (0 errors), 180 tests passed
+- [x] (2026-03-25) Stage 9: Validation — `dotnet test LavaLauncher.sln` passed with 188 tests; `dotnet build LavaLauncher.sln` succeeded when run serially
 
 ## Surprises & discoveries
 
-(None yet.)
+- `LauncherDatabase` originally used `ExecuteScalarAsync<long>` for `DELETE`, which returned the wrong success signal. The branch needed an extra fix and regression tests to switch deletion paths to `ExecuteAsync`.
+- The new `InstanceModsManager.EvictInstanceCaches` implementation did not match the real latest-compatible-version cache key shape. Postmortem review found that the code removes keys prefixed by `instance.Id|`, while the cache is actually keyed by `VersionId|ModLoader|ProjectId`.
+- Scope control drifted. The branch exceeded the stated file and line tolerances, and `GenericLauncher.Shared/Minecraft/.editorconfig` plus broad formatting changes in `GenericLauncher.Tests/Minecraft/ModLoaderServicesTest.cs` made the diff substantially larger than the feature itself required.
+- Validation results drifted inside this document. Earlier notes said 180 tests and 7 files changed; the actual branch state at closure was 188 passing tests and 14 files changed from merge-base.
 
 ## Decision log
 
@@ -76,13 +83,17 @@ Ready ──────→ Deleting ──────→ (DB record removed, i
 
 ## Outcomes & retrospective
 
-Implementation completed 2026-03-25. All 9 stages delivered as planned with no surprises:
+Implementation completed on 2026-03-25 and the feature is closed as delivered, but not as spotless. The user-visible deletion flow landed, the app builds, and the test suite passes. The postmortem also identified follow-up work that should not be hidden by the "complete" label.
 
-- Build: `dotnet build LavaLauncher.sln` succeeded, 0 errors, 0 warnings.
-- Tests: `dotnet test LavaLauncher.sln` — 180 passed, 0 failed, no regressions.
-- 7 files changed; well within the ~10 file tolerance.
-- Constructor signature change to `InstanceDetailsViewModel` was additive only (new optional parameters with defaults); existing callers unaffected except `MainWindowViewModel` which was updated to pass `onDeleted`.
-- No new dependencies introduced.
+- Build: `dotnet build LavaLauncher.sln` succeeded, 0 errors, 0 warnings, when run serially on 2026-03-25.
+- Tests: `dotnet test LavaLauncher.sln` passed with 188 tests, 0 failures, on 2026-03-25.
+- Scope: the branch exceeded the stated tolerance. Final diff from merge-base touched 14 files with 1248 insertions / 226 deletions.
+- Unplanned work: the branch had to fix incorrect DB deletion semantics in `LauncherDatabase`, which was the right fix but expanded scope.
+- Postmortem outcome: the deletion feature is functionally in place, but one real defect remains in cache eviction. `InstanceModsManager.EvictInstanceCaches` does not match the actual latest-compatible-version cache key shape, so that cache is not reliably evicted for deleted instances.
+- Architecture outcome: navigation ownership stayed aligned with the repo pattern via the `onDeleted` callback from `MainWindowViewModel`, but `MinecraftLauncher` now reaches too far into `InstanceModsManager` internals to clean up deletion side effects.
+- Documentation outcome: this ExecPlan was not kept fully current during implementation. The postmortem in `docs/instance-deletion-postmortem.md` is the authoritative retrospective.
+
+Closure decision: yes, close this ExecPlan. The implementation work described here is done, and the remaining issues are follow-up items from postmortem review rather than unfinished plan steps. Do not reopen this plan unless the feature itself is being redesigned; track any fixes as separate work.
 
 ## Context and orientation
 
