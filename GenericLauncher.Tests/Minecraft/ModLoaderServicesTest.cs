@@ -6,6 +6,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -47,7 +48,7 @@ public class ModLoaderServicesTest
                 """),
             ["https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json"] = StringContent("""
                 {"promos":{"1.21.10-recommended":"60.1.8","1.21.10-latest":"60.1.7"}}
-                """),
+                """)
         });
         var service = new ForgeModLoaderService(
             Path.Combine(root, "forge"),
@@ -74,7 +75,7 @@ public class ModLoaderServicesTest
                     <version>21.4.120</version>
                     <version>21.4.150</version>
                 </versions></versioning></metadata>
-                """),
+                """)
         });
         var service = new NeoForgeModLoaderService(
             Path.Combine(root, "neoforge"),
@@ -95,57 +96,57 @@ public class ModLoaderServicesTest
         var universalBytes = Encoding.UTF8.GetBytes("forge-universal");
         var universalSha1 = ComputeSha1(universalBytes);
         var installerBytes = CreateInstallerJar(
-            installProfileJson: """
-                {
-                  "spec": 1,
-                  "profile": "forge",
-                  "version": "1.21.10-forge-60.1.8",
-                  "minecraft": "1.21.10",
-                  "json": "/version.json",
-                  "data": {},
-                  "processors": [],
-                  "libraries": []
-                }
-                """,
-            versionJson: $$"""
-                {
-                  "id": "1.21.10-forge-60.1.8",
-                  "inheritsFrom": "1.21.10",
-                  "mainClass": "net.minecraftforge.bootstrap.ForgeBootstrap",
-                  "arguments": {
-                    "game": ["--launchTarget", "forge_client"],
-                    "jvm": [
-                      "-DlibraryDirectory=${library_directory}",
-                      "-Dseparator=${classpath_separator}",
-                      "-Dversion=${version_name}"
-                    ]
-                  },
-                  "libraries": [
-                    {
-                      "name": "net.minecraftforge:forge:1.21.10-60.1.8:universal",
-                      "downloads": {
-                        "artifact": {
-                          "path": "net/minecraftforge/forge/1.21.10-60.1.8/forge-1.21.10-60.1.8-universal.jar",
-                          "url": "https://example.test/forge-universal.jar",
-                          "sha1": "{{universalSha1}}",
-                          "size": {{universalBytes.Length}}
-                        }
-                      }
-                    },
-                    {
-                      "name": "net.minecraftforge:forge:1.21.10-60.1.8:client",
-                      "downloads": {
-                        "artifact": {
-                          "path": "net/minecraftforge/forge/1.21.10-60.1.8/forge-1.21.10-60.1.8-client.jar",
-                          "url": "",
-                          "sha1": "0000000000000000000000000000000000000000",
-                          "size": 1
-                        }
+            """
+            {
+              "spec": 1,
+              "profile": "forge",
+              "version": "1.21.10-forge-60.1.8",
+              "minecraft": "1.21.10",
+              "json": "/version.json",
+              "data": {},
+              "processors": [],
+              "libraries": []
+            }
+            """,
+            $$"""
+              {
+                "id": "1.21.10-forge-60.1.8",
+                "inheritsFrom": "1.21.10",
+                "mainClass": "net.minecraftforge.bootstrap.ForgeBootstrap",
+                "arguments": {
+                  "game": ["--launchTarget", "forge_client"],
+                  "jvm": [
+                    "-DlibraryDirectory=${library_directory}",
+                    "-Dseparator=${classpath_separator}",
+                    "-Dversion=${version_name}"
+                  ]
+                },
+                "libraries": [
+                  {
+                    "name": "net.minecraftforge:forge:1.21.10-60.1.8:universal",
+                    "downloads": {
+                      "artifact": {
+                        "path": "net/minecraftforge/forge/1.21.10-60.1.8/forge-1.21.10-60.1.8-universal.jar",
+                        "url": "https://example.test/forge-universal.jar",
+                        "sha1": "{{universalSha1}}",
+                        "size": {{universalBytes.Length}}
                       }
                     }
-                  ]
-                }
-                """);
+                  },
+                  {
+                    "name": "net.minecraftforge:forge:1.21.10-60.1.8:client",
+                    "downloads": {
+                      "artifact": {
+                        "path": "net/minecraftforge/forge/1.21.10-60.1.8/forge-1.21.10-60.1.8-client.jar",
+                        "url": "",
+                        "sha1": "0000000000000000000000000000000000000000",
+                        "size": 1
+                      }
+                    }
+                  }
+                ]
+              }
+              """);
 
         using var httpClient = CreateHttpClient(new Dictionary<string, HttpContent>
         {
@@ -155,8 +156,9 @@ public class ModLoaderServicesTest
             ["https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json"] = StringContent("""
                 {"promos":{"1.21.10-recommended":"60.1.8"}}
                 """),
-            ["https://maven.minecraftforge.net/net/minecraftforge/forge/1.21.10-60.1.8/forge-1.21.10-60.1.8-installer.jar"] = BinaryContent(installerBytes),
-            ["https://example.test/forge-universal.jar"] = BinaryContent(universalBytes),
+            ["https://maven.minecraftforge.net/net/minecraftforge/forge/1.21.10-60.1.8/forge-1.21.10-60.1.8-installer.jar"] =
+                BinaryContent(installerBytes),
+            ["https://example.test/forge-universal.jar"] = BinaryContent(universalBytes)
         });
 
         var service = new ForgeModLoaderService(
@@ -169,10 +171,13 @@ public class ModLoaderServicesTest
 
         Assert.Equal("1.21.10-forge-60.1.8", resolved.LaunchVersionId);
         Assert.Equal("60.1.8", resolved.LoaderVersionId);
-        Assert.Contains(resolved.ExtraJvmArguments, arg => arg.Contains(Path.Combine(root, "forge", "libraries"), StringComparison.Ordinal));
+        Assert.Contains(resolved.ExtraJvmArguments,
+            arg => arg.Contains(Path.Combine(root, "forge", "libraries"), StringComparison.Ordinal));
         Assert.Contains(resolved.ExtraJvmArguments, arg => arg.Contains(Path.PathSeparator));
-        Assert.Contains(resolved.ExtraJvmArguments, arg => arg.Contains("1.21.10-forge-60.1.8", StringComparison.Ordinal));
-        Assert.Contains(resolved.Libraries, lib => lib.Name.EndsWith(":client", StringComparison.Ordinal) && lib.Url is null);
+        Assert.Contains(resolved.ExtraJvmArguments,
+            arg => arg.Contains("1.21.10-forge-60.1.8", StringComparison.Ordinal));
+        Assert.Contains(resolved.Libraries,
+            lib => lib.Name.EndsWith(":client", StringComparison.Ordinal) && lib.Url is null);
 
         await service.InstallAsync(
             resolved,
@@ -199,65 +204,66 @@ public class ModLoaderServicesTest
         var universalBytes = Encoding.UTF8.GetBytes("neoforge-universal");
         var universalSha1 = ComputeSha1(universalBytes);
         var installerBytes = CreateInstallerJar(
-            installProfileJson: """
-                {
-                  "spec": 1,
-                  "profile": "neoforge",
-                  "version": "neoforge-21.4.150",
-                  "minecraft": "1.21.4",
-                  "json": "/version.json",
-                  "data": {},
-                  "processors": [],
-                  "libraries": []
-                }
-                """,
-            versionJson: $$"""
-                {
-                  "id": "neoforge-21.4.150",
-                  "inheritsFrom": "1.21.4",
-                  "mainClass": "net.neoforged.bootstrap.NeoForgeBootstrap",
-                  "arguments": {
-                    "game": ["--launchTarget", "neoforge_client"],
-                    "jvm": [
-                      "-DlibraryDirectory=${library_directory}",
-                      "-Dseparator=${classpath_separator}",
-                      "-Dversion=${version_name}"
-                    ]
-                  },
-                  "libraries": [
-                    {
-                      "name": "net.neoforged:neoforge:21.4.150:universal",
-                      "downloads": {
-                        "artifact": {
-                          "path": "net/neoforged/neoforge/21.4.150/neoforge-21.4.150-universal.jar",
-                          "url": "https://example.test/neoforge-universal.jar",
-                          "sha1": "{{universalSha1}}",
-                          "size": {{universalBytes.Length}}
-                        }
-                      }
-                    },
-                    {
-                      "name": "net.neoforged:neoforge:21.4.150:client",
-                      "downloads": {
-                        "artifact": {
-                          "path": "net/neoforged/neoforge/21.4.150/neoforge-21.4.150-client.jar",
-                          "url": "",
-                          "sha1": "0000000000000000000000000000000000000000",
-                          "size": 1
-                        }
+            """
+            {
+              "spec": 1,
+              "profile": "neoforge",
+              "version": "neoforge-21.4.150",
+              "minecraft": "1.21.4",
+              "json": "/version.json",
+              "data": {},
+              "processors": [],
+              "libraries": []
+            }
+            """,
+            $$"""
+              {
+                "id": "neoforge-21.4.150",
+                "inheritsFrom": "1.21.4",
+                "mainClass": "net.neoforged.bootstrap.NeoForgeBootstrap",
+                "arguments": {
+                  "game": ["--launchTarget", "neoforge_client"],
+                  "jvm": [
+                    "-DlibraryDirectory=${library_directory}",
+                    "-Dseparator=${classpath_separator}",
+                    "-Dversion=${version_name}"
+                  ]
+                },
+                "libraries": [
+                  {
+                    "name": "net.neoforged:neoforge:21.4.150:universal",
+                    "downloads": {
+                      "artifact": {
+                        "path": "net/neoforged/neoforge/21.4.150/neoforge-21.4.150-universal.jar",
+                        "url": "https://example.test/neoforge-universal.jar",
+                        "sha1": "{{universalSha1}}",
+                        "size": {{universalBytes.Length}}
                       }
                     }
-                  ]
-                }
-                """);
+                  },
+                  {
+                    "name": "net.neoforged:neoforge:21.4.150:client",
+                    "downloads": {
+                      "artifact": {
+                        "path": "net/neoforged/neoforge/21.4.150/neoforge-21.4.150-client.jar",
+                        "url": "",
+                        "sha1": "0000000000000000000000000000000000000000",
+                        "size": 1
+                      }
+                    }
+                  }
+                ]
+              }
+              """);
 
         using var httpClient = CreateHttpClient(new Dictionary<string, HttpContent>
         {
             ["https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml"] = StringContent("""
                 <metadata><versioning><versions><version>21.4.150</version></versions></versioning></metadata>
                 """),
-            ["https://maven.neoforged.net/releases/net/neoforged/neoforge/21.4.150/neoforge-21.4.150-installer.jar"] = BinaryContent(installerBytes),
-            ["https://example.test/neoforge-universal.jar"] = BinaryContent(universalBytes),
+            ["https://maven.neoforged.net/releases/net/neoforged/neoforge/21.4.150/neoforge-21.4.150-installer.jar"] =
+                BinaryContent(installerBytes),
+            ["https://example.test/neoforge-universal.jar"] = BinaryContent(universalBytes)
         });
 
         var service = new NeoForgeModLoaderService(
@@ -270,10 +276,12 @@ public class ModLoaderServicesTest
 
         Assert.Equal("neoforge-21.4.150", resolved.LaunchVersionId);
         Assert.Equal("21.4.150", resolved.LoaderVersionId);
-        Assert.Contains(resolved.ExtraJvmArguments, arg => arg.Contains(Path.Combine(root, "neoforge", "libraries"), StringComparison.Ordinal));
+        Assert.Contains(resolved.ExtraJvmArguments,
+            arg => arg.Contains(Path.Combine(root, "neoforge", "libraries"), StringComparison.Ordinal));
         Assert.Contains(resolved.ExtraJvmArguments, arg => arg.Contains(Path.PathSeparator));
         Assert.Contains(resolved.ExtraJvmArguments, arg => arg.Contains("neoforge-21.4.150", StringComparison.Ordinal));
-        Assert.Contains(resolved.Libraries, lib => lib.Name.EndsWith(":client", StringComparison.Ordinal) && lib.Url is null);
+        Assert.Contains(resolved.Libraries,
+            lib => lib.Name.EndsWith(":client", StringComparison.Ordinal) && lib.Url is null);
 
         await service.InstallAsync(
             resolved,
@@ -305,11 +313,16 @@ public class ModLoaderServicesTest
             null,
             null,
             [
-                new ForgeInstallProcessor(["server"], "net.minecraftforge:installertools:1.4.3", [], ["--task", "EXTRACT_FILES"], null),
-                new ForgeInstallProcessor(null, "net.minecraftforge:installertools:1.4.3", [], ["--task", "DOWNLOAD_MOJMAPS"], null),
-                new ForgeInstallProcessor(["server"], "net.minecraftforge:ForgeAutoRenamingTool:1.0.6", [], ["--input", "{MC_UNPACKED}"], null),
-                new ForgeInstallProcessor(["client"], "net.minecraftforge:ForgeAutoRenamingTool:1.0.6", [], ["--input", "{MINECRAFT_JAR}"], null),
-                new ForgeInstallProcessor(null, "net.minecraftforge:binarypatcher:1.2.0", [], ["--clean", "{MC_OFF}"], null),
+                new ForgeInstallProcessor(["server"], "net.minecraftforge:installertools:1.4.3", [],
+                    ["--task", "EXTRACT_FILES"], null),
+                new ForgeInstallProcessor(null, "net.minecraftforge:installertools:1.4.3", [],
+                    ["--task", "DOWNLOAD_MOJMAPS"], null),
+                new ForgeInstallProcessor(["server"], "net.minecraftforge:ForgeAutoRenamingTool:1.0.6", [],
+                    ["--input", "{MC_UNPACKED}"], null),
+                new ForgeInstallProcessor(["client"], "net.minecraftforge:ForgeAutoRenamingTool:1.0.6", [],
+                    ["--input", "{MINECRAFT_JAR}"], null),
+                new ForgeInstallProcessor(null, "net.minecraftforge:binarypatcher:1.2.0", [], ["--clean", "{MC_OFF}"],
+                    null)
             ],
             []);
 
@@ -319,7 +332,7 @@ public class ModLoaderServicesTest
             [
                 ForgeModLoaderService.ForgeClientProcessorKind.DownloadMojmaps,
                 ForgeModLoaderService.ForgeClientProcessorKind.ClientAutoRename,
-                ForgeModLoaderService.ForgeClientProcessorKind.BinaryPatch,
+                ForgeModLoaderService.ForgeClientProcessorKind.BinaryPatch
             ],
             plans.Select(p => p.Kind));
     }
@@ -334,7 +347,8 @@ public class ModLoaderServicesTest
             ["--task", "EXTRACT_FILES"],
             null);
 
-        var ex = Assert.Throws<InvalidOperationException>(() => ForgeModLoaderService.ParseClientProcessorPlan(processor));
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            ForgeModLoaderService.ParseClientProcessorPlan(processor));
 
         Assert.Contains("Unsupported Forge client installertools task", ex.Message, StringComparison.Ordinal);
     }
@@ -352,9 +366,12 @@ public class ModLoaderServicesTest
             null,
             null,
             [
-                new NeoForgeInstallProcessor(["server"], "net.neoforged.installertools:installertools:4.0.6:fatjar", [], ["--task", "EXTRACT_FILES"], null),
-                new NeoForgeInstallProcessor(null, "net.neoforged.installertools:installertools:4.0.6:fatjar", [], ["--task", "DOWNLOAD_MOJMAPS"], null),
-                new NeoForgeInstallProcessor(null, "net.neoforged.installertools:installertools:4.0.6:fatjar", [], ["--task", "PROCESS_MINECRAFT_JAR"], null),
+                new NeoForgeInstallProcessor(["server"], "net.neoforged.installertools:installertools:4.0.6:fatjar", [],
+                    ["--task", "EXTRACT_FILES"], null),
+                new NeoForgeInstallProcessor(null, "net.neoforged.installertools:installertools:4.0.6:fatjar", [],
+                    ["--task", "DOWNLOAD_MOJMAPS"], null),
+                new NeoForgeInstallProcessor(null, "net.neoforged.installertools:installertools:4.0.6:fatjar", [],
+                    ["--task", "PROCESS_MINECRAFT_JAR"], null)
             ],
             []);
 
@@ -363,7 +380,7 @@ public class ModLoaderServicesTest
         Assert.Equal(
             [
                 NeoForgeModLoaderService.NeoForgeClientProcessorKind.DownloadMojmaps,
-                NeoForgeModLoaderService.NeoForgeClientProcessorKind.ProcessMinecraftJar,
+                NeoForgeModLoaderService.NeoForgeClientProcessorKind.ProcessMinecraftJar
             ],
             plans.Select(p => p.Kind));
     }
@@ -378,7 +395,8 @@ public class ModLoaderServicesTest
             ["--task", "EXTRACT_FILES"],
             null);
 
-        var ex = Assert.Throws<InvalidOperationException>(() => NeoForgeModLoaderService.ParseClientProcessorPlan(processor));
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            NeoForgeModLoaderService.ParseClientProcessorPlan(processor));
 
         Assert.Contains("Unsupported NeoForge client installertools task", ex.Message, StringComparison.Ordinal);
     }
@@ -404,7 +422,7 @@ public class ModLoaderServicesTest
             installerPath,
             CreateInstallerJar("{}", "{}", new Dictionary<string, byte[]>
             {
-                ["data/client.lzma"] = Encoding.UTF8.GetBytes("patch-data"),
+                ["data/client.lzma"] = Encoding.UTF8.GetBytes("patch-data")
             }));
 
         var installProfile = new ForgeInstallProfile(
@@ -419,7 +437,7 @@ public class ModLoaderServicesTest
             {
                 ["MC_OFF"] = new("[net.minecraft:client:1.21.11:official]", null),
                 ["PATCHED"] = new("[net.minecraftforge:forge:1.21.11-61.1.4:client]", null),
-                ["BINPATCH"] = new("/data/client.lzma", null),
+                ["BINPATCH"] = new("/data/client.lzma", null)
             },
             [],
             []);
@@ -454,8 +472,12 @@ public class ModLoaderServicesTest
             new ModLoaderInstallContext(CreatePlatform("windows", "x64"), "/bin/true", "/tmp/client.jar"),
             versionFolder);
 
-        var mcOffPath = Path.Combine(librariesRoot, MavenCoordinate.ToRelativePath("net.minecraft:client:1.21.11:official").Replace('/', Path.DirectorySeparatorChar));
-        var patchedPath = Path.Combine(librariesRoot, MavenCoordinate.ToRelativePath("net.minecraftforge:forge:1.21.11-61.1.4:client").Replace('/', Path.DirectorySeparatorChar));
+        var mcOffPath = Path.Combine(librariesRoot,
+            MavenCoordinate.ToRelativePath("net.minecraft:client:1.21.11:official")
+                .Replace('/', Path.DirectorySeparatorChar));
+        var patchedPath = Path.Combine(librariesRoot,
+            MavenCoordinate.ToRelativePath("net.minecraftforge:forge:1.21.11-61.1.4:client")
+                .Replace('/', Path.DirectorySeparatorChar));
         var extractedPatchPath = Path.Combine(versionFolder, "data", "client.lzma");
 
         Assert.Equal(processorJarPath, command.JarPath);
@@ -475,7 +497,8 @@ public class ModLoaderServicesTest
         Directory.CreateDirectory(librariesRoot);
 
         using var httpClient = CreateHttpClient([]);
-        var service = new NeoForgeModLoaderService(loaderRoot, librariesRoot, httpClient, new FileDownloader(httpClient));
+        var service =
+            new NeoForgeModLoaderService(loaderRoot, librariesRoot, httpClient, new FileDownloader(httpClient));
 
         var processorCoordinate = "net.neoforged.installertools:installertools:4.0.6:fatjar";
         var processorJarPath = CreateProcessorJar(librariesRoot, processorCoordinate, "example.Main");
@@ -487,7 +510,7 @@ public class ModLoaderServicesTest
             installerPath,
             CreateInstallerJar("{}", "{}", new Dictionary<string, byte[]>
             {
-                ["data/client.lzma"] = Encoding.UTF8.GetBytes("patch-data"),
+                ["data/client.lzma"] = Encoding.UTF8.GetBytes("patch-data")
             }));
 
         var installProfile = new NeoForgeInstallProfile(
@@ -502,7 +525,7 @@ public class ModLoaderServicesTest
             {
                 ["MOJMAPS"] = new("[net.minecraft:client:1.21.11:mappings@txt]", null),
                 ["PATCHED"] = new("[net.neoforged:minecraft-client-patched:21.11.38-beta]", null),
-                ["BINPATCH"] = new("/data/client.lzma", null),
+                ["BINPATCH"] = new("/data/client.lzma", null)
             },
             [],
             []);
@@ -519,7 +542,7 @@ public class ModLoaderServicesTest
                     "--output", "{PATCHED}",
                     "--extract-libraries-to", "{ROOT}/libraries/",
                     "--neoform-data", "[net.neoforged:neoform:1.21.11-20251209.172050:mappings@tsrg.lzma]",
-                    "--apply-patches", "{BINPATCH}",
+                    "--apply-patches", "{BINPATCH}"
                 ],
                 null));
 
@@ -545,9 +568,15 @@ public class ModLoaderServicesTest
             new ModLoaderInstallContext(CreatePlatform("windows", "x64"), "/bin/true", "/tmp/client.jar"),
             versionFolder);
 
-        var mojmapsPath = Path.Combine(librariesRoot, MavenCoordinate.ToRelativePath("net.minecraft:client:1.21.11:mappings@txt").Replace('/', Path.DirectorySeparatorChar));
-        var patchedPath = Path.Combine(librariesRoot, MavenCoordinate.ToRelativePath("net.neoforged:minecraft-client-patched:21.11.38-beta").Replace('/', Path.DirectorySeparatorChar));
-        var neoformPath = Path.Combine(librariesRoot, MavenCoordinate.ToRelativePath("net.neoforged:neoform:1.21.11-20251209.172050:mappings@tsrg.lzma").Replace('/', Path.DirectorySeparatorChar));
+        var mojmapsPath = Path.Combine(librariesRoot,
+            MavenCoordinate.ToRelativePath("net.minecraft:client:1.21.11:mappings@txt")
+                .Replace('/', Path.DirectorySeparatorChar));
+        var patchedPath = Path.Combine(librariesRoot,
+            MavenCoordinate.ToRelativePath("net.neoforged:minecraft-client-patched:21.11.38-beta")
+                .Replace('/', Path.DirectorySeparatorChar));
+        var neoformPath = Path.Combine(librariesRoot,
+            MavenCoordinate.ToRelativePath("net.neoforged:neoform:1.21.11-20251209.172050:mappings@tsrg.lzma")
+                .Replace('/', Path.DirectorySeparatorChar));
         var extractedPatchPath = Path.Combine(versionFolder, "data", "client.lzma");
 
         Assert.Equal(processorJarPath, command.JarPath);
@@ -571,7 +600,9 @@ public class ModLoaderServicesTest
         Directory.CreateDirectory(librariesRoot);
         Directory.CreateDirectory(versionFolder);
 
-        var patchedOutputPath = Path.Combine(librariesRoot, MavenCoordinate.ToRelativePath("net.minecraftforge:forge:1.21.11-61.1.4:client").Replace('/', Path.DirectorySeparatorChar));
+        var patchedOutputPath = Path.Combine(librariesRoot,
+            MavenCoordinate.ToRelativePath("net.minecraftforge:forge:1.21.11-61.1.4:client")
+                .Replace('/', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(Path.GetDirectoryName(patchedOutputPath)!);
         var patchedBytes = Encoding.UTF8.GetBytes("already-current");
         await File.WriteAllBytesAsync(patchedOutputPath, patchedBytes, cancellationToken);
@@ -581,29 +612,29 @@ public class ModLoaderServicesTest
         await File.WriteAllTextAsync(
             installProfilePath,
             $$"""
-            {
-              "spec": 1,
-              "profile": "forge",
-              "version": "1.21.11-forge-61.1.4",
-              "path": "net.minecraftforge:forge:1.21.11-61.1.4:shim",
-              "minecraft": "1.21.11",
-              "data": {
-                "MC_OFF": { "client": "[net.minecraft:client:1.21.11:official]" },
-                "PATCHED": { "client": "[net.minecraftforge:forge:1.21.11-61.1.4:client]" },
-                "PATCHED_SHA": { "client": "'{{patchedSha1}}'" }
-              },
-              "processors": [
-                {
-                  "jar": "net.minecraftforge:binarypatcher:1.2.0",
-                  "args": ["--clean", "{MC_OFF}", "--output", "{PATCHED}"],
-                  "outputs": {
-                    "{PATCHED}": "{PATCHED_SHA}"
+              {
+                "spec": 1,
+                "profile": "forge",
+                "version": "1.21.11-forge-61.1.4",
+                "path": "net.minecraftforge:forge:1.21.11-61.1.4:shim",
+                "minecraft": "1.21.11",
+                "data": {
+                  "MC_OFF": { "client": "[net.minecraft:client:1.21.11:official]" },
+                  "PATCHED": { "client": "[net.minecraftforge:forge:1.21.11-61.1.4:client]" },
+                  "PATCHED_SHA": { "client": "'{{patchedSha1}}'" }
+                },
+                "processors": [
+                  {
+                    "jar": "net.minecraftforge:binarypatcher:1.2.0",
+                    "args": ["--clean", "{MC_OFF}", "--output", "{PATCHED}"],
+                    "outputs": {
+                      "{PATCHED}": "{PATCHED_SHA}"
+                    }
                   }
-                }
-              ],
-              "libraries": []
-            }
-            """,
+                ],
+                "libraries": []
+              }
+              """,
             cancellationToken);
 
         var profilePath = Path.Combine(versionFolder, "profile.json");
@@ -713,7 +744,7 @@ public class ModLoaderServicesTest
             installerPath,
             CreateInstallerJar("{}", "{}", new Dictionary<string, byte[]>
             {
-                ["data/client.lzma"] = Encoding.UTF8.GetBytes("patch-data"),
+                ["data/client.lzma"] = Encoding.UTF8.GetBytes("patch-data")
             }),
             cancellationToken);
 
@@ -721,7 +752,8 @@ public class ModLoaderServicesTest
         var captureExecutablePath = CreateArgumentCaptureExecutable(root, runLogPath);
 
         using var httpClient = CreateHttpClient([]);
-        var service = new NeoForgeModLoaderService(loaderRoot, librariesRoot, httpClient, new FileDownloader(httpClient));
+        var service =
+            new NeoForgeModLoaderService(loaderRoot, librariesRoot, httpClient, new FileDownloader(httpClient));
         var resolved = new ResolvedModLoaderVersion(
             "NeoForge",
             "1.21.11",
@@ -741,17 +773,21 @@ public class ModLoaderServicesTest
             cancellationToken: cancellationToken);
 
         var runLog = await File.ReadAllTextAsync(runLogPath, cancellationToken);
-        var neoformPath = Path.Combine(librariesRoot, MavenCoordinate.ToRelativePath("net.neoforged:neoform:1.21.11-20251209.172050:mappings@tsrg.lzma").Replace('/', Path.DirectorySeparatorChar));
+        var neoformPath = Path.Combine(librariesRoot,
+            MavenCoordinate.ToRelativePath("net.neoforged:neoform:1.21.11-20251209.172050:mappings@tsrg.lzma")
+                .Replace('/', Path.DirectorySeparatorChar));
         Assert.Contains("PROCESS_MINECRAFT_JAR", runLog, StringComparison.Ordinal);
         Assert.Contains(neoformPath, runLog, StringComparison.Ordinal);
-        Assert.DoesNotContain("[net.neoforged:neoform:1.21.11-20251209.172050:mappings@tsrg.lzma]", runLog, StringComparison.Ordinal);
+        Assert.DoesNotContain("[net.neoforged:neoform:1.21.11-20251209.172050:mappings@tsrg.lzma]", runLog,
+            StringComparison.Ordinal);
         Assert.True(File.Exists(Path.Combine(versionFolder, "data", "client.lzma")));
     }
 
     [Fact]
     public async Task NewInstanceDialogViewModel_ReloadsCompatibleVersionsWhenMinecraftVersionChanges()
     {
-        var version1210 = new VersionInfo("1.21.10", "release", "https://example.test/1.21.10", default, default, "", 0);
+        var version1210 =
+            new VersionInfo("1.21.10", "release", "https://example.test/1.21.10", default, default, "", 0);
         var version1214 = new VersionInfo("1.21.4", "release", "https://example.test/1.21.4", default, default, "", 0);
         var fakeLauncher = new FakeLauncherFacade
         {
@@ -762,8 +798,8 @@ public class ModLoaderServicesTest
                 {
                     "1.21.10" => ImmutableList.Create(new ModLoaderVersionInfo("60.1.8", "RECOMMENDED")),
                     "1.21.4" => ImmutableList.Create(new ModLoaderVersionInfo("21.4.150", "LATEST")),
-                    _ => ImmutableList<ModLoaderVersionInfo>.Empty,
-                }),
+                    _ => ImmutableList<ModLoaderVersionInfo>.Empty
+                })
         };
 
         var vm = new NewInstanceDialogViewModel(fakeLauncher, null);
@@ -786,7 +822,7 @@ public class ModLoaderServicesTest
         {
             AvailableVersionsValue = [version],
             AvailableModLoadersValue = [MinecraftInstanceModLoader.NeoForge],
-            LoaderVersions = (_, _) => Task.FromResult(ImmutableList<ModLoaderVersionInfo>.Empty),
+            LoaderVersions = (_, _) => Task.FromResult(ImmutableList<ModLoaderVersionInfo>.Empty)
         };
 
         var vm = new NewInstanceDialogViewModel(fakeLauncher, null);
@@ -797,13 +833,15 @@ public class ModLoaderServicesTest
         Assert.Contains("No compatible loader versions", vm.ModLoaderVersionStatusText, StringComparison.Ordinal);
     }
 
-    private static LauncherPlatform CreatePlatform(string os, string architecture, Version? version = null) =>
-        new(os,
+    private static LauncherPlatform CreatePlatform(string os, string architecture, Version? version = null)
+    {
+        return new LauncherPlatform(os,
             architecture,
             version ?? new Version(14, 0),
             AppConfig.MacBundleIdentifier,
             Path.Combine(Path.GetTempPath(), "lavalancher-tests", os, architecture),
             Path.Combine(Path.GetTempPath(), "lavalancher-tests", os, architecture));
+    }
 
     private static string CreateTempRoot()
     {
@@ -812,21 +850,27 @@ public class ModLoaderServicesTest
         return root;
     }
 
-    private static HttpClient CreateHttpClient(Dictionary<string, HttpContent> responses) =>
-        new(new FakeHttpMessageHandler(responses));
+    private static HttpClient CreateHttpClient(Dictionary<string, HttpContent> responses)
+    {
+        return new HttpClient(new FakeHttpMessageHandler(responses));
+    }
 
-    private static StringContent StringContent(string value) =>
-        new(value, Encoding.UTF8, "application/json");
+    private static StringContent StringContent(string value)
+    {
+        return new StringContent(value, Encoding.UTF8, "application/json");
+    }
 
     private static ByteArrayContent BinaryContent(byte[] bytes)
     {
         var content = new ByteArrayContent(bytes);
-        content.Headers.ContentType = new("application/java-archive");
+        content.Headers.ContentType = new MediaTypeHeaderValue("application/java-archive");
         return content;
     }
 
-    private static string ComputeSha1(byte[] bytes) =>
-        Convert.ToHexString(SHA1.HashData(bytes)).ToLowerInvariant();
+    private static string ComputeSha1(byte[] bytes)
+    {
+        return Convert.ToHexString(SHA1.HashData(bytes)).ToLowerInvariant();
+    }
 
     private static byte[] CreateInstallerJar(
         string installProfileJson,
@@ -849,14 +893,12 @@ public class ModLoaderServicesTest
             }
 
             if (extraEntries is not null)
-            {
                 foreach (var extraEntry in extraEntries)
                 {
                     var entry = archive.CreateEntry(extraEntry.Key);
                     using var entryStream = entry.Open();
                     entryStream.Write(extraEntry.Value);
                 }
-            }
         }
 
         return stream.ToArray();
@@ -923,21 +965,20 @@ public class ModLoaderServicesTest
 
     private sealed class FakeHttpMessageHandler(Dictionary<string, HttpContent> responses) : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken)
         {
             var url = request.RequestUri?.ToString() ?? "";
             if (!responses.TryGetValue(url, out var content))
-            {
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)
                 {
-                    RequestMessage = request,
+                    RequestMessage = request
                 });
-            }
 
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = Clone(content),
-                RequestMessage = request,
+                RequestMessage = request
             });
         }
 
@@ -946,9 +987,7 @@ public class ModLoaderServicesTest
             var bytes = content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
             var clone = new ByteArrayContent(bytes);
             if (content.Headers.ContentType is not null)
-            {
-                clone.Headers.ContentType = new(content.Headers.ContentType.MediaType!);
-            }
+                clone.Headers.ContentType = new MediaTypeHeaderValue(content.Headers.ContentType.MediaType!);
 
             return clone;
         }
@@ -958,7 +997,12 @@ public class ModLoaderServicesTest
     {
         public ImmutableList<VersionInfo> AvailableVersionsValue { get; init; } = [];
         public ImmutableList<MinecraftInstanceModLoader> AvailableModLoadersValue { get; init; } = [];
-        public Func<MinecraftInstanceModLoader, string, Task<ImmutableList<ModLoaderVersionInfo>>> LoaderVersions { get; init; } =
+
+        public Func<MinecraftInstanceModLoader, string, Task<ImmutableList<ModLoaderVersionInfo>>> LoaderVersions
+        {
+            get;
+            init;
+        } =
             (_, _) => Task.FromResult(ImmutableList<ModLoaderVersionInfo>.Empty);
 
         public ImmutableList<VersionInfo> AvailableVersions => AvailableVersionsValue;
@@ -968,17 +1012,24 @@ public class ModLoaderServicesTest
         public Task<ImmutableList<ModLoaderVersionInfo>> GetLoaderVersionsAsync(
             MinecraftInstanceModLoader modLoader,
             string minecraftVersionId,
-            bool reload) =>
-            LoaderVersions(modLoader, minecraftVersionId);
+            bool reload)
+        {
+            return LoaderVersions(modLoader, minecraftVersionId);
+        }
 
         public Task CreateInstance(
             VersionInfo version,
-            string name,
+            string instanceId,
             MinecraftInstanceModLoader modLoader,
             string? preferredModLoaderVersion,
-            IProgress<ThreadSafeInstallProgressReporter.InstallProgress> progress) =>
-            Task.CompletedTask;
+            IProgress<ThreadSafeInstallProgressReporter.InstallProgress> progress)
+        {
+            return Task.CompletedTask;
+        }
 
-        public void RaiseVersionsChanged() => AvailableVersionsChanged?.Invoke(this, EventArgs.Empty);
+        public void RaiseVersionsChanged()
+        {
+            AvailableVersionsChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 }

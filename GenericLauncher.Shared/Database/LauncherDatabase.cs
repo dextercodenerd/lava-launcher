@@ -104,7 +104,7 @@ public sealed class LauncherDatabase
     public async Task<bool> RemoveAccountAsync(string accountId)
     {
         var count = await _rwLock.ExecuteWriteAsync(() =>
-            _conn.ExecuteScalarAsync<long>($"DELETE FROM {Account.Table} WHERE Id = @Id;",
+            _conn.ExecuteAsync($"DELETE FROM {Account.Table} WHERE Id = @Id;",
                 bind: cmd => { cmd.Parameters.AddWithValue("@Id", accountId); }));
         return count == 1;
     }
@@ -115,11 +115,11 @@ public sealed class LauncherDatabase
             await _conn.QueryAsync<MinecraftInstance>($"SELECT * FROM {MinecraftInstance.Table}"));
     }
 
-    public async Task<bool> MinecraftInstanceExists(string name)
+    public async Task<bool> MinecraftInstanceExists(string instanceId)
     {
         var count = await _rwLock.ExecuteReadAsync(() =>
             _conn.ExecuteScalarAsync<long>($"SELECT COUNT(*) FROM {MinecraftInstance.Table} WHERE Id = @Id;",
-                bind: cmd => { cmd.Parameters.AddWithValue("@Id", name); }));
+                bind: cmd => { cmd.Parameters.AddWithValue("@Id", instanceId); }));
         return count == 1;
     }
 
@@ -133,16 +133,25 @@ public sealed class LauncherDatabase
             instance));
     }
 
-    public Task SetMinecraftInstanceAsReadyAsync(string name)
+    public Task SetMinecraftInstanceStateAsync(string instanceId, MinecraftInstanceState state)
     {
         return _rwLock.ExecuteWriteAsync(() => _conn.ExecuteAsync(
             $"UPDATE {MinecraftInstance.Table} SET State = @State WHERE Id = @Id",
-            (name, MinecraftInstance.StateToString(MinecraftInstanceState.Ready)),
+            (instanceId: instanceId, MinecraftInstance.StateToString(state)),
             static (cmd, args) =>
             {
-                cmd.Parameters.AddWithValue("@Id", args.name);
+                cmd.Parameters.AddWithValue("@Id", args.instanceId);
                 cmd.Parameters.AddWithValue("@State", args.Item2);
             }));
+    }
+
+    public async Task<bool> DeleteMinecraftInstanceAsync(string instanceId)
+    {
+        var count = await _rwLock.ExecuteWriteAsync(() =>
+            _conn.ExecuteAsync(
+                $"DELETE FROM {MinecraftInstance.Table} WHERE Id = @Id;",
+                bind: cmd => { cmd.Parameters.AddWithValue("@Id", instanceId); }));
+        return count == 1;
     }
 
     public void Dispose()
@@ -150,5 +159,8 @@ public sealed class LauncherDatabase
         _conn.Dispose();
     }
 
-    public ValueTask DisposeAsync() => _conn.DisposeAsync();
+    public ValueTask DisposeAsync()
+    {
+        return _conn.DisposeAsync();
+    }
 }

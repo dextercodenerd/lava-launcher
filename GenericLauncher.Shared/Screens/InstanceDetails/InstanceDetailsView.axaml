@@ -37,6 +37,36 @@
                         HorizontalAlignment="Left"
                         IsEnabled="{Binding RunningState, Converter={StaticResource IsStoppedConverter}}"
                         IsVisible="{Binding !IsInstalling}" />
+
+                <!-- Deleting status -->
+                <TextBlock Text="Deleting instance..."
+                           IsVisible="{Binding IsDeleting}"
+                           Margin="0,16,0,0" />
+
+                <!-- Delete failed + retry -->
+                <StackPanel IsVisible="{Binding IsDeleteFailed}"
+                            Spacing="8" Margin="0,16,0,0">
+                    <TextBlock Text="{Binding DeleteErrorMessage}" />
+                    <Button Content="Retry Delete"
+                            Command="{Binding RetryDeleteCommand}" />
+                </StackPanel>
+
+                <!-- Delete section (only visible when Ready and not running) -->
+                <StackPanel Spacing="8" Margin="0,32,0,0"
+                            IsVisible="{Binding CanDelete}">
+                    <Button Content="Delete Instance"
+                            Command="{Binding ShowDeleteConfirmationCommand}"
+                            IsVisible="{Binding !IsDeleteConfirmationVisible}" />
+                    <StackPanel IsVisible="{Binding IsDeleteConfirmationVisible}"
+                                Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="Are you sure? This will permanently delete this instance and all its files."
+                                   VerticalAlignment="Center" />
+                        <Button Content="Yes, Delete"
+                                Command="{Binding ConfirmDeleteCommand}" />
+                        <Button Content="Cancel"
+                                Command="{Binding CancelDeleteCommand}" />
+                    </StackPanel>
+                </StackPanel>
             </StackPanel>
 
             <ScrollViewer Margin="16" IsVisible="{Binding IsModsTab}">

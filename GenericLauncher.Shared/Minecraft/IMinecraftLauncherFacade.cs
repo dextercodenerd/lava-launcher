@@ -21,7 +21,7 @@ public interface IMinecraftLauncherFacade
 
     Task CreateInstance(
         VersionInfo version,
-        string name,
+        string instanceId,
         MinecraftInstanceModLoader modLoader,
         string? preferredModLoaderVersion,
         IProgress<ThreadSafeInstallProgressReporter.InstallProgress> progress);

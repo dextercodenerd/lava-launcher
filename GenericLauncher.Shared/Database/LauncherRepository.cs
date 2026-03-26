@@ -99,9 +99,15 @@ public class LauncherRepository
         await _db.InsertMinecraftInstanceAsync(instance);
     }
 
-    public async Task SetMinecraftInstanceAsReadyAsync(string name)
+    public async Task SetMinecraftInstanceStateAsync(string instanceId, MinecraftInstanceState state)
     {
         await _initTask;
-        await _db.SetMinecraftInstanceAsReadyAsync(name);
+        await _db.SetMinecraftInstanceStateAsync(instanceId, state);
+    }
+
+    public async Task<bool> RemoveMinecraftInstanceAsync(string instanceId)
+    {
+        await _initTask;
+        return await _db.DeleteMinecraftInstanceAsync(instanceId);
     }
 }

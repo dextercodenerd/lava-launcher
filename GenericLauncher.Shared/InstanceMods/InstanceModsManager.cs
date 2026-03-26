@@ -922,6 +922,27 @@ public sealed class InstanceModsManager
         && !string.IsNullOrWhiteSpace(meta.ModLoader)
         && !string.IsNullOrWhiteSpace(meta.LaunchVersionId);
 
+    public void EvictInstanceCaches(MinecraftInstance instance)
+    {
+        InvalidateSnapshot(instance.Id);
+
+        var folderPath = GetInstanceFolder(instance.Folder);
+        _instanceStateLocks.TryRemove(folderPath, out _);
+
+        lock (_latestCompatibleVersionCacheLock)
+        {
+            var prefix = $"{instance.Id}|";
+            var keysToRemove = _latestCompatibleVersionCache.Keys
+                .Where(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            foreach (var key in keysToRemove)
+            {
+                _latestCompatibleVersionCache.Remove(key);
+            }
+        }
+    }
+
     private string GetInstanceFolder(string folderName) => Path.Combine(_instancesRoot, folderName);
 
     private static int GetVersionTypeRank(string versionType) => versionType.ToLowerInvariant() switch
@@ -1029,9 +1050,7 @@ public sealed class InstanceModsManager
 
     private static string GetMetaPath(string instanceFolder) => Path.Combine(instanceFolder, MetaFileName);
 
-    private static string GetLatestCompatibleVersionCacheKey(
-        MinecraftInstance instance,
-        string projectId) =>
+    private static string GetLatestCompatibleVersionCacheKey(MinecraftInstance instance, string projectId) =>
         $"{instance.VersionId}|{instance.ModLoader}|{projectId}";
 
     private AsyncRwLock GetInstanceStateLock(string instanceFolder) =>
