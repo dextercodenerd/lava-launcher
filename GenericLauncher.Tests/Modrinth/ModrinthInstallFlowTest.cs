@@ -4,6 +4,7 @@ using System.Text.Json;
 using GenericLauncher.Database.Model;
 using GenericLauncher.InstanceMods;
 using GenericLauncher.InstanceMods.Json;
+using GenericLauncher.Misc;
 using GenericLauncher.Modrinth;
 using GenericLauncher.Modrinth.Json;
 using GenericLauncher.Screens.ModrinthSearch;
@@ -37,9 +38,9 @@ public class ModrinthInstallFlowTest
     {
         var versions = new[]
         {
-            new ModrinthVersion("beta", "project", "Beta", "2.0.0-beta", "beta", "2026-03-20T00:00:00Z", ["fabric"], ["1.21.1"], [], []),
-            new ModrinthVersion("release", "project", "Release", "1.9.0", "release", "2026-03-18T00:00:00Z", ["fabric"], ["1.21.1"], [], []),
-            new ModrinthVersion("older-release", "project", "Older", "1.8.0", "release", "2026-03-10T00:00:00Z", ["fabric"], ["1.21.1"], [], []),
+            new ModrinthVersion("beta", "project", "Beta", "2.0.0-beta", "beta", UtcInstant.Parse("2026-03-20T00:00:00Z"), ["fabric"], ["1.21.1"], [], []),
+            new ModrinthVersion("release", "project", "Release", "1.9.0", "release", UtcInstant.Parse("2026-03-18T00:00:00Z"), ["fabric"], ["1.21.1"], [], []),
+            new ModrinthVersion("older-release", "project", "Older", "1.8.0", "release", UtcInstant.Parse("2026-03-10T00:00:00Z"), ["fabric"], ["1.21.1"], [], []),
         };
 
         var selected = InstanceModsManager.SelectBestVersion(versions);
@@ -56,7 +57,7 @@ public class ModrinthInstallFlowTest
             "Test",
             "1.0.0",
             "release",
-            "2026-03-20T00:00:00Z",
+            UtcInstant.Parse("2026-03-20T00:00:00Z"),
             ["fabric"],
             ["1.21.1"],
             [],
@@ -111,7 +112,7 @@ public class ModrinthInstallFlowTest
     public void ModrinthSearchResultItemViewModel_ApplyInstallState_ShowsInstallWhenMissing()
     {
         var item = new ModrinthSearchResultItemViewModel(
-            new ModrinthSearchResult("project", "slug", "Title", "Desc", [], "mod", 0, null, "", "", ""),
+            new ModrinthSearchResult("project", "slug", "Title", "Desc", [], "mod", 0, null, "", UtcInstant.UnixEpoch, UtcInstant.UnixEpoch),
             canInstall: true);
 
         item.ApplyInstallState(isInstanceScopedSearch: true, state: null, latestCompatibleVersion: null);
@@ -125,7 +126,7 @@ public class ModrinthInstallFlowTest
     public void ModrinthSearchResultItemViewModel_ApplyInstallState_ShowsUpdateForOutdatedDirectMod()
     {
         var item = new ModrinthSearchResultItemViewModel(
-            new ModrinthSearchResult("project", "slug", "Title", "Desc", [], "mod", 0, null, "", "", ""),
+            new ModrinthSearchResult("project", "slug", "Title", "Desc", [], "mod", 0, null, "", UtcInstant.UnixEpoch, UtcInstant.UnixEpoch),
             canInstall: true);
 
         item.ApplyInstallState(
@@ -148,7 +149,7 @@ public class ModrinthInstallFlowTest
     public void ModrinthSearchResultItemViewModel_ApplyInstallState_HidesUpdateForCurrentDirectMod()
     {
         var item = new ModrinthSearchResultItemViewModel(
-            new ModrinthSearchResult("project", "slug", "Title", "Desc", [], "mod", 0, null, "", "", ""),
+            new ModrinthSearchResult("project", "slug", "Title", "Desc", [], "mod", 0, null, "", UtcInstant.UnixEpoch, UtcInstant.UnixEpoch),
             canInstall: true);
 
         item.ApplyInstallState(
@@ -171,7 +172,7 @@ public class ModrinthInstallFlowTest
     public void ModrinthSearchResultItemViewModel_ApplyInstallState_HidesManualActionsForDependency()
     {
         var item = new ModrinthSearchResultItemViewModel(
-            new ModrinthSearchResult("project", "slug", "Title", "Desc", [], "mod", 0, null, "", "", ""),
+            new ModrinthSearchResult("project", "slug", "Title", "Desc", [], "mod", 0, null, "", UtcInstant.UnixEpoch, UtcInstant.UnixEpoch),
             canInstall: true);
 
         item.ApplyInstallState(

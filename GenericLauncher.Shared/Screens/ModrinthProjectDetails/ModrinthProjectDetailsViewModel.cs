@@ -5,6 +5,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GenericLauncher.InstanceMods;
+using GenericLauncher.Misc;
 using GenericLauncher.Modrinth;
 using GenericLauncher.Modrinth.Json;
 using GenericLauncher.Navigation;
@@ -75,7 +76,7 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
 
     // Design-time constructor
     public ModrinthProjectDetailsViewModel() : this(
-        new ModrinthSearchResult("", "", "Project Title", "Description", [], "mod", 0, null, "", "", ""),
+        new ModrinthSearchResult("", "", "Project Title", "Description", [], "mod", 0, null, "", UtcInstant.UnixEpoch, UtcInstant.UnixEpoch),
         null,
         null,
         ModrinthSearchContext.CreateRoot())

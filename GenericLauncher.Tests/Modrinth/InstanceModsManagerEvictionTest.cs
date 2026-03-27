@@ -1,7 +1,9 @@
-using System.Collections.Generic;
+using System.Collections.Concurrent;
+using System.IO;
 using System.Reflection;
 using System.Threading.Tasks;
 using GenericLauncher.InstanceMods;
+using GenericLauncher.Misc;
 using Xunit;
 
 namespace GenericLauncher.Tests.Modrinth;
@@ -9,39 +11,20 @@ namespace GenericLauncher.Tests.Modrinth;
 public sealed class InstanceModsManagerEvictionTest
 {
     [Fact]
-    public async Task EvictInstanceCaches_RemovesAllEntriesForTargetInstance()
+    public async Task OnInstanceDeletingAsync_DeletesFolder()
     {
         var fixture = await RefreshGateTestSupport.CreateFixtureAsync();
         var manager = RefreshGateTestSupport.CreateManager(fixture.RootPath, CreateThrowingHandler());
-        var cache = GetCache(manager);
 
-        cache[$"{fixture.Instance.Id}|mod-a"] = new LatestCompatibleVersionInfo("mod-a", "v1", "1.0.0");
-        cache[$"{fixture.Instance.Id}|mod-b"] = new LatestCompatibleVersionInfo("mod-b", "v2", "2.0.0");
+        Assert.True(Directory.Exists(fixture.InstanceFolder));
 
-        manager.EvictInstanceCaches(fixture.Instance);
+        await manager.OnInstanceDeletingAsync(fixture.Instance);
 
-        Assert.Empty(cache);
+        Assert.False(Directory.Exists(fixture.InstanceFolder));
     }
 
     [Fact]
-    public async Task EvictInstanceCaches_RemovesOnlyTargetInstanceCacheEntries()
-    {
-        var fixture = await RefreshGateTestSupport.CreateFixtureAsync();
-        var otherInstance = fixture.Instance with { Id = "Other Pack", Folder = "other-pack" };
-        var manager = RefreshGateTestSupport.CreateManager(fixture.RootPath, CreateThrowingHandler());
-        var cache = GetCache(manager);
-
-        cache[$"{fixture.Instance.Id}|mod-a"] = new LatestCompatibleVersionInfo("mod-a", "v1", "1.0.0");
-        cache[$"{otherInstance.Id}|mod-a"] = new LatestCompatibleVersionInfo("mod-a", "v3", "3.0.0");
-
-        manager.EvictInstanceCaches(fixture.Instance);
-
-        Assert.DoesNotContain(cache.Keys, k => k.StartsWith($"{fixture.Instance.Id}|"));
-        Assert.Contains($"{otherInstance.Id}|mod-a", cache.Keys);
-    }
-
-    [Fact]
-    public async Task EvictInstanceCaches_InvalidatesSnapshot()
+    public async Task OnInstanceDeletingAsync_InvalidatesSnapshot()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var fixture = await RefreshGateTestSupport.CreateFixtureAsync();
@@ -55,18 +38,36 @@ public sealed class InstanceModsManagerEvictionTest
         var snapshotBefore = await manager.GetSnapshotAsync(fixture.Instance, forceRefresh: false, cancellationToken);
         Assert.Single(snapshotBefore.InstalledMods);
 
-        manager.EvictInstanceCaches(fixture.Instance);
+        await manager.OnInstanceDeletingAsync(fixture.Instance);
 
-        // After eviction, GetSnapshotAsync should re-read from disk and return correct data.
+        // After deletion the folder is gone, so the snapshot should be re-created empty.
         var snapshotAfter = await manager.GetSnapshotAsync(fixture.Instance, forceRefresh: false, cancellationToken);
-        Assert.Single(snapshotAfter.InstalledMods);
+        Assert.Empty(snapshotAfter.InstalledMods);
     }
 
-    private static Dictionary<string, LatestCompatibleVersionInfo?> GetCache(InstanceModsManager manager)
+    [Fact]
+    public async Task OnInstanceDeletingAsync_RemovesStateLock()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var fixture = await RefreshGateTestSupport.CreateFixtureAsync();
+        var manager = RefreshGateTestSupport.CreateManager(fixture.RootPath, CreateThrowingHandler());
+
+        // Trigger a snapshot read to create the lock entry.
+        await manager.GetSnapshotAsync(fixture.Instance, forceRefresh: false, cancellationToken);
+
+        var locks = GetInstanceStateLocks(manager);
+        Assert.True(locks.ContainsKey(fixture.InstanceFolder));
+
+        await manager.OnInstanceDeletingAsync(fixture.Instance);
+
+        Assert.False(locks.ContainsKey(fixture.InstanceFolder));
+    }
+
+    private static ConcurrentDictionary<string, AsyncRwLock> GetInstanceStateLocks(InstanceModsManager manager)
     {
         var field = typeof(InstanceModsManager)
-            .GetField("_latestCompatibleVersionCache", BindingFlags.Instance | BindingFlags.NonPublic)!;
-        return (Dictionary<string, LatestCompatibleVersionInfo?>)field.GetValue(manager)!;
+            .GetField("_instanceStateLocks", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        return (ConcurrentDictionary<string, AsyncRwLock>)field.GetValue(manager)!;
     }
 
     private static RefreshGateTestSupport.RoutingHttpMessageHandler CreateThrowingHandler() =>

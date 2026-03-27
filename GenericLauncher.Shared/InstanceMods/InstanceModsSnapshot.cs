@@ -1,8 +1,16 @@
 using System;
 using System.Collections.Immutable;
 using System.Linq;
+using GenericLauncher.Misc;
 
 namespace GenericLauncher.InstanceMods;
+
+public sealed record CompatibleVersionInfo(
+    string VersionId,
+    string VersionNumber,
+    string VersionType,
+    UtcInstant DatePublished
+);
 
 public sealed record InstanceInstalledProjectState(
     string ProjectId,

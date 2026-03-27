@@ -508,7 +508,7 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
         knownIds.Add(instanceId);
     }
 
-    public async Task DeleteInstanceAsync(string instanceId)
+    public async Task DeleteInstanceAsync(string instanceId, bool force = false)
     {
         MinecraftInstance instance;
 
@@ -525,11 +525,14 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
                     $"Cannot delete instance '{instanceId}' because it is currently running.");
             }
 
-            if (instance.State == MinecraftInstanceState.Installing
-                || CurrentInstallProgress.ContainsKey(instanceId))
+            if (!force)
             {
-                throw new InvalidOperationException(
-                    $"Cannot delete instance '{instanceId}' because it is currently installing.");
+                if (instance.State == MinecraftInstanceState.Installing
+                    || CurrentInstallProgress.ContainsKey(instanceId))
+                {
+                    throw new InvalidOperationException(
+                        $"Cannot delete instance '{instanceId}' because it is currently installing.");
+                }
             }
 
             // Move the DB I/O off the main thread
@@ -544,31 +547,31 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
         // Refresh so UI shows "Deleting" status
         await RefreshInstancesAsync();
 
-        // Phase 2: Delete disk folder
-        var instanceFolder = Path.Combine(_instancesFolder, instance.Folder);
+        // Phase 2: Delete instance folder (delegated to InstanceModsManager for proper locking)
         try
         {
-            if (Directory.Exists(instanceFolder))
-            {
-                Directory.Delete(instanceFolder, true);
-            }
+            await _instanceModsManager.OnInstanceDeletingAsync(instance);
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Failed to delete instance folder '{Folder}'", instanceFolder);
+            if (!force)
+            {
+                _logger?.LogError(ex, "Failed to delete instance folder for '{Id}'", instanceId);
 
-            // Transition to DeleteFailed
-            await Task.Run(() =>
-                _repository.SetMinecraftInstanceStateAsync(instanceId, MinecraftInstanceState.DeleteFailed));
-            await RefreshInstancesAsync();
-            throw new InvalidOperationException(
-                "Failed to delete instance folder. The instance is marked for retry.",
-                ex);
+                // Transition to DeleteFailed
+                await Task.Run(() =>
+                    _repository.SetMinecraftInstanceStateAsync(instanceId, MinecraftInstanceState.DeleteFailed));
+                await RefreshInstancesAsync();
+                throw new InvalidOperationException(
+                    "Failed to delete instance folder. The instance is marked for retry.",
+                    ex);
+            }
+
+            _logger?.LogWarning(ex, "Force-deleting instance '{Id}' — ignoring folder deletion failure", instanceId);
         }
 
-        // Phase 3: Disk is gone -- now delete the DB record and clean the caches
+        // Phase 3: Disk is gone -- now delete the DB record and clean up
         await Task.Run(() => _repository.RemoveMinecraftInstanceAsync(instanceId));
-        _instanceModsManager.EvictInstanceCaches(instance);
         CurrentInstallProgress.TryRemove(instanceId, out _);
 
         await RefreshInstancesAsync();
