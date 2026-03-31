@@ -170,6 +170,10 @@ public sealed class InstanceModsManagerStateTest
                         remoteEntered.TrySetResult();
                         await allowRemoteToContinue.Task.WaitAsync(token);
                         return JsonResponse([bravoVersion], ModrinthJsonContext.Default.ModrinthVersionArray);
+                    // GetVersionAsync is now called by the converged install path after
+                    // obtaining the version ID from the compatible-versions cache.
+                    case "/v2/version/bravo-1":
+                        return JsonResponse(bravoVersion, ModrinthJsonContext.Default.ModrinthVersion);
                     case "/v2/project/bravo":
                         return JsonResponse(CreateProject("bravo", "Bravo"), ModrinthJsonContext.Default.ModrinthProject);
                     default:

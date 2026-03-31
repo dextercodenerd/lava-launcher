@@ -31,6 +31,9 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
     [ObservableProperty] private string _installMessage = "";
     [ObservableProperty] private InstanceInstalledProjectState? _targetProjectState;
     [ObservableProperty] private LatestCompatibleVersionInfo? _targetLatestCompatibleVersion;
+    // True when the most recent compatibility check failed (stale data may still be shown).
+    // Views can use this to display a quiet unavailable/stale indicator.
+    [ObservableProperty] private bool _hasCompatibilityRefreshFailure;
 
     public ModrinthInstallTargetPickerViewModel InstallTargetPicker { get; } = new();
     public bool CanInstall => string.Equals(Project?.ProjectType, "mod", StringComparison.OrdinalIgnoreCase);
@@ -49,9 +52,19 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
     {
         get
         {
-            if (_searchContext.TargetInstance is null || TargetProjectState is null)
+            if (_searchContext.TargetInstance is null)
             {
                 return "";
+            }
+
+            if (TargetProjectState is null)
+            {
+                // Project is not installed in the target instance.
+                // If the compatibility check failed with no prior data, show a quiet indicator
+                // so the user knows we could not verify whether this version is compatible.
+                return HasCompatibilityRefreshFailure && TargetLatestCompatibleVersion is null
+                    ? "Compatibility status unavailable."
+                    : "";
             }
 
             if (TargetProjectState.IsBroken)
@@ -64,6 +77,11 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
             if (TargetProjectState.InstallKind == InstanceModItemKind.Dependency)
             {
                 return $"Installed as a required dependency ({TargetProjectState.InstalledVersionNumber}).";
+            }
+
+            if (HasCompatibilityRefreshFailure && TargetLatestCompatibleVersion is null)
+            {
+                return $"Installed {TargetProjectState.InstalledVersionNumber}. Update status unavailable.";
             }
 
             return ShowUpdateAction && !string.IsNullOrWhiteSpace(TargetLatestCompatibleVersion?.VersionNumber)
@@ -220,7 +238,7 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
 
         try
         {
-            var latestCompatibleVersions = await _instanceModsManager.GetLatestCompatibleVersionsAsync(
+            var result = await _instanceModsManager.GetLatestCompatibleVersionsAsync(
                 _searchContext.TargetInstance,
                 [_projectId],
                 forceRefresh);
@@ -229,7 +247,7 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
                 return;
             }
 
-            latestCompatibleVersions.TryGetValue(_projectId, out var latestCompatibleVersion);
+            result.Versions.TryGetValue(_projectId, out var latestCompatibleVersion);
             Dispatcher.UIThread.Post(() =>
             {
                 if (!IsCurrentTargetStateRefresh(generation))
@@ -238,6 +256,7 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
                 }
 
                 TargetLatestCompatibleVersion = latestCompatibleVersion;
+                HasCompatibilityRefreshFailure = result.HasRefreshFailure;
             });
         }
         catch (Exception ex)
@@ -426,6 +445,12 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
     partial void OnTargetLatestCompatibleVersionChanged(LatestCompatibleVersionInfo? value)
     {
         OnPropertyChanged(nameof(ShowUpdateAction));
+        OnPropertyChanged(nameof(TargetStateText));
+        OnPropertyChanged(nameof(HasTargetStateText));
+    }
+
+    partial void OnHasCompatibilityRefreshFailureChanged(bool value)
+    {
         OnPropertyChanged(nameof(TargetStateText));
         OnPropertyChanged(nameof(HasTargetStateText));
     }

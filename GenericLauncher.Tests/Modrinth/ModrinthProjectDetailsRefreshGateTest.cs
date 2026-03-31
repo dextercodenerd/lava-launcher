@@ -140,6 +140,12 @@ public sealed class ModrinthProjectDetailsRefreshGateTest
                     }
 
                     break;
+                // GetVersionAsync is now called by the converged install path after
+                // obtaining the version ID from the compatible-versions lookup result.
+                case "/v2/version/alpha-2":
+                    return RefreshGateTestSupport.JsonResponse(
+                        installedVersion,
+                        ModrinthJsonContext.Default.ModrinthVersion);
                 case "/v2/project/alpha":
                     return RefreshGateTestSupport.JsonResponse(
                         RefreshGateTestSupport.CreateProject("alpha", "Alpha"),
@@ -264,6 +270,12 @@ public sealed class ModrinthProjectDetailsRefreshGateTest
                     }
 
                     break;
+                // GetVersionAsync is now called by the converged install path after
+                // obtaining the version ID from the compatible-versions lookup result.
+                case "/v2/version/alpha-2":
+                    return RefreshGateTestSupport.JsonResponse(
+                        installedVersion,
+                        ModrinthJsonContext.Default.ModrinthVersion);
                 case "/v2/project/alpha":
                     return RefreshGateTestSupport.JsonResponse(
                         RefreshGateTestSupport.CreateProject("alpha", "Alpha"),

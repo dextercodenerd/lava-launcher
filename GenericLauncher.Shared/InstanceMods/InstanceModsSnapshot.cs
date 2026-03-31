@@ -27,6 +27,20 @@ public sealed record LatestCompatibleVersionInfo(
     string VersionNumber
 );
 
+/// <summary>
+/// The result returned by <c>GetLatestCompatibleVersionsAsync</c>.
+/// <see cref="Versions"/> contains the best compatible version per project id for all projects
+/// where a result (fresh or stale) is available.
+/// <see cref="HasRefreshFailure"/> is <c>true</c> when at least one per-project lookup failed —
+/// either because the fetch failed and no prior cached data exists (unavailable), or because
+/// the fetch failed but stale cached data was used (stale-success).  Callers should surface a
+/// quiet indicator so users know the data may be incomplete or outdated.
+/// </summary>
+public sealed record LatestCompatibleVersionsResult(
+    ImmutableDictionary<string, LatestCompatibleVersionInfo> Versions,
+    bool HasRefreshFailure
+);
+
 public sealed record InstanceModsSnapshot(
     ImmutableList<InstanceModListItem> InstalledMods,
     ImmutableList<InstanceModListItem> RequiredDependencies,

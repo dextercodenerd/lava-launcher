@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
@@ -55,6 +56,9 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
     [ObservableProperty] private bool _isModsLoading;
     [ObservableProperty] private string _modsStatusMessage = "";
     [ObservableProperty] private string _modsErrorMessage = "";
+    // True when the most recent update-check pass encountered at least one lookup failure.
+    // The view can use this to show a quiet stale/unavailable indicator.
+    [ObservableProperty] private bool _modsUpdateCheckFailed;
     [ObservableProperty] private bool _isSearchVisible;
     [ObservableProperty] private ModrinthSearchViewModel? _inlineSearchViewModel;
     [ObservableProperty] private ObservableCollection<InstanceModListItem> _installedMods = [];
@@ -543,9 +547,10 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
         RenderModLists();
     }
 
-    private void ApplyLatestCompatibleVersions(IReadOnlyDictionary<string, LatestCompatibleVersionInfo> latestCompatibleVersions)
+    private void ApplyLatestCompatibleVersions(LatestCompatibleVersionsResult result)
     {
-        _latestCompatibleVersions = latestCompatibleVersions;
+        _latestCompatibleVersions = result.Versions;
+        ModsUpdateCheckFailed = result.HasRefreshFailure;
         RenderModLists();
     }
 
@@ -559,13 +564,18 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
         OnPropertyChanged(nameof(CanUpdateAll));
     }
 
-    private async Task<IReadOnlyDictionary<string, LatestCompatibleVersionInfo>> GetLatestCompatibleVersionsAsync(
+    private async Task<LatestCompatibleVersionsResult> GetLatestCompatibleVersionsAsync(
         InstanceModsSnapshot snapshot,
         bool forceRefresh)
     {
+        var empty = new LatestCompatibleVersionsResult(
+            ImmutableDictionary<string, LatestCompatibleVersionInfo>.Empty
+                .WithComparers(StringComparer.OrdinalIgnoreCase),
+            HasRefreshFailure: false);
+
         if (_instanceModsManager is null)
         {
-            return new Dictionary<string, LatestCompatibleVersionInfo>(StringComparer.OrdinalIgnoreCase);
+            return empty;
         }
 
         var directProjectIds = snapshot.ProjectsById.Values
@@ -574,7 +584,7 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
             .ToArray();
         if (directProjectIds.Length == 0)
         {
-            return new Dictionary<string, LatestCompatibleVersionInfo>(StringComparer.OrdinalIgnoreCase);
+            return empty;
         }
 
         return await _instanceModsManager.GetLatestCompatibleVersionsAsync(Instance, directProjectIds, forceRefresh);
@@ -590,7 +600,7 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
     {
         try
         {
-            var latestCompatibleVersions = await GetLatestCompatibleVersionsAsync(snapshot, forceRefresh);
+            var result = await GetLatestCompatibleVersionsAsync(snapshot, forceRefresh);
             if (!IsCurrentModsRefresh(generation))
             {
                 return;
@@ -603,7 +613,7 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
                     return;
                 }
 
-                ApplyLatestCompatibleVersions(latestCompatibleVersions);
+                ApplyLatestCompatibleVersions(result);
             });
         }
         catch (Exception ex)
