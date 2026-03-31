@@ -55,8 +55,10 @@ public sealed class InstanceModsManagerCompatibleVersionsCacheTest
         Assert.Equal(1, callCount);
         Assert.False(first.HasRefreshFailure);
         Assert.False(second.HasRefreshFailure);
-        Assert.True(first.Versions.ContainsKey("bravo"));
-        Assert.True(second.Versions.ContainsKey("bravo"));
+        Assert.Equal(CompatibilityRefreshState.Fresh, first.Projects["bravo"].RefreshState);
+        Assert.Equal(CompatibilityRefreshState.Fresh, second.Projects["bravo"].RefreshState);
+        Assert.Equal("bravo-v1", first.Projects["bravo"].LatestVersion?.VersionId);
+        Assert.Equal("bravo-v1", second.Projects["bravo"].LatestVersion?.VersionId);
     }
 
     // 2. Force refresh: bypasses valid cache entry
@@ -94,7 +96,8 @@ public sealed class InstanceModsManagerCompatibleVersionsCacheTest
 
         Assert.Equal(2, callCount);
         Assert.False(refreshed.HasRefreshFailure);
-        Assert.Equal("bravo-v2", refreshed.Versions["bravo"].VersionId);
+        Assert.Equal("bravo-v2", refreshed.Projects["bravo"].LatestVersion?.VersionId);
+        Assert.Equal(CompatibilityRefreshState.Fresh, refreshed.Projects["bravo"].RefreshState);
     }
 
     // 3. TTL expiry: stale cache entry causes a fresh fetch
@@ -164,7 +167,7 @@ public sealed class InstanceModsManagerCompatibleVersionsCacheTest
             await manager.GetLatestCompatibleVersionsAsync(fixture.Instance, ["bravo"],
                 cancellationToken: cancellationToken);
         Assert.False(success.HasRefreshFailure);
-        Assert.Equal("bravo-v1", success.Versions["bravo"].VersionId);
+        Assert.Equal("bravo-v1", success.Projects["bravo"].LatestVersion?.VersionId);
 
         // Expire the cache so the next call triggers a fresh fetch.
         ExpireCacheEntry(manager, fixture.Instance, "bravo");
@@ -174,8 +177,8 @@ public sealed class InstanceModsManagerCompatibleVersionsCacheTest
         var stale = await manager.GetLatestCompatibleVersionsAsync(fixture.Instance, ["bravo"],
             cancellationToken: cancellationToken);
         Assert.True(stale.HasRefreshFailure);
-        Assert.True(stale.Versions.ContainsKey("bravo"), "Stale cached data must still be returned.");
-        Assert.Equal("bravo-v1", stale.Versions["bravo"].VersionId);
+        Assert.Equal(CompatibilityRefreshState.Stale, stale.Projects["bravo"].RefreshState);
+        Assert.Equal("bravo-v1", stale.Projects["bravo"].LatestVersion?.VersionId);
     }
 
     // 5. Unavailable: first fetch fails and no prior data exists
@@ -197,13 +200,14 @@ public sealed class InstanceModsManagerCompatibleVersionsCacheTest
                 throw new InvalidOperationException($"Unexpected: {request.RequestUri}");
             }));
 
-        // No prior data and fetch fails: must signal unavailable (no version in dict).
+        // No prior data and fetch fails: must signal unavailable.
         var result =
             await manager.GetLatestCompatibleVersionsAsync(fixture.Instance, ["bravo"],
                 cancellationToken: cancellationToken);
 
         Assert.True(result.HasRefreshFailure);
-        Assert.False(result.Versions.ContainsKey("bravo"), "No cached data should be shown for an unavailable lookup.");
+        Assert.Equal(CompatibilityRefreshState.Unavailable, result.Projects["bravo"].RefreshState);
+        Assert.Null(result.Projects["bravo"].LatestVersion);
     }
 
     // 6. Empty compatible versions: distinct from fetch failure
@@ -236,13 +240,90 @@ public sealed class InstanceModsManagerCompatibleVersionsCacheTest
             await manager.GetLatestCompatibleVersionsAsync(fixture.Instance, ["bravo"],
                 cancellationToken: cancellationToken);
 
-        // No versions but NOT a failure: HasRefreshFailure must be false.
+        // No versions but NOT a failure: refresh state stays fresh with a null latest version.
         Assert.False(first.HasRefreshFailure);
-        Assert.False(first.Versions.ContainsKey("bravo"));
+        Assert.Equal(CompatibilityRefreshState.Fresh, first.Projects["bravo"].RefreshState);
+        Assert.Null(first.Projects["bravo"].LatestVersion);
 
         // The successful-empty result is cached: second call must not fetch again.
         Assert.Equal(1, callCount);
         Assert.False(second.HasRefreshFailure);
+        Assert.Equal(CompatibilityRefreshState.Fresh, second.Projects["bravo"].RefreshState);
+        Assert.Null(second.Projects["bravo"].LatestVersion);
+    }
+
+    [Fact]
+    public async Task GetLatestCompatibleVersionsAsync_MixedBatchPreservesPerProjectStatuses()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var fixture = await RefreshGateTestSupport.CreateFixtureAsync();
+        var alphaV1 = RefreshGateTestSupport.CreateVersion("alpha-v1", "alpha", "1.1.0", "alpha.jar", [1, 2, 3]);
+
+        var manager = RefreshGateTestSupport.CreateManager(fixture.RootPath,
+            new RefreshGateTestSupport.RoutingHttpMessageHandler((request, _) =>
+            {
+                return request.RequestUri?.AbsolutePath switch
+                {
+                    "/v2/project/alpha/version" => Task.FromResult(
+                        JsonResponse([alphaV1], ModrinthJsonContext.Default.ModrinthVersionArray)),
+                    "/v2/project/bravo/version" => Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)),
+                    _ => throw new InvalidOperationException($"Unexpected: {request.RequestUri}"),
+                };
+            }));
+
+        var result = await manager.GetLatestCompatibleVersionsAsync(
+            fixture.Instance,
+            ["alpha", "bravo"],
+            cancellationToken: cancellationToken);
+
+        Assert.True(result.HasRefreshFailure);
+        Assert.Equal(CompatibilityRefreshState.Fresh, result.Projects["alpha"].RefreshState);
+        Assert.Equal("alpha-v1", result.Projects["alpha"].LatestVersion?.VersionId);
+        Assert.Equal(CompatibilityRefreshState.Unavailable, result.Projects["bravo"].RefreshState);
+        Assert.Null(result.Projects["bravo"].LatestVersion);
+    }
+
+    [Fact]
+    public async Task GetLatestCompatibleVersionsAsync_StaleFailureDuringRetryDelay_ReusesCachedResultWithoutRefetch()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var fixture = await RefreshGateTestSupport.CreateFixtureAsync();
+        var bravoV1 = RefreshGateTestSupport.CreateVersion("bravo-v1", "bravo", "1.0.0", "bravo.jar", [1, 2, 3]);
+
+        var callCount = 0;
+        var shouldFail = false;
+        var manager = RefreshGateTestSupport.CreateManager(fixture.RootPath,
+            new RefreshGateTestSupport.RoutingHttpMessageHandler((request, _) =>
+            {
+                if (request.RequestUri?.AbsolutePath != "/v2/project/bravo/version")
+                {
+                    throw new InvalidOperationException($"Unexpected: {request.RequestUri}");
+                }
+
+                callCount++;
+                return Task.FromResult(
+                    shouldFail
+                        ? new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+                        : JsonResponse([bravoV1], ModrinthJsonContext.Default.ModrinthVersionArray));
+            }));
+
+        await manager.GetLatestCompatibleVersionsAsync(fixture.Instance, ["bravo"], cancellationToken: cancellationToken);
+        ExpireCacheEntry(manager, fixture.Instance, "bravo");
+        shouldFail = true;
+
+        var stale = await manager.GetLatestCompatibleVersionsAsync(
+            fixture.Instance,
+            ["bravo"],
+            cancellationToken: cancellationToken);
+        var repeated = await manager.GetLatestCompatibleVersionsAsync(
+            fixture.Instance,
+            ["bravo"],
+            cancellationToken: cancellationToken);
+
+        Assert.Equal(2, callCount);
+        Assert.Equal(CompatibilityRefreshState.Stale, stale.Projects["bravo"].RefreshState);
+        Assert.Equal(CompatibilityRefreshState.Stale, repeated.Projects["bravo"].RefreshState);
+        Assert.Equal("bravo-v1", repeated.Projects["bravo"].LatestVersion?.VersionId);
     }
 
     // 7. Install convergence: UpdateModAsync uses shared cache path
@@ -302,7 +383,7 @@ public sealed class InstanceModsManagerCompatibleVersionsCacheTest
     }
 
     /// <summary>
-    /// Backdates the <c>FetchedAt</c> of a cache entry so it appears expired.
+    /// Backdates the successful-fetch timestamps of a cache entry so it appears expired.
     /// Uses reflection to reach the private cache, matching the pattern used in the
     /// existing <see cref="InstanceModsManagerEvictionTest"/>.
     /// </summary>
@@ -328,9 +409,18 @@ public sealed class InstanceModsManagerCompatibleVersionsCacheTest
         }
 
         var entry = args[1]!;
-        entry.GetType()
-            .GetProperty("FetchedAt", BindingFlags.Public | BindingFlags.Instance)!
-            .SetValue(entry, DateTime.UtcNow - TimeSpan.FromHours(1));
+        var entryType = entry.GetType();
+        var expiredAt = DateTime.UtcNow - TimeSpan.FromHours(1);
+        var updatedEntry = Activator.CreateInstance(
+            entryType,
+            entryType.GetProperty("Versions", BindingFlags.Public | BindingFlags.Instance)!.GetValue(entry),
+            expiredAt,
+            expiredAt,
+            entryType.GetProperty("LastRefreshAttemptAtUtc", BindingFlags.Public | BindingFlags.Instance)!.GetValue(entry),
+            entryType.GetProperty("RefreshState", BindingFlags.Public | BindingFlags.Instance)!.GetValue(entry))!;
+        cache.GetType()
+            .GetProperty("Item")!
+            .SetValue(cache, updatedEntry, [cacheKey]);
     }
 
     private static HttpResponseMessage JsonResponse<T>(T value, JsonTypeInfo<T> typeInfo) =>

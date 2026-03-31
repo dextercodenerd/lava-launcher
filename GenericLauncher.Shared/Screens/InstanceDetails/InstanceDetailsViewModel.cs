@@ -37,8 +37,8 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
     private readonly ILogger? _logger;
 
     private InstanceModsSnapshot _modsSnapshot = InstanceModsSnapshot.Empty;
-    private IReadOnlyDictionary<string, LatestCompatibleVersionInfo> _latestCompatibleVersions =
-        new Dictionary<string, LatestCompatibleVersionInfo>(StringComparer.OrdinalIgnoreCase);
+    private IReadOnlyDictionary<string, ProjectCompatibilityStatus> _projectCompatibilityStatuses =
+        new Dictionary<string, ProjectCompatibilityStatus>(StringComparer.OrdinalIgnoreCase);
     private int _modsRefreshGeneration;
     private bool _modsLoaded;
 
@@ -56,8 +56,6 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
     [ObservableProperty] private bool _isModsLoading;
     [ObservableProperty] private string _modsStatusMessage = "";
     [ObservableProperty] private string _modsErrorMessage = "";
-    // True when the most recent update-check pass encountered at least one lookup failure.
-    // The view can use this to show a quiet stale/unavailable indicator.
     [ObservableProperty] private bool _modsUpdateCheckFailed;
     [ObservableProperty] private bool _isSearchVisible;
     [ObservableProperty] private ModrinthSearchViewModel? _inlineSearchViewModel;
@@ -283,7 +281,7 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
             ModrinthSearchContext.CreateForInstance(Instance),
             _openProjectDetails,
             _logger);
-        InlineSearchViewModel.ApplyTargetState(_modsSnapshot, _latestCompatibleVersions);
+        InlineSearchViewModel.ApplyTargetState(_modsSnapshot, GetLatestCompatibleVersionsLookup());
         IsSearchVisible = true;
     }
 
@@ -549,7 +547,7 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
 
     private void ApplyLatestCompatibleVersions(LatestCompatibleVersionsResult result)
     {
-        _latestCompatibleVersions = result.Versions;
+        _projectCompatibilityStatuses = result.Projects;
         ModsUpdateCheckFailed = result.HasRefreshFailure;
         RenderModLists();
     }
@@ -560,7 +558,7 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
         Replace(RequiredDependencies, _modsSnapshot.RequiredDependencies);
         Replace(ManualMods, _modsSnapshot.ManualMods);
         Replace(BrokenMods, _modsSnapshot.BrokenMods);
-        InlineSearchViewModel?.ApplyTargetState(_modsSnapshot, _latestCompatibleVersions);
+        InlineSearchViewModel?.ApplyTargetState(_modsSnapshot, GetLatestCompatibleVersionsLookup());
         OnPropertyChanged(nameof(CanUpdateAll));
     }
 
@@ -569,9 +567,8 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
         bool forceRefresh)
     {
         var empty = new LatestCompatibleVersionsResult(
-            ImmutableDictionary<string, LatestCompatibleVersionInfo>.Empty
-                .WithComparers(StringComparer.OrdinalIgnoreCase),
-            HasRefreshFailure: false);
+            ImmutableDictionary<string, ProjectCompatibilityStatus>.Empty
+                .WithComparers(StringComparer.OrdinalIgnoreCase));
 
         if (_instanceModsManager is null)
         {
@@ -635,21 +632,60 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
         if (string.IsNullOrWhiteSpace(item.ProjectId)
             || !_modsSnapshot.ProjectsById.TryGetValue(item.ProjectId, out var installedProject)
             || installedProject.InstallKind != InstanceModItemKind.Direct
-            || installedProject.IsBroken
-            || !_latestCompatibleVersions.TryGetValue(item.ProjectId, out var latestCompatibleVersion)
-            || string.Equals(latestCompatibleVersion.VersionId, installedProject.InstalledVersionId, StringComparison.Ordinal))
+            || installedProject.IsBroken)
         {
             return item with
             {
                 HasUpdate = false,
                 LatestVersionNumber = null,
+                UpdateStatusText = null,
             };
         }
 
+        if (!_projectCompatibilityStatuses.TryGetValue(item.ProjectId, out var status))
+        {
+            return item with
+            {
+                HasUpdate = false,
+                LatestVersionNumber = null,
+                UpdateStatusText = null,
+            };
+        }
+
+        var latestCompatibleVersion = status.LatestVersion;
+        var hasUpdate = latestCompatibleVersion is not null
+                        && !string.Equals(
+                            latestCompatibleVersion.VersionId,
+                            installedProject.InstalledVersionId,
+                            StringComparison.Ordinal);
+
         return item with
         {
-            HasUpdate = true,
-            LatestVersionNumber = latestCompatibleVersion.VersionNumber,
+            HasUpdate = hasUpdate,
+            LatestVersionNumber = hasUpdate ? latestCompatibleVersion?.VersionNumber : null,
+            UpdateStatusText = BuildUpdateStatusText(status, latestCompatibleVersion, hasUpdate),
+        };
+    }
+
+    private IReadOnlyDictionary<string, LatestCompatibleVersionInfo> GetLatestCompatibleVersionsLookup() =>
+        _projectCompatibilityStatuses.Values
+            .Where(status => status.LatestVersion is not null)
+            .ToDictionary(status => status.ProjectId, status => status.LatestVersion!, StringComparer.OrdinalIgnoreCase);
+
+    private static string? BuildUpdateStatusText(
+        ProjectCompatibilityStatus status,
+        LatestCompatibleVersionInfo? latestCompatibleVersion,
+        bool hasUpdate)
+    {
+        return status.RefreshState switch
+        {
+            CompatibilityRefreshState.Unavailable => "Status unavailable.",
+            CompatibilityRefreshState.Stale when hasUpdate && latestCompatibleVersion is not null =>
+                $"Refresh failed; showing cached {latestCompatibleVersion.VersionNumber}.",
+            CompatibilityRefreshState.Stale => "Refresh failed; showing cached status.",
+            CompatibilityRefreshState.Fresh when hasUpdate && latestCompatibleVersion is not null =>
+                $"Update available: {latestCompatibleVersion.VersionNumber}",
+            _ => null,
         };
     }
 

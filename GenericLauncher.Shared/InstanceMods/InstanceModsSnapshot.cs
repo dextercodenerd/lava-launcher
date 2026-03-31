@@ -27,19 +27,32 @@ public sealed record LatestCompatibleVersionInfo(
     string VersionNumber
 );
 
+public enum CompatibilityRefreshState
+{
+    Fresh,
+    Stale,
+    Unavailable,
+}
+
+public sealed record ProjectCompatibilityStatus(
+    string ProjectId,
+    LatestCompatibleVersionInfo? LatestVersion,
+    CompatibilityRefreshState RefreshState
+);
+
 /// <summary>
 /// The result returned by <c>GetLatestCompatibleVersionsAsync</c>.
-/// <see cref="Versions"/> contains the best compatible version per project id for all projects
-/// where a result (fresh or stale) is available.
-/// <see cref="HasRefreshFailure"/> is <c>true</c> when at least one per-project lookup failed —
-/// either because the fetch failed and no prior cached data exists (unavailable), or because
-/// the fetch failed but stale cached data was used (stale-success).  Callers should surface a
-/// quiet indicator so users know the data may be incomplete or outdated.
+/// <see cref="Projects"/> always contains one status per requested project id.
+/// Successful lookups with no compatible versions still appear as <see cref="CompatibilityRefreshState.Fresh"/>
+/// with a null <see cref="ProjectCompatibilityStatus.LatestVersion"/>.
+/// Failed refreshes surface as either stale cached data or unavailable status.
 /// </summary>
 public sealed record LatestCompatibleVersionsResult(
-    ImmutableDictionary<string, LatestCompatibleVersionInfo> Versions,
-    bool HasRefreshFailure
-);
+    ImmutableDictionary<string, ProjectCompatibilityStatus> Projects)
+{
+    public bool HasRefreshFailure =>
+        Projects.Values.Any(project => project.RefreshState != CompatibilityRefreshState.Fresh);
+}
 
 public sealed record InstanceModsSnapshot(
     ImmutableList<InstanceModListItem> InstalledMods,

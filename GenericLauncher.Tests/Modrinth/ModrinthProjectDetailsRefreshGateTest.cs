@@ -1,7 +1,10 @@
 using System;
 using System.Net;
 using System.Net.Http;
+using System.Reflection;
 using System.Threading.Tasks;
+using GenericLauncher.Database.Model;
+using GenericLauncher.InstanceMods;
 using GenericLauncher.Modrinth.Json;
 using GenericLauncher.Screens.ModrinthProjectDetails;
 using GenericLauncher.Screens.ModrinthSearch;
@@ -326,5 +329,110 @@ public sealed class ModrinthProjectDetailsRefreshGateTest
         Assert.Equal("1.2.0", viewModel.TargetLatestCompatibleVersion?.VersionNumber);
         Assert.True(viewModel.ShowUpdateAction);
         Assert.Equal("1.1.0", viewModel.TargetProjectState?.InstalledVersionNumber);
+    }
+
+    [Fact]
+    public async Task RefreshTargetLatestCompatibleVersionAsync_UnavailableResultShowsQuietMessage()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var fixture = await RefreshGateTestSupport.CreateFixtureAsync();
+
+        using var handler = new RefreshGateTestSupport.RoutingHttpMessageHandler((request, _) =>
+        {
+            if (request.RequestUri?.AbsolutePath != "/v2/project/alpha/version")
+            {
+                throw new InvalidOperationException($"Unexpected request: {request.RequestUri}");
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+        });
+        var manager = RefreshGateTestSupport.CreateManager(fixture.RootPath, handler);
+        var viewModel = new ModrinthProjectDetailsViewModel(
+            RefreshGateTestSupport.CreateSearchResult("alpha", "Alpha"),
+            null,
+            manager,
+            ModrinthSearchContext.CreateForInstance(fixture.Instance));
+
+        await RefreshGateTestSupport.WaitUntilAsync(
+            () => viewModel.TargetStateText == "Compatibility status unavailable.",
+            cancellationToken);
+
+        Assert.Equal("Compatibility status unavailable.", viewModel.TargetStateText);
+        Assert.False(viewModel.ShowUpdateAction);
+    }
+
+    [Fact]
+    public async Task RefreshTargetLatestCompatibleVersionAsync_StaleResultMentionsCachedData()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var fixture = await RefreshGateTestSupport.CreateFixtureAsync();
+        await RefreshGateTestSupport.WriteManagedModsAsync(
+            fixture,
+            RefreshGateTestSupport.CreateManagedMod("alpha", "Alpha", "alpha-1", "1.0.0", "alpha.jar", "Direct", [], [1, 2, 3]));
+
+        var shouldFail = false;
+        using var handler = new RefreshGateTestSupport.RoutingHttpMessageHandler((request, _) =>
+        {
+            if (request.RequestUri?.AbsolutePath != "/v2/project/alpha/version")
+            {
+                throw new InvalidOperationException($"Unexpected request: {request.RequestUri}");
+            }
+
+            return Task.FromResult(
+                shouldFail
+                    ? new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+                    : RefreshGateTestSupport.JsonResponse(
+                        [RefreshGateTestSupport.CreateVersion("alpha-2", "alpha", "1.1.0", "alpha-2.jar", [4, 5, 6])],
+                        ModrinthJsonContext.Default.ModrinthVersionArray));
+        });
+        var manager = RefreshGateTestSupport.CreateManager(fixture.RootPath, handler);
+        await manager.GetLatestCompatibleVersionsAsync(fixture.Instance, ["alpha"], cancellationToken: cancellationToken);
+        ExpireCacheEntry(manager, fixture.Instance, "alpha");
+        shouldFail = true;
+
+        var viewModel = new ModrinthProjectDetailsViewModel(
+            RefreshGateTestSupport.CreateSearchResult("alpha", "Alpha"),
+            null,
+            manager,
+            ModrinthSearchContext.CreateForInstance(fixture.Instance));
+
+        await RefreshGateTestSupport.WaitUntilAsync(
+            () => viewModel.TargetStateText.Contains("cached 1.1.0", StringComparison.Ordinal),
+            cancellationToken);
+
+        Assert.Contains("cached 1.1.0", viewModel.TargetStateText, StringComparison.Ordinal);
+        Assert.True(viewModel.ShowUpdateAction);
+    }
+
+    private static void ExpireCacheEntry(InstanceModsManager manager, MinecraftInstance instance, string projectId)
+    {
+        var cacheKey = (string)typeof(InstanceModsManager)
+            .GetMethod("GetCompatibleVersionsCacheKey", BindingFlags.NonPublic | BindingFlags.Static)!
+            .Invoke(null, [instance, projectId])!;
+
+        var cacheField = typeof(InstanceModsManager)
+            .GetField("_compatibleVersionsCache", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var cache = cacheField.GetValue(manager)!;
+
+        var tryGetValueMethod = cache.GetType().GetMethod("TryGetValue")!;
+        var args = new object?[] { cacheKey, null };
+        if (!(bool)tryGetValueMethod.Invoke(cache, args)!)
+        {
+            return;
+        }
+
+        var entry = args[1]!;
+        var entryType = entry.GetType();
+        var expiredAt = DateTime.UtcNow - TimeSpan.FromHours(1);
+        var updatedEntry = Activator.CreateInstance(
+            entryType,
+            entryType.GetProperty("Versions", BindingFlags.Public | BindingFlags.Instance)!.GetValue(entry),
+            expiredAt,
+            expiredAt,
+            entryType.GetProperty("LastRefreshAttemptAtUtc", BindingFlags.Public | BindingFlags.Instance)!.GetValue(entry),
+            entryType.GetProperty("RefreshState", BindingFlags.Public | BindingFlags.Instance)!.GetValue(entry))!;
+        cache.GetType()
+            .GetProperty("Item")!
+            .SetValue(cache, updatedEntry, [cacheKey]);
     }
 }

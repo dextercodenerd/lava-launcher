@@ -131,10 +131,11 @@
                                                                        FontSize="12"
                                                                        Foreground="{DynamicResource ThemeForegroundBrush}"
                                                                        Opacity="0.72" />
-                                                            <TextBlock Text="{Binding LatestVersionNumber, StringFormat='{}Update available: {0}'}"
-                                                                       IsVisible="{Binding HasUpdate}"
+                                                            <TextBlock Text="{Binding UpdateStatusText}"
+                                                                       IsVisible="{Binding UpdateStatusText, Converter={x:Static ObjectConverters.IsNotNull}}"
                                                                        FontSize="12"
-                                                                       Foreground="{DynamicResource ThemeAccentBrush}" />
+                                                                       Foreground="{DynamicResource ThemeForegroundBrush}"
+                                                                       Opacity="0.72" />
                                                         </StackPanel>
                                                         <StackPanel Grid.Column="1" Spacing="8">
                                                             <Button Content="Update"

@@ -34,6 +34,7 @@ public sealed class InstanceModsManager
     // as stale so callers can show a quiet refresh-failure indicator.
     private const int CompatibleVersionsCacheMaxSize = 512;
     private static readonly TimeSpan CompatibleVersionsCacheTtl = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan CompatibleVersionsRefreshRetryDelay = TimeSpan.FromSeconds(60);
 
     private readonly LauncherPlatform _platform;
     private readonly ModrinthApiClient _modrinthApiClient;
@@ -49,12 +50,10 @@ public sealed class InstanceModsManager
     private readonly Dictionary<string, InstanceModsSnapshot> _snapshots =
         new(StringComparer.OrdinalIgnoreCase);
 
-    private readonly Dictionary<string, CompatibleVersionCacheEntry> _compatibleVersionsCache =
+    private readonly Dictionary<string, CompatibleVersionsCacheEntry> _compatibleVersionsCache =
         new(StringComparer.OrdinalIgnoreCase);
 
     private readonly Lock _compatibleVersionsCacheLock = new();
-
-    private readonly LinkedList<string> _compatibleVersionsCacheOrder = [];
 
     public event EventHandler<InstanceModsSnapshotChangedEventArgs>? InstanceModsChanged;
 
@@ -142,9 +141,8 @@ public sealed class InstanceModsManager
         if (distinctProjectIds.Length == 0)
         {
             return new LatestCompatibleVersionsResult(
-                ImmutableDictionary<string, LatestCompatibleVersionInfo>.Empty
-                    .WithComparers(StringComparer.OrdinalIgnoreCase),
-                false);
+                ImmutableDictionary<string, ProjectCompatibilityStatus>.Empty
+                    .WithComparers(StringComparer.OrdinalIgnoreCase));
         }
 
         var fetchResults = new CompatibleVersionFetchResult[distinctProjectIds.Length];
@@ -166,29 +164,24 @@ public sealed class InstanceModsManager
                     token);
             });
 
-        var hasRefreshFailure = false;
-        var versions = ImmutableDictionary.CreateBuilder<string, LatestCompatibleVersionInfo>(
+        var projects = ImmutableDictionary.CreateBuilder<string, ProjectCompatibilityStatus>(
             StringComparer.OrdinalIgnoreCase);
 
         for (var i = 0; i < distinctProjectIds.Length; i++)
         {
+            var projectId = distinctProjectIds[i];
             var result = fetchResults[i];
-            if (result.IsUnavailable || result.IsStale)
+            LatestCompatibleVersionInfo? latestVersion = null;
+            if (!result.Versions.IsDefaultOrEmpty)
             {
-                hasRefreshFailure = true;
+                var best = result.Versions[0];
+                latestVersion = new LatestCompatibleVersionInfo(projectId, best.VersionId, best.VersionNumber);
             }
 
-            if (result.Versions.IsDefaultOrEmpty)
-            {
-                continue;
-            }
-
-            var best = result.Versions[0];
-            versions[distinctProjectIds[i]] = new LatestCompatibleVersionInfo(
-                distinctProjectIds[i], best.VersionId, best.VersionNumber);
+            projects[projectId] = new ProjectCompatibilityStatus(projectId, latestVersion, result.RefreshState);
         }
 
-        return new LatestCompatibleVersionsResult(versions.ToImmutable(), hasRefreshFailure);
+        return new LatestCompatibleVersionsResult(projects.ToImmutable());
     }
 
     public async Task<ImmutableList<PortableInstanceCandidate>> DiscoverPortableInstancesAsync(
@@ -530,11 +523,7 @@ public sealed class InstanceModsManager
             foreach (var projectId in projectIds)
             {
                 var key = GetCompatibleVersionsCacheKey(instance, projectId);
-                if (_compatibleVersionsCache.TryGetValue(key, out var entry))
-                {
-                    _compatibleVersionsCacheOrder.Remove(entry.OrderNode!);
-                    _compatibleVersionsCache.Remove(key);
-                }
+                _compatibleVersionsCache.Remove(key);
             }
         }
     }
@@ -753,6 +742,7 @@ public sealed class InstanceModsManager
                 parentTitles.Length == 0 ? null : string.Join(", ", parentTitles),
                 installKind == InstanceModItemKind.Direct,
                 false,
+                null,
                 null);
 
             switch (displayKind)
@@ -794,6 +784,7 @@ public sealed class InstanceModsManager
                 null,
                 true,
                 false,
+                null,
                 null));
         }
 
@@ -960,11 +951,9 @@ public sealed class InstanceModsManager
             lock (_compatibleVersionsCacheLock)
             {
                 if (_compatibleVersionsCache.TryGetValue(cacheKey, out var hit)
-                    && !hit.LastRefreshFailed
-                    && DateTime.UtcNow - hit.FetchedAt < CompatibleVersionsCacheTtl)
+                    && TryUseCachedCompatibleVersionsEntry(cacheKey, hit, DateTime.UtcNow, out var cachedResult))
                 {
-                    PromoteCacheEntry(hit);
-                    return CompatibleVersionFetchResult.Fresh(hit.Versions);
+                    return cachedResult;
                 }
             }
         }
@@ -974,7 +963,15 @@ public sealed class InstanceModsManager
             var versions = await ResolveCompatibleVersionsAsync(instance, projectId, cancellationToken);
             lock (_compatibleVersionsCacheLock)
             {
-                UpsertSuccessfulCacheEntry(cacheKey, versions);
+                var utcNow = DateTime.UtcNow;
+                UpsertCompatibleVersionsCacheEntry(
+                    cacheKey,
+                    new CompatibleVersionsCacheEntry(
+                        versions,
+                        utcNow,
+                        utcNow,
+                        utcNow,
+                        CompatibilityRefreshState.Fresh));
             }
 
             return CompatibleVersionFetchResult.Fresh(versions);
@@ -988,12 +985,30 @@ public sealed class InstanceModsManager
             _logger?.LogWarning(ex, "Failed to resolve compatible versions for {ProjectId}", projectId);
             lock (_compatibleVersionsCacheLock)
             {
+                var nowUtc = DateTime.UtcNow;
                 if (_compatibleVersionsCache.TryGetValue(cacheKey, out var stale))
                 {
-                    stale.LastRefreshFailed = true;
-                    PromoteCacheEntry(stale);
-                    return CompatibleVersionFetchResult.Stale(stale.Versions);
+                    if (HasSuccessfulCompatibleVersions(stale))
+                    {
+                        var staleEntry = stale with
+                        {
+                            LastAccessedAtUtc = nowUtc,
+                            LastRefreshAttemptAtUtc = nowUtc,
+                            RefreshState = CompatibilityRefreshState.Stale,
+                        };
+                        UpsertCompatibleVersionsCacheEntry(cacheKey, staleEntry);
+                        return CompatibleVersionFetchResult.Stale(staleEntry.Versions);
+                    }
                 }
+
+                UpsertCompatibleVersionsCacheEntry(
+                    cacheKey,
+                    new CompatibleVersionsCacheEntry(
+                        [],
+                        DateTime.MinValue,
+                        nowUtc,
+                        nowUtc,
+                        CompatibilityRefreshState.Unavailable));
             }
 
             return CompatibleVersionFetchResult.Unavailable;
@@ -1001,42 +1016,78 @@ public sealed class InstanceModsManager
     }
 
     // Must be called with _compatibleVersionsCacheLock held.
-    private void UpsertSuccessfulCacheEntry(string cacheKey, ImmutableArray<CompatibleVersionInfo> versions)
+    private void UpsertCompatibleVersionsCacheEntry(string cacheKey, CompatibleVersionsCacheEntry entry)
     {
-        if (_compatibleVersionsCache.TryGetValue(cacheKey, out var existing))
-        {
-            existing.Versions = versions;
-            existing.FetchedAt = DateTime.UtcNow;
-            existing.LastRefreshFailed = false;
-            PromoteCacheEntry(existing);
-        }
-        else
-        {
-            var entry = new CompatibleVersionCacheEntry
-            {
-                Versions = versions,
-                FetchedAt = DateTime.UtcNow,
-                LastRefreshFailed = false,
-            };
-            var node = _compatibleVersionsCacheOrder.AddFirst(cacheKey);
-            entry.OrderNode = node;
-            _compatibleVersionsCache[cacheKey] = entry;
-
-            while (_compatibleVersionsCache.Count > CompatibleVersionsCacheMaxSize)
-            {
-                var lru = _compatibleVersionsCacheOrder.Last!;
-                _compatibleVersionsCache.Remove(lru.Value);
-                _compatibleVersionsCacheOrder.RemoveLast();
-            }
-        }
+        _compatibleVersionsCache[cacheKey] = entry;
+        PruneCompatibleVersionsCache(entry.LastAccessedAtUtc);
     }
 
     // Must be called with _compatibleVersionsCacheLock held.
-    private void PromoteCacheEntry(CompatibleVersionCacheEntry entry)
+    private bool TryUseCachedCompatibleVersionsEntry(
+        string cacheKey,
+        CompatibleVersionsCacheEntry entry,
+        DateTime nowUtc,
+        out CompatibleVersionFetchResult result)
     {
-        _compatibleVersionsCacheOrder.Remove(entry.OrderNode!);
-        _compatibleVersionsCacheOrder.AddFirst(entry.OrderNode!);
+        if (entry.RefreshState == CompatibilityRefreshState.Fresh)
+        {
+            if (nowUtc - entry.LastSuccessfulFetchAtUtc < CompatibleVersionsCacheTtl)
+            {
+                _compatibleVersionsCache[cacheKey] = entry with { LastAccessedAtUtc = nowUtc };
+                result = CompatibleVersionFetchResult.Fresh(entry.Versions);
+                return true;
+            }
+
+            result = default;
+            return false;
+        }
+
+        if (nowUtc - entry.LastRefreshAttemptAtUtc < CompatibleVersionsRefreshRetryDelay)
+        {
+            var touchedEntry = entry with { LastAccessedAtUtc = nowUtc };
+            _compatibleVersionsCache[cacheKey] = touchedEntry;
+            result = entry.RefreshState == CompatibilityRefreshState.Stale
+                ? CompatibleVersionFetchResult.Stale(entry.Versions)
+                : CompatibleVersionFetchResult.Unavailable;
+            return true;
+        }
+
+        result = default;
+        return false;
     }
+
+    // Must be called with _compatibleVersionsCacheLock held.
+    private void PruneCompatibleVersionsCache(DateTime nowUtc)
+    {
+        foreach (var key in _compatibleVersionsCache.Keys.ToArray())
+        {
+            if (!IsCompatibleVersionsCacheEntryUseful(_compatibleVersionsCache[key], nowUtc))
+            {
+                _compatibleVersionsCache.Remove(key);
+            }
+        }
+
+        while (_compatibleVersionsCache.Count > CompatibleVersionsCacheMaxSize)
+        {
+            var leastRecentlyAccessed = _compatibleVersionsCache.MinBy(pair => pair.Value.LastAccessedAtUtc);
+            _compatibleVersionsCache.Remove(leastRecentlyAccessed.Key);
+        }
+    }
+
+    private static bool IsCompatibleVersionsCacheEntryUseful(CompatibleVersionsCacheEntry entry, DateTime nowUtc)
+    {
+        return entry.RefreshState switch
+        {
+            CompatibilityRefreshState.Fresh => nowUtc - entry.LastSuccessfulFetchAtUtc < CompatibleVersionsCacheTtl,
+            CompatibilityRefreshState.Stale or CompatibilityRefreshState.Unavailable =>
+                nowUtc - entry.LastRefreshAttemptAtUtc < CompatibleVersionsRefreshRetryDelay,
+            _ => false,
+        };
+    }
+
+    private static bool HasSuccessfulCompatibleVersions(CompatibleVersionsCacheEntry entry) =>
+        entry.RefreshState != CompatibilityRefreshState.Unavailable
+        && entry.LastSuccessfulFetchAtUtc != DateTime.MinValue;
 
     private static InstanceMeta BuildMetaFromResolution(MinecraftInstance instance, ResolutionState resolution) => new(
         CurrentSchemaVersion,
@@ -1329,34 +1380,30 @@ public sealed class InstanceModsManager
     }
 
     // Stores the result of one compatible-version lookup in the private cache.
-    private sealed class CompatibleVersionCacheEntry
-    {
-        public ImmutableArray<CompatibleVersionInfo> Versions { get; set; }
-
-        public DateTime FetchedAt { get; set; }
-
-        // True when the most recent refresh attempt failed. The entry still holds
-        // the last successful data so callers can show stale results with a quiet indicator.
-        public bool LastRefreshFailed { get; set; }
-
-        // Node in the LRU order list (non-null after the entry is inserted).
-        public LinkedListNode<string>? OrderNode { get; set; }
-    }
+    private sealed record CompatibleVersionsCacheEntry(
+        ImmutableArray<CompatibleVersionInfo> Versions,
+        DateTime LastSuccessfulFetchAtUtc,
+        DateTime LastAccessedAtUtc,
+        DateTime LastRefreshAttemptAtUtc,
+        CompatibilityRefreshState RefreshState
+    );
 
     // Discriminated result returned by GetCompatibleVersionsInternalAsync.
     private readonly record struct CompatibleVersionFetchResult(
         ImmutableArray<CompatibleVersionInfo> Versions,
-        bool IsUnavailable,
-        bool IsStale)
+        CompatibilityRefreshState RefreshState)
     {
         public static CompatibleVersionFetchResult Fresh(ImmutableArray<CompatibleVersionInfo> v)
-            => new(v, false, false);
+            => new(v, CompatibilityRefreshState.Fresh);
 
         public static CompatibleVersionFetchResult Stale(ImmutableArray<CompatibleVersionInfo> v)
-            => new(v, false, true);
+            => new(v, CompatibilityRefreshState.Stale);
 
         public static readonly CompatibleVersionFetchResult Unavailable
-            = new([], true, false);
+            = new([], CompatibilityRefreshState.Unavailable);
+
+        public bool IsUnavailable => RefreshState == CompatibilityRefreshState.Unavailable;
+        public bool IsStale => RefreshState == CompatibilityRefreshState.Stale;
     }
 
     private sealed class ResolutionState
@@ -1456,7 +1503,8 @@ public sealed record InstanceModListItem(
     string? RequiredByDisplay,
     bool CanDelete,
     bool HasUpdate,
-    string? LatestVersionNumber
+    string? LatestVersionNumber,
+    string? UpdateStatusText
 )
 {
     public bool CanUpdate => Kind == InstanceModItemKind.Direct;
