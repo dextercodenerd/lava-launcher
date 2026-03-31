@@ -37,17 +37,21 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
     private readonly ILogger? _logger;
 
     private InstanceModsSnapshot _modsSnapshot = InstanceModsSnapshot.Empty;
+
     private IReadOnlyDictionary<string, ProjectCompatibilityStatus> _projectCompatibilityStatuses =
         new Dictionary<string, ProjectCompatibilityStatus>(StringComparer.OrdinalIgnoreCase);
+
     private int _modsRefreshGeneration;
     private bool _modsLoaded;
 
     [ObservableProperty] private MinecraftInstance _instance;
     [ObservableProperty] private ThreadSafeInstallProgressReporter.InstallProgress? _progress;
     [ObservableProperty] private InstanceDetailsTab _selectedTab = InstanceDetailsTab.Content;
+
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ClickPlayCommand))]
     [NotifyPropertyChangedFor(nameof(CanDelete))]
+    [NotifyPropertyChangedFor(nameof(CanForceDelete))]
     private MinecraftLauncher.RunningState _runningState = MinecraftLauncher.RunningState.Stopped;
 
     [ObservableProperty] private bool _isDeleteConfirmationVisible;
@@ -70,11 +74,19 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
     public bool IsInstalling => Instance.State == MinecraftInstanceState.Installing;
     public bool IsDeleting => Instance.State == MinecraftInstanceState.Deleting;
     public bool IsDeleteFailed => Instance.State == MinecraftInstanceState.DeleteFailed;
+
     public bool CanDelete => Instance.State == MinecraftInstanceState.Ready
-        && RunningState == MinecraftLauncher.RunningState.Stopped;
+                             && RunningState == MinecraftLauncher.RunningState.Stopped;
+
+    public bool CanForceDelete => !CanDelete
+                                  && !IsDeleting
+                                  && RunningState == MinecraftLauncher.RunningState.Stopped
+                                  && Instance.State == MinecraftInstanceState.Installing;
+
     public bool CanManageMods => Instance.ModLoader is MinecraftInstanceModLoader.Fabric
         or MinecraftInstanceModLoader.Forge
         or MinecraftInstanceModLoader.NeoForge;
+
     public bool CanUpdateAll => InstalledMods.Any(item => item.HasUpdate);
 
     public string ProgressMessage
@@ -86,11 +98,7 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
                 return "100";
             }
 
-            var average = (long)Progress.Value.MinecraftDownloadProgress * Progress.Value.AssetsDownloadProgress *
-                Progress.Value.LibrariesDownloadProgress * Progress.Value.JavaDownloadProgress *
-                Progress.Value.ModLoaderInstallProgress / 100000000;
-
-            return average.ToString();
+            return Progress.Value.GetOverallProgressPercent().ToString();
         }
     }
 
@@ -182,6 +190,7 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
                 OnPropertyChanged(nameof(IsDeleting));
                 OnPropertyChanged(nameof(IsDeleteFailed));
                 OnPropertyChanged(nameof(CanDelete));
+                OnPropertyChanged(nameof(CanForceDelete));
                 ClickPlayCommand.NotifyCanExecuteChanged();
             }
         });
@@ -224,7 +233,7 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
 
             ApplyModsSnapshot(e.Snapshot);
         });
-        _ = RefreshUpdateStatusesAsync(e.Snapshot, forceRefresh: false, generation);
+        _ = RefreshUpdateStatusesAsync(e.Snapshot, false, generation);
     }
 
     partial void OnProgressChanged(ThreadSafeInstallProgressReporter.InstallProgress? value)
@@ -245,6 +254,7 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
         OnPropertyChanged(nameof(IsDeleting));
         OnPropertyChanged(nameof(IsDeleteFailed));
         OnPropertyChanged(nameof(CanDelete));
+        OnPropertyChanged(nameof(CanForceDelete));
     }
 
     [RelayCommand]
@@ -263,7 +273,7 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
     [RelayCommand]
     private async Task RefreshModsAsync()
     {
-        await LoadModsStateAsync(forceRefresh: true);
+        await LoadModsStateAsync(true);
     }
 
     [RelayCommand]
@@ -378,7 +388,17 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
     private void ShowDeleteConfirmation() => IsDeleteConfirmationVisible = true;
 
     [RelayCommand]
+    private void ShowForceDeleteConfirmation() => IsDeleteConfirmationVisible = true;
+
+    [RelayCommand]
     private void CancelDelete()
+    {
+        IsDeleteConfirmationVisible = false;
+        DeleteErrorMessage = "";
+    }
+
+    [RelayCommand]
+    private void CancelForceDelete()
     {
         IsDeleteConfirmationVisible = false;
         DeleteErrorMessage = "";
@@ -387,41 +407,23 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
     [RelayCommand]
     private async Task ConfirmDeleteAsync()
     {
-        if (_minecraftLauncher is null)
-        {
-            return;
-        }
-        try
-        {
-            DeleteErrorMessage = "";
-            await _minecraftLauncher.DeleteInstanceAsync(Instance.Id);
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "Failed to delete instance {InstanceId}", Instance.Id);
-            DeleteErrorMessage = "Failed to delete instance files. You can retry.";
-            IsDeleteConfirmationVisible = false;
-        }
+        await DeleteInstanceAsync(false, "Failed to delete instance {InstanceId}", true);
     }
 
     [RelayCommand]
-    private async Task RetryDeleteAsync()
+    private async Task ConfirmForceDeleteAsync()
     {
-        if (_minecraftLauncher is null)
-        {
-            return;
-        }
-        try
-        {
-            DeleteErrorMessage = "";
-            await _minecraftLauncher.DeleteInstanceAsync(Instance.Id);
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "Failed to retry delete for instance {InstanceId}", Instance.Id);
-            DeleteErrorMessage = "Failed to delete instance files. You can retry.";
-        }
+        await DeleteInstanceAsync(true, "Failed to force-delete instance {InstanceId}", true);
     }
+
+    [RelayCommand]
+    private async Task RetryDeleteAsync() =>
+        await DeleteInstanceAsync(false, "Failed to retry delete for instance {InstanceId}", false);
+
+    [RelayCommand]
+    private async Task RetryForceDeleteAsync() =>
+        await DeleteInstanceAsync(true, "Failed to retry force-delete for instance {InstanceId}",
+            false);
 
     [RelayCommand(CanExecute = nameof(CanClickPlay))]
     private async Task OnClickPlay()
@@ -469,6 +471,29 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
         }
 
         return RunningState == MinecraftLauncher.RunningState.Stopped;
+    }
+
+    private async Task DeleteInstanceAsync(bool force, string errorLogTemplate, bool hideConfirmationOnFailure)
+    {
+        if (_minecraftLauncher is null)
+        {
+            return;
+        }
+
+        try
+        {
+            DeleteErrorMessage = "";
+            await _minecraftLauncher.DeleteInstanceAsync(Instance.Id, force);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, errorLogTemplate, Instance.Id);
+            DeleteErrorMessage = "Failed to delete instance files. You can retry.";
+            if (hideConfirmationOnFailure)
+            {
+                IsDeleteConfirmationVisible = false;
+            }
+        }
     }
 
     private async Task EnsureModsLoadedAsync()
@@ -670,7 +695,8 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
     private IReadOnlyDictionary<string, LatestCompatibleVersionInfo> GetLatestCompatibleVersionsLookup() =>
         _projectCompatibilityStatuses.Values
             .Where(status => status.LatestVersion is not null)
-            .ToDictionary(status => status.ProjectId, status => status.LatestVersion!, StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(status => status.ProjectId, status => status.LatestVersion!,
+                StringComparer.OrdinalIgnoreCase);
 
     private static string? BuildUpdateStatusText(
         ProjectCompatibilityStatus status,

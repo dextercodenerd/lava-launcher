@@ -30,7 +30,7 @@ public class LauncherRepository
         {
             DataSource = dbPath,
             Mode = SqliteOpenMode.ReadWriteCreate,
-            Cache = SqliteCacheMode.Shared,
+            Cache = SqliteCacheMode.Private, // shared cache is obsolete and replaced by WAL
             ForeignKeys = true,
             Pooling = true,
         };
