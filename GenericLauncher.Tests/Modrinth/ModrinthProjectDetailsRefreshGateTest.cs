@@ -2,6 +2,7 @@ using System;
 using System.Net;
 using System.Net.Http;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 using GenericLauncher.Database.Model;
 using GenericLauncher.InstanceMods;
@@ -12,6 +13,7 @@ using Xunit;
 
 namespace GenericLauncher.Tests.Modrinth;
 
+[Collection("AvaloniaDispatcher")]
 public sealed class ModrinthProjectDetailsRefreshGateTest
 {
     [Fact]
@@ -115,8 +117,8 @@ public sealed class ModrinthProjectDetailsRefreshGateTest
             switch (request.RequestUri?.AbsolutePath)
             {
                 case "/v2/project/alpha/version":
-                    versionRequestCount++;
-                    if (versionRequestCount == 1)
+                    var requestOrdinal = Interlocked.Increment(ref versionRequestCount);
+                    if (requestOrdinal == 1)
                     {
                         initialRefreshEntered.TrySetResult();
                         await releaseFirstRequest.Task.WaitAsync(token);
@@ -126,7 +128,7 @@ public sealed class ModrinthProjectDetailsRefreshGateTest
                             ModrinthJsonContext.Default.ModrinthVersionArray);
                     }
 
-                    if (versionRequestCount == 2)
+                    if (requestOrdinal == 2)
                     {
                         updateResolutionEntered.TrySetResult();
                         return RefreshGateTestSupport.JsonResponse(
@@ -134,7 +136,7 @@ public sealed class ModrinthProjectDetailsRefreshGateTest
                             ModrinthJsonContext.Default.ModrinthVersionArray);
                     }
 
-                    if (versionRequestCount == 3)
+                    if (requestOrdinal == 3)
                     {
                         eventRefreshEntered.TrySetResult();
                         return RefreshGateTestSupport.JsonResponse(
@@ -245,8 +247,8 @@ public sealed class ModrinthProjectDetailsRefreshGateTest
             switch (request.RequestUri?.AbsolutePath)
             {
                 case "/v2/project/alpha/version":
-                    versionRequestCount++;
-                    if (versionRequestCount == 1)
+                    var requestOrdinal = Interlocked.Increment(ref versionRequestCount);
+                    if (requestOrdinal == 1)
                     {
                         initialRefreshEntered.TrySetResult();
                         await releaseFirstRequest.Task.WaitAsync(token);
@@ -256,7 +258,7 @@ public sealed class ModrinthProjectDetailsRefreshGateTest
                             ModrinthJsonContext.Default.ModrinthVersionArray);
                     }
 
-                    if (versionRequestCount == 2)
+                    if (requestOrdinal == 2)
                     {
                         updateResolutionEntered.TrySetResult();
                         return RefreshGateTestSupport.JsonResponse(
@@ -264,7 +266,7 @@ public sealed class ModrinthProjectDetailsRefreshGateTest
                             ModrinthJsonContext.Default.ModrinthVersionArray);
                     }
 
-                    if (versionRequestCount == 3)
+                    if (requestOrdinal == 3)
                     {
                         eventRefreshEntered.TrySetResult();
                         return RefreshGateTestSupport.JsonResponse(

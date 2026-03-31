@@ -2,6 +2,7 @@ using System;
 using System.Net;
 using System.Net.Http;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 using GenericLauncher.Database.Model;
 using GenericLauncher.InstanceMods;
@@ -11,6 +12,10 @@ using Xunit;
 
 namespace GenericLauncher.Tests.Modrinth;
 
+[CollectionDefinition("AvaloniaDispatcher", DisableParallelization = true)]
+public sealed class AvaloniaDispatcherCollection;
+
+[Collection("AvaloniaDispatcher")]
 public sealed class InstanceDetailsRefreshGateTest
 {
     [Fact]
@@ -58,7 +63,11 @@ public sealed class InstanceDetailsRefreshGateTest
 
         releaseFirstRequest.TrySetResult();
         await loadTask;
-        await RefreshGateTestSupport.DrainUiAsync();
+        await RefreshGateTestSupport.WaitUntilAsync(
+            () => viewModel.InstalledMods.Count == 0
+                  && viewModel.RequiredDependencies.Count == 0
+                  && !viewModel.CanUpdateAll,
+            cancellationToken);
 
         Assert.Empty(viewModel.InstalledMods);
         Assert.Empty(viewModel.RequiredDependencies);
@@ -96,8 +105,8 @@ public sealed class InstanceDetailsRefreshGateTest
                 throw new InvalidOperationException($"Unexpected request: {request.RequestUri}");
             }
 
-            requestCount++;
-            if (requestCount == 1)
+            var requestOrdinal = Interlocked.Increment(ref requestCount);
+            if (requestOrdinal == 1)
             {
                 firstRequestEntered.TrySetResult();
                 await releaseFirstRequest.Task.WaitAsync(token);
@@ -121,7 +130,7 @@ public sealed class InstanceDetailsRefreshGateTest
         var secondLoadTask = RefreshGateTestSupport.InvokeNonPublicTaskAsync(viewModel, "LoadModsStateAsync", true);
         await secondRequestEntered.Task.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
         await secondLoadTask;
-        await RefreshGateTestSupport.DrainUiAsync();
+        await WaitForInstalledModAsync(viewModel, "1.2.0", cancellationToken);
 
         var currentItem = Assert.Single(viewModel.InstalledMods);
         Assert.True(currentItem.HasUpdate);
@@ -130,7 +139,7 @@ public sealed class InstanceDetailsRefreshGateTest
         releaseFirstRequest.TrySetResult();
         await firstRequestReturned.Task.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
         await firstLoadTask;
-        await RefreshGateTestSupport.DrainUiAsync();
+        await WaitForInstalledModAsync(viewModel, "1.2.0", cancellationToken);
 
         currentItem = Assert.Single(viewModel.InstalledMods);
         Assert.True(currentItem.HasUpdate);
@@ -167,8 +176,8 @@ public sealed class InstanceDetailsRefreshGateTest
                 throw new InvalidOperationException($"Unexpected request: {request.RequestUri}");
             }
 
-            requestCount++;
-            if (requestCount == 1)
+            var requestOrdinal = Interlocked.Increment(ref requestCount);
+            if (requestOrdinal == 1)
             {
                 firstRequestEntered.TrySetResult();
                 await releaseFirstRequest.Task.WaitAsync(token);
@@ -192,7 +201,7 @@ public sealed class InstanceDetailsRefreshGateTest
         var secondLoadTask = RefreshGateTestSupport.InvokeNonPublicTaskAsync(viewModel, "LoadModsStateAsync", true);
         await secondRequestEntered.Task.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
         await secondLoadTask;
-        await RefreshGateTestSupport.DrainUiAsync();
+        await WaitForInstalledModAsync(viewModel, "1.2.0", cancellationToken);
 
         var currentItem = Assert.Single(viewModel.InstalledMods);
         Assert.True(currentItem.HasUpdate);
@@ -201,7 +210,7 @@ public sealed class InstanceDetailsRefreshGateTest
         releaseFirstRequest.TrySetResult();
         await firstRequestReturned.Task.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
         await firstLoadTask;
-        await RefreshGateTestSupport.DrainUiAsync();
+        await WaitForInstalledModAsync(viewModel, "1.2.0", cancellationToken);
 
         currentItem = Assert.Single(viewModel.InstalledMods);
         Assert.True(currentItem.HasUpdate);
@@ -321,5 +330,21 @@ public sealed class InstanceDetailsRefreshGateTest
         cache.GetType()
             .GetProperty("Item")!
             .SetValue(cache, updatedEntry, [cacheKey]);
+    }
+
+    private static async Task WaitForInstalledModAsync(
+        InstanceDetailsViewModel viewModel,
+        string latestVersionNumber,
+        CancellationToken cancellationToken)
+    {
+        await RefreshGateTestSupport.WaitUntilAsync(
+            () => viewModel.InstalledMods.Count == 1
+                  && string.Equals(viewModel.InstalledMods[0].ProjectId, "alpha", StringComparison.Ordinal)
+                  && viewModel.InstalledMods[0].HasUpdate
+                  && string.Equals(
+                      viewModel.InstalledMods[0].LatestVersionNumber,
+                      latestVersionNumber,
+                      StringComparison.Ordinal),
+            cancellationToken);
     }
 }

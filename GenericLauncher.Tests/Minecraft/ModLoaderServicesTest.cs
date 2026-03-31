@@ -30,6 +30,7 @@ using Xunit;
 namespace GenericLauncher.Tests.Minecraft;
 
 [TestSubject(typeof(IModLoaderService))]
+[Collection("AvaloniaDispatcher")]
 public class ModLoaderServicesTest
 {
     [Fact]
@@ -48,7 +49,7 @@ public class ModLoaderServicesTest
                 """),
             ["https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json"] = StringContent("""
                 {"promos":{"1.21.10-recommended":"60.1.8","1.21.10-latest":"60.1.7"}}
-                """)
+                """),
         });
         var service = new ForgeModLoaderService(
             Path.Combine(root, "forge"),
@@ -75,7 +76,7 @@ public class ModLoaderServicesTest
                     <version>21.4.120</version>
                     <version>21.4.150</version>
                 </versions></versioning></metadata>
-                """)
+                """),
         });
         var service = new NeoForgeModLoaderService(
             Path.Combine(root, "neoforge"),
@@ -158,7 +159,7 @@ public class ModLoaderServicesTest
                 """),
             ["https://maven.minecraftforge.net/net/minecraftforge/forge/1.21.10-60.1.8/forge-1.21.10-60.1.8-installer.jar"] =
                 BinaryContent(installerBytes),
-            ["https://example.test/forge-universal.jar"] = BinaryContent(universalBytes)
+            ["https://example.test/forge-universal.jar"] = BinaryContent(universalBytes),
         });
 
         var service = new ForgeModLoaderService(
@@ -263,7 +264,7 @@ public class ModLoaderServicesTest
                 """),
             ["https://maven.neoforged.net/releases/net/neoforged/neoforge/21.4.150/neoforge-21.4.150-installer.jar"] =
                 BinaryContent(installerBytes),
-            ["https://example.test/neoforge-universal.jar"] = BinaryContent(universalBytes)
+            ["https://example.test/neoforge-universal.jar"] = BinaryContent(universalBytes),
         });
 
         var service = new NeoForgeModLoaderService(
@@ -322,7 +323,7 @@ public class ModLoaderServicesTest
                 new ForgeInstallProcessor(["client"], "net.minecraftforge:ForgeAutoRenamingTool:1.0.6", [],
                     ["--input", "{MINECRAFT_JAR}"], null),
                 new ForgeInstallProcessor(null, "net.minecraftforge:binarypatcher:1.2.0", [], ["--clean", "{MC_OFF}"],
-                    null)
+                    null),
             ],
             []);
 
@@ -332,7 +333,7 @@ public class ModLoaderServicesTest
             [
                 ForgeModLoaderService.ForgeClientProcessorKind.DownloadMojmaps,
                 ForgeModLoaderService.ForgeClientProcessorKind.ClientAutoRename,
-                ForgeModLoaderService.ForgeClientProcessorKind.BinaryPatch
+                ForgeModLoaderService.ForgeClientProcessorKind.BinaryPatch,
             ],
             plans.Select(p => p.Kind));
     }
@@ -371,7 +372,7 @@ public class ModLoaderServicesTest
                 new NeoForgeInstallProcessor(null, "net.neoforged.installertools:installertools:4.0.6:fatjar", [],
                     ["--task", "DOWNLOAD_MOJMAPS"], null),
                 new NeoForgeInstallProcessor(null, "net.neoforged.installertools:installertools:4.0.6:fatjar", [],
-                    ["--task", "PROCESS_MINECRAFT_JAR"], null)
+                    ["--task", "PROCESS_MINECRAFT_JAR"], null),
             ],
             []);
 
@@ -380,7 +381,7 @@ public class ModLoaderServicesTest
         Assert.Equal(
             [
                 NeoForgeModLoaderService.NeoForgeClientProcessorKind.DownloadMojmaps,
-                NeoForgeModLoaderService.NeoForgeClientProcessorKind.ProcessMinecraftJar
+                NeoForgeModLoaderService.NeoForgeClientProcessorKind.ProcessMinecraftJar,
             ],
             plans.Select(p => p.Kind));
     }
@@ -422,7 +423,7 @@ public class ModLoaderServicesTest
             installerPath,
             CreateInstallerJar("{}", "{}", new Dictionary<string, byte[]>
             {
-                ["data/client.lzma"] = Encoding.UTF8.GetBytes("patch-data")
+                ["data/client.lzma"] = Encoding.UTF8.GetBytes("patch-data"),
             }));
 
         var installProfile = new ForgeInstallProfile(
@@ -437,7 +438,7 @@ public class ModLoaderServicesTest
             {
                 ["MC_OFF"] = new("[net.minecraft:client:1.21.11:official]", null),
                 ["PATCHED"] = new("[net.minecraftforge:forge:1.21.11-61.1.4:client]", null),
-                ["BINPATCH"] = new("/data/client.lzma", null)
+                ["BINPATCH"] = new("/data/client.lzma", null),
             },
             [],
             []);
@@ -510,7 +511,7 @@ public class ModLoaderServicesTest
             installerPath,
             CreateInstallerJar("{}", "{}", new Dictionary<string, byte[]>
             {
-                ["data/client.lzma"] = Encoding.UTF8.GetBytes("patch-data")
+                ["data/client.lzma"] = Encoding.UTF8.GetBytes("patch-data"),
             }));
 
         var installProfile = new NeoForgeInstallProfile(
@@ -525,7 +526,7 @@ public class ModLoaderServicesTest
             {
                 ["MOJMAPS"] = new("[net.minecraft:client:1.21.11:mappings@txt]", null),
                 ["PATCHED"] = new("[net.neoforged:minecraft-client-patched:21.11.38-beta]", null),
-                ["BINPATCH"] = new("/data/client.lzma", null)
+                ["BINPATCH"] = new("/data/client.lzma", null),
             },
             [],
             []);
@@ -542,7 +543,7 @@ public class ModLoaderServicesTest
                     "--output", "{PATCHED}",
                     "--extract-libraries-to", "{ROOT}/libraries/",
                     "--neoform-data", "[net.neoforged:neoform:1.21.11-20251209.172050:mappings@tsrg.lzma]",
-                    "--apply-patches", "{BINPATCH}"
+                    "--apply-patches", "{BINPATCH}",
                 ],
                 null));
 
@@ -744,7 +745,7 @@ public class ModLoaderServicesTest
             installerPath,
             CreateInstallerJar("{}", "{}", new Dictionary<string, byte[]>
             {
-                ["data/client.lzma"] = Encoding.UTF8.GetBytes("patch-data")
+                ["data/client.lzma"] = Encoding.UTF8.GetBytes("patch-data"),
             }),
             cancellationToken);
 
@@ -798,8 +799,8 @@ public class ModLoaderServicesTest
                 {
                     "1.21.10" => ImmutableList.Create(new ModLoaderVersionInfo("60.1.8", "RECOMMENDED")),
                     "1.21.4" => ImmutableList.Create(new ModLoaderVersionInfo("21.4.150", "LATEST")),
-                    _ => ImmutableList<ModLoaderVersionInfo>.Empty
-                })
+                    _ => ImmutableList<ModLoaderVersionInfo>.Empty,
+                }),
         };
 
         var vm = new NewInstanceDialogViewModel(fakeLauncher, null);
@@ -822,7 +823,7 @@ public class ModLoaderServicesTest
         {
             AvailableVersionsValue = [version],
             AvailableModLoadersValue = [MinecraftInstanceModLoader.NeoForge],
-            LoaderVersions = (_, _) => Task.FromResult(ImmutableList<ModLoaderVersionInfo>.Empty)
+            LoaderVersions = (_, _) => Task.FromResult(ImmutableList<ModLoaderVersionInfo>.Empty),
         };
 
         var vm = new NewInstanceDialogViewModel(fakeLauncher, null);
@@ -833,15 +834,13 @@ public class ModLoaderServicesTest
         Assert.Contains("No compatible loader versions", vm.ModLoaderVersionStatusText, StringComparison.Ordinal);
     }
 
-    private static LauncherPlatform CreatePlatform(string os, string architecture, Version? version = null)
-    {
-        return new LauncherPlatform(os,
+    private static LauncherPlatform CreatePlatform(string os, string architecture, Version? version = null) =>
+        new(os,
             architecture,
             version ?? new Version(14, 0),
             AppConfig.MacBundleIdentifier,
             Path.Combine(Path.GetTempPath(), "lavalancher-tests", os, architecture),
             Path.Combine(Path.GetTempPath(), "lavalancher-tests", os, architecture));
-    }
 
     private static string CreateTempRoot()
     {
@@ -850,15 +849,10 @@ public class ModLoaderServicesTest
         return root;
     }
 
-    private static HttpClient CreateHttpClient(Dictionary<string, HttpContent> responses)
-    {
-        return new HttpClient(new FakeHttpMessageHandler(responses));
-    }
+    private static HttpClient CreateHttpClient(Dictionary<string, HttpContent> responses) =>
+        new(new FakeHttpMessageHandler(responses));
 
-    private static StringContent StringContent(string value)
-    {
-        return new StringContent(value, Encoding.UTF8, "application/json");
-    }
+    private static StringContent StringContent(string value) => new(value, Encoding.UTF8, "application/json");
 
     private static ByteArrayContent BinaryContent(byte[] bytes)
     {
@@ -867,10 +861,7 @@ public class ModLoaderServicesTest
         return content;
     }
 
-    private static string ComputeSha1(byte[] bytes)
-    {
-        return Convert.ToHexString(SHA1.HashData(bytes)).ToLowerInvariant();
-    }
+    private static string ComputeSha1(byte[] bytes) => Convert.ToHexString(SHA1.HashData(bytes)).ToLowerInvariant();
 
     private static byte[] CreateInstallerJar(
         string installProfileJson,
@@ -893,12 +884,14 @@ public class ModLoaderServicesTest
             }
 
             if (extraEntries is not null)
+            {
                 foreach (var extraEntry in extraEntries)
                 {
                     var entry = archive.CreateEntry(extraEntry.Key);
                     using var entryStream = entry.Open();
                     entryStream.Write(extraEntry.Value);
                 }
+            }
         }
 
         return stream.ToArray();
@@ -970,15 +963,17 @@ public class ModLoaderServicesTest
         {
             var url = request.RequestUri?.ToString() ?? "";
             if (!responses.TryGetValue(url, out var content))
+            {
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)
                 {
-                    RequestMessage = request
+                    RequestMessage = request,
                 });
+            }
 
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = Clone(content),
-                RequestMessage = request
+                RequestMessage = request,
             });
         }
 
@@ -987,7 +982,9 @@ public class ModLoaderServicesTest
             var bytes = content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
             var clone = new ByteArrayContent(bytes);
             if (content.Headers.ContentType is not null)
+            {
                 clone.Headers.ContentType = new MediaTypeHeaderValue(content.Headers.ContentType.MediaType!);
+            }
 
             return clone;
         }
@@ -1012,20 +1009,16 @@ public class ModLoaderServicesTest
         public Task<ImmutableList<ModLoaderVersionInfo>> GetLoaderVersionsAsync(
             MinecraftInstanceModLoader modLoader,
             string minecraftVersionId,
-            bool reload)
-        {
-            return LoaderVersions(modLoader, minecraftVersionId);
-        }
+            bool reload) =>
+            LoaderVersions(modLoader, minecraftVersionId);
 
         public Task CreateInstance(
             VersionInfo version,
             string instanceId,
             MinecraftInstanceModLoader modLoader,
             string? preferredModLoaderVersion,
-            IProgress<ThreadSafeInstallProgressReporter.InstallProgress> progress)
-        {
-            return Task.CompletedTask;
-        }
+            IProgress<ThreadSafeInstallProgressReporter.InstallProgress> progress) =>
+            Task.CompletedTask;
 
         public void RaiseVersionsChanged()
         {

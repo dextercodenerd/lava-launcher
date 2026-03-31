@@ -224,16 +224,16 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
         }
 
         var generation = BeginModsRefresh();
-        Dispatcher.UIThread.Post(() =>
-        {
-            if (!IsCurrentModsRefresh(generation))
+        _ = ApplyCurrentModsRefreshUiAsync(generation, () => ApplyModsSnapshot(e.Snapshot))
+            .ContinueWith(t =>
             {
-                return;
-            }
+                if (t.IsFaulted)
+                {
+                    _logger?.LogError(t.Exception, "Problem applying mods versions snapshot");
+                }
 
-            ApplyModsSnapshot(e.Snapshot);
-        });
-        _ = RefreshUpdateStatusesAsync(e.Snapshot, false, generation);
+                return RefreshUpdateStatusesAsync(e.Snapshot, false, generation);
+            });
     }
 
     partial void OnProgressChanged(ThreadSafeInstallProgressReporter.InstallProgress? value)
@@ -517,49 +517,28 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
 
         try
         {
-            IsModsLoading = true;
-            ModsErrorMessage = "";
+            await ApplyCurrentModsRefreshUiAsync(generation, () =>
+            {
+                IsModsLoading = true;
+                ModsErrorMessage = "";
+            });
             var snapshot = await _instanceModsManager.GetSnapshotAsync(Instance, forceRefresh);
             if (!IsCurrentModsRefresh(generation))
             {
                 return;
             }
 
-            Dispatcher.UIThread.Post(() =>
-            {
-                if (!IsCurrentModsRefresh(generation))
-                {
-                    return;
-                }
-
-                ApplyModsSnapshot(snapshot);
-            });
+            await ApplyCurrentModsRefreshUiAsync(generation, () => ApplyModsSnapshot(snapshot));
             await RefreshUpdateStatusesAsync(snapshot, forceRefresh, generation);
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Failed to load mods for {InstanceId}", Instance.Id);
-            Dispatcher.UIThread.Post(() =>
-            {
-                if (!IsCurrentModsRefresh(generation))
-                {
-                    return;
-                }
-
-                ModsErrorMessage = "Failed to load mods.";
-            });
+            await ApplyCurrentModsRefreshUiAsync(generation, () => ModsErrorMessage = "Failed to load mods.");
         }
         finally
         {
-            Dispatcher.UIThread.Post(() =>
-            {
-                if (!IsCurrentModsRefresh(generation))
-                {
-                    return;
-                }
-
-                IsModsLoading = false;
-            });
+            await ApplyCurrentModsRefreshUiAsync(generation, () => IsModsLoading = false);
         }
     }
 
@@ -612,9 +591,6 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
         return await _instanceModsManager.GetLatestCompatibleVersionsAsync(Instance, directProjectIds, forceRefresh);
     }
 
-    private async Task RefreshUpdateStatusesAsync(InstanceModsSnapshot snapshot, bool forceRefresh)
-        => await RefreshUpdateStatusesAsync(snapshot, forceRefresh, Volatile.Read(ref _modsRefreshGeneration));
-
     private async Task RefreshUpdateStatusesAsync(
         InstanceModsSnapshot snapshot,
         bool forceRefresh,
@@ -623,20 +599,7 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
         try
         {
             var result = await GetLatestCompatibleVersionsAsync(snapshot, forceRefresh);
-            if (!IsCurrentModsRefresh(generation))
-            {
-                return;
-            }
-
-            Dispatcher.UIThread.Post(() =>
-            {
-                if (!IsCurrentModsRefresh(generation))
-                {
-                    return;
-                }
-
-                ApplyLatestCompatibleVersions(result);
-            });
+            await ApplyCurrentModsRefreshUiAsync(generation, () => ApplyLatestCompatibleVersions(result));
         }
         catch (Exception ex)
         {
@@ -651,6 +614,29 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
 
     private bool IsCurrentModsRefresh(int generation) =>
         generation == Volatile.Read(ref _modsRefreshGeneration);
+
+    private async Task ApplyCurrentModsRefreshUiAsync(int generation, Action apply)
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            if (IsCurrentModsRefresh(generation))
+            {
+                apply();
+            }
+
+            return;
+        }
+
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            if (!IsCurrentModsRefresh(generation))
+            {
+                return;
+            }
+
+            apply();
+        });
+    }
 
     private InstanceModListItem ApplyLatestCompatibleVersion(InstanceModListItem item)
     {
