@@ -105,6 +105,12 @@ public class LauncherRepository
         await _db.SetMinecraftInstanceStateAsync(instanceId, state);
     }
 
+    public async Task SetMinecraftInstanceClassPathAsync(string instanceId, List<string> classPath)
+    {
+        await _initTask;
+        await _db.SetMinecraftInstanceClassPathAsync(instanceId, classPath);
+    }
+
     public async Task<bool> RemoveMinecraftInstanceAsync(string instanceId)
     {
         await _initTask;

@@ -333,7 +333,7 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
     [RelayCommand]
     private async Task UpdateModItemAsync(InstanceModListItem item)
     {
-        if (_instanceModsManager is null || !item.CanUpdate || string.IsNullOrWhiteSpace(item.ProjectId))
+        if (_instanceModsManager is null || !item.CanUpdate || !item.HasUpdate || string.IsNullOrWhiteSpace(item.ProjectId))
         {
             return;
         }

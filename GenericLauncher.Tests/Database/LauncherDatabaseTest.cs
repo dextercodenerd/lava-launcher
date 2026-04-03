@@ -74,6 +74,25 @@ public sealed class LauncherDatabaseTest
         Assert.False(deleted);
     }
 
+    [Fact]
+    public async Task SetMinecraftInstanceClassPathAsync_UpdatesOnlyClassPath()
+    {
+        await using var db = await CreateDatabaseAsync();
+        await db.InsertMinecraftInstanceAsync(CreateInstance("instance-1"));
+
+        var repairedClassPath = new[]
+        {
+            "/tmp/mc/modloaders/fabric/libraries/org/ow2/asm/asm/9.9/asm-9.9.jar",
+        }.ToList();
+
+        await db.SetMinecraftInstanceClassPathAsync("instance-1", repairedClassPath);
+
+        var stored = (await db.GetAllMinecraftInstancesAsync()).Single();
+        Assert.Equal(repairedClassPath, stored.ClassPath);
+        Assert.Equal("client.jar", stored.ClientJarPath);
+        Assert.Equal("net.minecraft.client.main.Main", stored.MainClass);
+    }
+
     private static async Task<LauncherDatabase> CreateDatabaseAsync()
     {
         var conn = new SqliteConnection("Data Source=:memory:");

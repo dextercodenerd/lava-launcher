@@ -38,6 +38,14 @@ The launcher uses a two-level native-libraries model:
 
 This keeps instance cleanup simple while avoiding repeated download and extraction of the same vanilla native archives for each instance.
 
+## Classpath Precedence
+
+Classpath merging is loader-agnostic and uses logical Maven-style artifact identity instead of absolute file paths.
+
+- When vanilla and a mod loader provide the same logical artifact, the mod-loader jar wins.
+- Logical identity ignores version, but keeps classifier and extension, so `artifact.jar` and `artifact-natives-linux.jar` remain distinct.
+- If a classpath entry cannot be mapped confidently to a Maven-style library under a `libraries/` root, the launcher falls back to full-path deduping for that entry.
+
 ## Fabric
 
 Fabric is applied as an overlay on top of a vanilla Minecraft version:

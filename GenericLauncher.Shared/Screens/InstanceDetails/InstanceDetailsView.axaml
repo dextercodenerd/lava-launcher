@@ -155,7 +155,7 @@
                                                         </StackPanel>
                                                         <StackPanel Grid.Column="1" Spacing="8">
                                                             <Button Content="Update"
-                                                                    IsVisible="{Binding CanUpdate}"
+                                                                    IsVisible="{Binding HasUpdate}"
                                                                     Command="{Binding $parent[ItemsControl].((instanceDetails:InstanceDetailsViewModel)DataContext).UpdateModItemCommand}"
                                                                     CommandParameter="{Binding}" />
                                                             <Button Content="Delete"

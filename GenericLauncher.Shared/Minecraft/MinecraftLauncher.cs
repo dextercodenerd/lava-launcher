@@ -581,6 +581,8 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
         MinecraftInstance instance,
         Func<Task<Account>> accountProvider)
     {
+        instance = await NormalizePersistedClassPathAsync(instance, _repository.SetMinecraftInstanceClassPathAsync);
+
         if (!LaunchedInstances.TryAdd(instance.Id, RunningState.Authenticating))
         {
             throw new InvalidOperationException($"Instance {instance.Id} is already running or launching.");
@@ -797,6 +799,20 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
         throw new InvalidOperationException($"No mod loader service configured for {modLoader}");
     }
 
+    internal static async Task<MinecraftInstance> NormalizePersistedClassPathAsync(
+        MinecraftInstance instance,
+        Func<string, List<string>, Task> persistClassPathAsync)
+    {
+        var normalizedClassPath = MinecraftClassPath.Normalize(instance.ClassPath);
+        if (normalizedClassPath.SequenceEqual(instance.ClassPath))
+        {
+            return instance;
+        }
+
+        await persistClassPathAsync(instance.Id, normalizedClassPath);
+        return instance with { ClassPath = normalizedClassPath };
+    }
+
     private static MinecraftVersionManager.Version ApplyModLoaderToVersion(
         MinecraftVersionManager.Version minecraft,
         ResolvedModLoaderVersion modLoader)
@@ -809,10 +825,8 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
             return minecraft;
         }
 
-        var classPath = minecraft.ClassPath
-            .Concat(modLoader.Libraries.Select(l => l.FilePath))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        var classPath = MinecraftClassPath.MergeVanillaAndModLoaderLibraries(minecraft.ClassPath,
+            modLoader.Libraries);
 
         var gameArgs = minecraft.GameArguments
             .Concat(modLoader.ExtraGameArguments)

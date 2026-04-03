@@ -145,6 +145,18 @@ public sealed class LauncherDatabase
             }));
     }
 
+    public Task SetMinecraftInstanceClassPathAsync(string instanceId, List<string> classPath)
+    {
+        return _rwLock.ExecuteWriteAsync(() => _conn.ExecuteAsync(
+            $"UPDATE {MinecraftInstance.Table} SET ClassPath = @ClassPath WHERE Id = @Id",
+            (instanceId, classPath),
+            static (cmd, args) =>
+            {
+                cmd.Parameters.AddWithValue("@Id", args.instanceId);
+                cmd.AddParam("@ClassPath", args.classPath, SqliteConnectionExtensions.DefaultHandlers, System.Data.DbType.String);
+            }));
+    }
+
     public async Task<bool> DeleteMinecraftInstanceAsync(string instanceId)
     {
         var count = await _rwLock.ExecuteWriteAsync(() =>

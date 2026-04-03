@@ -2,6 +2,7 @@ using System;
 using System.Net;
 using System.Net.Http;
 using System.Reflection;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using GenericLauncher.Database.Model;
@@ -255,6 +256,58 @@ public sealed class InstanceDetailsRefreshGateTest
         Assert.Equal("Update available: 1.1.0", alpha.UpdateStatusText);
         Assert.False(bravo.HasUpdate);
         Assert.Equal("Status unavailable.", bravo.UpdateStatusText);
+        Assert.True(viewModel.CanUpdateAll);
+    }
+
+    [Fact]
+    public async Task LoadModsStateAsync_OnlyOutdatedDirectModsExposeUpdateState()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var fixture = await RefreshGateTestSupport.CreateFixtureAsync();
+        await RefreshGateTestSupport.WriteManagedModsAsync(
+            fixture,
+            RefreshGateTestSupport.CreateManagedMod("alpha", "Alpha", "alpha-1", "1.0.0", "alpha.jar", "Direct", [],
+                [1, 2, 3]),
+            RefreshGateTestSupport.CreateManagedMod("bravo", "Bravo", "bravo-1", "1.0.0", "bravo.jar", "Direct", [],
+                [4, 5, 6]));
+
+        using var handler = new RefreshGateTestSupport.RoutingHttpMessageHandler((request, _) =>
+        {
+            return request.RequestUri?.AbsolutePath switch
+            {
+                "/v2/project/alpha/version" => Task.FromResult(
+                    RefreshGateTestSupport.JsonResponse(
+                        [RefreshGateTestSupport.CreateVersion("alpha-2", "alpha", "1.1.0", "alpha-2.jar", [7, 8, 9])],
+                        ModrinthJsonContext.Default.ModrinthVersionArray)),
+                "/v2/project/bravo/version" => Task.FromResult(
+                    RefreshGateTestSupport.JsonResponse(
+                        [RefreshGateTestSupport.CreateVersion("bravo-1", "bravo", "1.0.0", "bravo.jar", [4, 5, 6])],
+                        ModrinthJsonContext.Default.ModrinthVersionArray)),
+                _ => throw new InvalidOperationException($"Unexpected request: {request.RequestUri}"),
+            };
+        });
+        var manager = RefreshGateTestSupport.CreateManager(fixture.RootPath, handler);
+        var viewModel = new InstanceDetailsViewModel(fixture.Instance, null, null, manager, null, null, null);
+
+        await RefreshGateTestSupport.InvokeNonPublicTaskAsync(viewModel, "LoadModsStateAsync", false);
+        await RefreshGateTestSupport.DrainUiAsync();
+        await RefreshGateTestSupport.WaitUntilAsync(
+            () => viewModel.InstalledMods.Count == 2
+                  && viewModel.InstalledMods.Any(item => item.ProjectId == "alpha" && item.HasUpdate)
+                  && viewModel.InstalledMods.Any(item => item.ProjectId == "bravo" && !item.HasUpdate),
+            cancellationToken);
+
+        var alpha = Assert.Single(viewModel.InstalledMods, item => item.ProjectId == "alpha");
+        var bravo = Assert.Single(viewModel.InstalledMods, item => item.ProjectId == "bravo");
+
+        Assert.True(alpha.CanUpdate);
+        Assert.True(alpha.HasUpdate);
+        Assert.Equal("1.1.0", alpha.LatestVersionNumber);
+
+        Assert.True(bravo.CanUpdate);
+        Assert.False(bravo.HasUpdate);
+        Assert.Null(bravo.LatestVersionNumber);
+
         Assert.True(viewModel.CanUpdateAll);
     }
 
