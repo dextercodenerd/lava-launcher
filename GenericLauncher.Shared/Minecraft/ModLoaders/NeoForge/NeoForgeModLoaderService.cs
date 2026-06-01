@@ -656,12 +656,30 @@ public sealed partial class NeoForgeModLoaderService : IModLoaderService
 
     private static string? NormalizeMinecraftVersionPrefix(string minecraftVersionId)
     {
-        if (!minecraftVersionId.StartsWith("1.", StringComparison.Ordinal))
+        // Legacy 1.x.y Minecraft versions
+        if (minecraftVersionId.StartsWith("1.", StringComparison.Ordinal))
+        {
+            return minecraftVersionId[2..];
+        }
+
+        // Modern year-base Minecraft versions e.g., 26.1, 26.1.2 -- started with 26 for 2026 versions
+        var parts = minecraftVersionId.Split('.');
+        if (parts.Length is < 2 or > 3)
         {
             return null;
         }
 
-        return minecraftVersionId[2..];
+        if (!int.TryParse(parts[0], out var major)
+            || major < 26
+            || !int.TryParse(parts[1], out _)
+            || (parts.Length == 3 && !int.TryParse(parts[2], out _)))
+        {
+            return null;
+        }
+
+        return parts.Length == 2
+            ? $"{parts[0]}.{parts[1]}.0"
+            : minecraftVersionId;
     }
 
     [GeneratedRegex(@"\{([A-Z0-9_]+)\}")]

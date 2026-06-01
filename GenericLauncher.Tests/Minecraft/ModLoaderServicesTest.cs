@@ -90,6 +90,60 @@ public class ModLoaderServicesTest
     }
 
     [Fact]
+    public async Task NeoForge_GetLoaderVersionsAsync_MapsModernMinecraftVersionToHotfixZeroPrefix()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = CreateTempRoot();
+        using var httpClient = CreateHttpClient(new Dictionary<string, HttpContent>
+        {
+            ["https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml"] = StringContent("""
+                <metadata><versioning><versions>
+                    <version>26.1.0.1-beta</version>
+                    <version>26.1.0.19-beta</version>
+                    <version>26.1.1.0-beta</version>
+                    <version>26.1.2.68-beta</version>
+                </versions></versioning></metadata>
+                """),
+        });
+        var service = new NeoForgeModLoaderService(
+            Path.Combine(root, "neoforge"),
+            Path.Combine(root, "neoforge", "libraries"),
+            httpClient,
+            new FileDownloader(httpClient));
+
+        var versions = await service.GetLoaderVersionsAsync("26.1", true, cancellationToken);
+
+        Assert.Equal(["26.1.0.19-beta", "26.1.0.1-beta"], versions.Select(v => v.VersionId));
+    }
+
+    [Fact]
+    public async Task NeoForge_GetLoaderVersionsAsync_FiltersModernMinecraftHotfixVersions()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = CreateTempRoot();
+        using var httpClient = CreateHttpClient(new Dictionary<string, HttpContent>
+        {
+            ["https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml"] = StringContent("""
+                <metadata><versioning><versions>
+                    <version>26.1.0.19-beta</version>
+                    <version>26.1.1.0-beta</version>
+                    <version>26.1.2.67-beta</version>
+                    <version>26.1.2.68-beta</version>
+                </versions></versioning></metadata>
+                """),
+        });
+        var service = new NeoForgeModLoaderService(
+            Path.Combine(root, "neoforge"),
+            Path.Combine(root, "neoforge", "libraries"),
+            httpClient,
+            new FileDownloader(httpClient));
+
+        var versions = await service.GetLoaderVersionsAsync("26.1.2", true, cancellationToken);
+
+        Assert.Equal(["26.1.2.68-beta", "26.1.2.67-beta"], versions.Select(v => v.VersionId));
+    }
+
+    [Fact]
     public async Task Forge_ResolveAsync_ParsesInstallerProfileAndMarksGeneratedLibraries()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

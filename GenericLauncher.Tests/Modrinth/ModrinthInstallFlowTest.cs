@@ -1,6 +1,10 @@
 using System;
 using System.IO;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
 using System.Text.Json;
+using System.Threading.Tasks;
 using GenericLauncher.Database.Model;
 using GenericLauncher.InstanceMods;
 using GenericLauncher.InstanceMods.Json;
@@ -31,6 +35,83 @@ public class ModrinthInstallFlowTest
         Assert.Equal(
             "[[\"project_type:mod\"],[\"categories:fabric\"],[\"versions:1.21.1\"],[\"client_side:required\",\"client_side:optional\",\"client_side:unknown\"]]",
             json);
+    }
+
+    [Fact]
+    public void ModrinthSearchViewModel_SelectedSortOrder_ComesFromSelectedOptionValue()
+    {
+        var viewModel = new ModrinthSearchViewModel();
+        var downloads = viewModel.SortOrderOptions.Single(option => option.DisplayName == "Downloads");
+
+        viewModel.SelectedSortOrderOption = downloads;
+
+        Assert.Equal("downloads", viewModel.SelectedSortOrder);
+    }
+
+    [Fact]
+    public async Task ModrinthApiClient_SearchProjectsAsync_UsesSelectedSortOrderValueForIndex()
+    {
+        Uri? requestedUri = null;
+        using var handler = new RefreshGateTestSupport.RoutingHttpMessageHandler((request, _) =>
+        {
+            requestedUri = request.RequestUri;
+            return Task.FromResult(
+                RefreshGateTestSupport.JsonResponse(
+                    new ModrinthSearchResponse([], 0, 20, 0),
+                    ModrinthJsonContext.Default.ModrinthSearchResponse));
+        });
+        using var httpClient = new HttpClient(handler);
+        var apiClient = new ModrinthApiClient(httpClient);
+
+        var response = await apiClient.SearchProjectsAsync(
+            new ModrinthSearchQuery(
+                Query: "lava",
+                SortOrder: "downloads"),
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(response);
+        Assert.NotNull(requestedUri);
+        Assert.Equal("/v2/search", requestedUri!.AbsolutePath);
+        Assert.Contains("query=lava", requestedUri.Query, StringComparison.Ordinal);
+        Assert.Contains("index=downloads", requestedUri.Query, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ModrinthSearchViewModel_RetrySearchAsync_RerunsFailedSearch()
+    {
+        var requestCount = 0;
+        using var handler = new RefreshGateTestSupport.RoutingHttpMessageHandler((request, _) =>
+        {
+            requestCount++;
+            return Task.FromResult(
+                requestCount == 1
+                    ? new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+                    : RefreshGateTestSupport.JsonResponse(
+                        new ModrinthSearchResponse(
+                            [RefreshGateTestSupport.CreateSearchResult("alpha", "Alpha")],
+                            1,
+                            20,
+                            1),
+                        ModrinthJsonContext.Default.ModrinthSearchResponse));
+        });
+        using var httpClient = new HttpClient(handler);
+        var viewModel = new ModrinthSearchViewModel(
+            new ModrinthApiClient(httpClient),
+            null,
+            ModrinthSearchContext.CreateRoot(),
+            null);
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        Assert.True(viewModel.HasError);
+        Assert.Equal(1, requestCount);
+        Assert.Empty(viewModel.SearchResults);
+
+        await viewModel.RetrySearchCommand.ExecuteAsync(null);
+
+        Assert.False(viewModel.HasError);
+        Assert.Equal(2, requestCount);
+        Assert.Single(viewModel.SearchResults);
     }
 
     [Fact]
