@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using System.Net.Http;
 using System.Text.Json;
 using GenericLauncher.Http;
@@ -73,5 +74,21 @@ public class MinecraftJsonContextTest
         Assert.DoesNotContain(classPath, p => p.Contains("lwjgl-3.3.3-natives-macos.jar"));
         Assert.Contains(classPath, p => p.Contains("jtracy-1.0.36-natives-macos-arm64.jar"));
         Assert.DoesNotContain(classPath, p => p.Contains("jtracy-1.0.36-natives-macos.jar"));
+    }
+
+    [Fact]
+    public void CreateClassPath_OnAppleSilicon_DoesNotFallbackToGenericMacNatives()
+    {
+        var json = File.ReadAllText("../../../Data/client_1.18.json");
+        var details = JsonSerializer.Deserialize(json, MinecraftJsonContext.Default.VersionDetails);
+        var platform = CreatePlatform("osx", "arm64");
+        using var httpClient = new HttpClient();
+        var downloader = new FileDownloader(httpClient);
+        var manager = new MinecraftVersionManager(platform, httpClient, downloader, null);
+
+        var classPath = manager.CreateClassPathForTesting(details!.Libraries);
+
+        Assert.DoesNotContain(classPath, path => path.Contains("natives-macos.jar", StringComparison.Ordinal));
+        Assert.DoesNotContain(classPath, path => path.Contains("natives-osx.jar", StringComparison.Ordinal));
     }
 }

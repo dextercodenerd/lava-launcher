@@ -91,8 +91,6 @@ internal static class MinecraftLibrarySelector
         {
             ("osx", "arm64", "natives-macos-arm64") => 0,
             ("osx", "arm64", "natives-osx-arm64") => 0,
-            ("osx", "arm64", "natives-macos") => 1,
-            ("osx", "arm64", "natives-osx") => 1,
             ("osx", "x64", "natives-macos") => 0,
             ("osx", "x64", "natives-osx") => 0,
             ("osx", "x64", "natives-macos-x64") => 1,
