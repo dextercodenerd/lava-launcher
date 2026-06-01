@@ -28,7 +28,7 @@ public class AuthService
 
     // We need manual backing fields to control the exact moment of state update vs event firing.
     // This allows us to update the state effectively "atomically" from the perspective of the UI thread
-    // which listens to the events. If we used auto-properties, we couldn't update both Accounts and 
+    // which listens to the events. If we used auto-properties, we couldn't update both Accounts and
     // ActiveAccount before firing the first event, leading to a glitch states where the UI sees
     // new Accounts but old ActiveAccount.
     private ImmutableList<Account> _accounts = [];
@@ -94,7 +94,7 @@ public class AuthService
         var accounts = (await _repository.GetAllAccountsAsync())
             .Select(a => a.Username is not null
                 ? a
-                : a with { Username = "New Account", })
+                : a with { Username = "New Account" })
             .ToImmutableList();
 
         var activeChanged = false;
@@ -258,8 +258,11 @@ public class AuthService
 
     public async Task<Account> AuthenticateAccountAsync(Account acc, bool force = false)
     {
-        // TODO: Call this only if the MC token is expired, or near expiration, or force == true,
-        //  because this refreshes all the tokens and slows down the start time.
+        if (!force && !acc.ShouldRefresh)
+        {
+            _logger?.LogDebug("Using cached Minecraft access token for account {AccountId}", acc.Id);
+            return acc;
+        }
 
         var refreshedAccount = await _auth.AuthenticateWithMsRefreshTokenAsync(acc.RefreshToken);
         var accState = XstsFailureToXboxAccountState(refreshedAccount);

@@ -5,8 +5,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GenericLauncher.Auth;
 using GenericLauncher.Database.Model;
-using Microsoft.Extensions.Logging;
 using GenericLauncher.Navigation;
+using Microsoft.Extensions.Logging;
 
 namespace GenericLauncher.Screens.ProfileScreen;
 
@@ -171,7 +171,7 @@ public partial class ProfileViewModel : ViewModelBase, IPageViewModel
 
         try
         {
-            var newAcc = await _auth.AuthenticateAccountAsync(Account);
+            var newAcc = await _auth.AuthenticateAccountAsync(Account, true);
             _logger?.LogDebug("Refreshed account: {acc}", newAcc);
 
             // TODO: Check of the newAcc still has problems

@@ -1,3 +1,4 @@
+using System;
 using System.Data;
 using System.Threading.Tasks;
 using GenericLauncher.Database.Orm;
@@ -32,6 +33,8 @@ public record Account(
     UtcInstant ExpiresAt
 ) : IRecord<Account>, IParams<Account>
 {
+    public bool ShouldRefresh => UtcInstant.Now.Add(TimeSpan.FromMinutes(15)) >= ExpiresAt;
+
     // We settled on C# convention of PascalCase names for tables & columns for easy use of models
     // and everything. Also, we escape the table name with square brackets [].
     public const string Table = "[Accounts]";
