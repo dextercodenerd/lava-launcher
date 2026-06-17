@@ -118,12 +118,12 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
     public async Task RefreshAvailableVersionsAsync(bool reload)
     {
         // We don't allow too-old versions yet, because there are too many complications with
-        // managing them. For now, we settled on 1.16 as the minimum, which was released during the
-        // day 202-06-23.
+        // managing them. The shared baseline is still 1.16+, and stricter platform-specific
+        // filtering is applied afterwards when needed.
         var releaseThreshold = new UtcInstant(new DateTime(2020, 6, 23));
-        var versions =
-            (await _minecraftManager.GetStableVersionsAsync(reload)).Where(v => v.ReleaseTime > releaseThreshold)
-            .ToImmutableList();
+        var versions = MinecraftPlatformSupportPolicy.FilterSupportedStableVersions(
+            (await _minecraftManager.GetStableVersionsAsync(reload)).Where(v => v.ReleaseTime > releaseThreshold),
+            _platform);
 
         await _lock.WaitAsync();
         try
@@ -210,6 +210,12 @@ public sealed class MinecraftLauncher : IMinecraftLauncherFacade, IDisposable
         if (string.IsNullOrWhiteSpace(instanceId))
         {
             throw new ArgumentException("Instance name cannot be empty or all whitespace!");
+        }
+
+        var platformSupport = MinecraftPlatformSupportPolicy.EvaluateForNewInstance(_platform, version);
+        if (!platformSupport.IsSupported)
+        {
+            throw new InvalidOperationException(platformSupport.Reason);
         }
 
         // WARN: This is a race condition, because we insert new record after a while, when we have the MC version info
