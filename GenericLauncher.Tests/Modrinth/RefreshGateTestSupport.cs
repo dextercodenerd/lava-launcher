@@ -126,7 +126,7 @@ internal static class RefreshGateTestSupport
             versionNumber,
             versionNumber,
             "release",
-            "2026-03-24T00:00:00Z",
+            UtcInstant.Parse("2026-03-24T00:00:00Z"),
             ["fabric"],
             ["1.21.1"],
             dependencies,
@@ -142,7 +142,7 @@ internal static class RefreshGateTestSupport
     }
 
     public static ModrinthSearchResult CreateSearchResult(string projectId, string title) =>
-        new(projectId, projectId, title, $"{title} description", [], "mod", 0, null, "", "", "");
+        new(projectId, projectId, title, $"{title} description", [], "mod", 0, null, "", UtcInstant.UnixEpoch, UtcInstant.UnixEpoch);
 
     public static ModrinthProject CreateProject(string projectId, string title) =>
         new(
@@ -158,8 +158,8 @@ internal static class RefreshGateTestSupport
             0,
             0,
             null,
-            "2026-03-24T00:00:00Z",
-            "2026-03-24T00:00:00Z",
+            UtcInstant.Parse("2026-03-24T00:00:00Z"),
+            UtcInstant.Parse("2026-03-24T00:00:00Z"),
             null,
             null,
             null,

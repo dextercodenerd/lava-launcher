@@ -26,22 +26,9 @@ public partial class MinecraftInstanceItem : ObservableObject
 
     public IAsyncRelayCommand PlayCommand { get; }
 
-    public string ProgressMessage
-    {
-        get
-        {
-            if (!Progress.HasValue)
-            {
-                return "100";
-            }
-
-            var average = (long)Progress.Value.MinecraftDownloadProgress * Progress.Value.AssetsDownloadProgress *
-                Progress.Value.LibrariesDownloadProgress * Progress.Value.JavaDownloadProgress *
-                Progress.Value.ModLoaderInstallProgress / 100000000;
-
-            return average.ToString();
-        }
-    }
+    public string ProgressMessage => !Progress.HasValue
+        ? "100"
+        : Progress.Value.GetOverallProgressPercent().ToString();
 
     public MinecraftInstanceItem(MinecraftInstance instance,
         ThreadSafeInstallProgressReporter.InstallProgress? progress,

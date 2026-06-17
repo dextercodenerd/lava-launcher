@@ -15,8 +15,21 @@ using Microsoft.Extensions.Logging;
 
 namespace GenericLauncher.Screens.ModrinthSearch;
 
+public sealed record ModrinthSortOrderOption(string DisplayName, string Value);
+
 public partial class ModrinthSearchViewModel : ViewModelBase, IPageViewModel, IDisposable
 {
+    private const int PageSize = 20;
+
+    private static readonly ModrinthSortOrderOption[] DefaultSortOrderOptions =
+    [
+        new("Relevance", "relevance"),
+        new("Downloads", "downloads"),
+        new("Follows", "follows"),
+        new("Newest", "newest"),
+        new("Updated", "updated"),
+    ];
+
     private readonly ModrinthApiClient? _apiClient;
     private readonly InstanceModsManager? _instanceModsManager;
     private readonly Action<ModrinthSearchResult, ModrinthSearchContext>? _openProjectDetails;
@@ -26,29 +39,37 @@ public partial class ModrinthSearchViewModel : ViewModelBase, IPageViewModel, ID
     private CancellationTokenSource? _currentSearchCts;
     private readonly ModrinthSearchContext _searchContext;
     private InstanceModsSnapshot? _targetSnapshot;
+
     private IReadOnlyDictionary<string, LatestCompatibleVersionInfo> _latestCompatibleVersions =
         new Dictionary<string, LatestCompatibleVersionInfo>(StringComparer.OrdinalIgnoreCase);
 
     [ObservableProperty] private string _searchQuery = "";
     [ObservableProperty] private ModrinthProjectType _selectedProjectType = ModrinthProjectType.All;
-    [ObservableProperty] private string _selectedSortOrder = "relevance";
+    [ObservableProperty] private ModrinthSortOrderOption? _selectedSortOrderOption = DefaultSortOrderOptions[0];
     [ObservableProperty] private ObservableCollection<ModrinthSearchResultItemViewModel> _searchResults = [];
     [ObservableProperty] private int _currentPage = 1;
     [ObservableProperty] private int _totalPages = 1;
-    [ObservableProperty] private bool _isLoading;
-    [ObservableProperty] private bool _hasError;
+
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(ShowResults))]
+    private bool _isLoading;
+
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(ShowResults))]
+    private bool _hasError;
+
     [ObservableProperty] private string _errorMessage = "";
     [ObservableProperty] private bool _isInstalling;
     [ObservableProperty] private string _installMessage = "";
     [ObservableProperty] private string _pendingInstallProjectId = "";
     public ModrinthInstallTargetPickerViewModel InstallTargetPicker { get; } = new();
 
-    private const int PageSize = 20;
-
     // IPageViewModel implementation
     public string Title => _searchContext.Title;
     public bool HasLockedFilters => _searchContext.IsInstanceInstall;
     public string LockedFiltersSummary => _searchContext.LockedFiltersSummary;
+
+    public bool ShowResults => !IsLoading && !HasError;
+    public IReadOnlyList<ModrinthSortOrderOption> SortOrderOptions => DefaultSortOrderOptions;
+    public string SelectedSortOrder => SelectedSortOrderOption?.Value ?? DefaultSortOrderOptions[0].Value;
 
     // Design-time constructor
     public ModrinthSearchViewModel()
@@ -92,7 +113,7 @@ public partial class ModrinthSearchViewModel : ViewModelBase, IPageViewModel, ID
     }
 
     /// <summary>
-    /// Cancels any active search and starts a new one using the current usage parameters.
+    ///     Cancels any active search and starts a new one using the current usage parameters.
     /// </summary>
     private async Task TriggerSearchAsync()
     {
@@ -118,6 +139,13 @@ public partial class ModrinthSearchViewModel : ViewModelBase, IPageViewModel, ID
         _debounceTimer.Stop();
 
         CurrentPage = 1;
+        await TriggerSearchAsync();
+    }
+
+    [RelayCommand]
+    private async Task RetrySearchAsync()
+    {
+        _debounceTimer.Stop();
         await TriggerSearchAsync();
     }
 
@@ -376,8 +404,14 @@ public partial class ModrinthSearchViewModel : ViewModelBase, IPageViewModel, ID
         }
     }
 
-    partial void OnSelectedSortOrderChanged(string value)
+    partial void OnSelectedSortOrderOptionChanged(ModrinthSortOrderOption? value)
     {
+        OnPropertyChanged(nameof(SelectedSortOrder));
+        if (value is null)
+        {
+            return;
+        }
+
         // Sort order change immediately triggers search
         _debounceTimer.Stop();
 

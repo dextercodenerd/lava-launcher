@@ -34,7 +34,17 @@ public sealed class ThreadSafeInstallProgressReporter : IAsyncDisposable
         uint LibrariesDownloadProgress = 0,
         uint JavaDownloadProgress = 0,
         uint ModLoaderInstallProgress = 0
-    );
+    )
+    {
+        public uint GetOverallProgressPercent()
+        {
+            var downloadPhaseProgress =
+                (MinecraftDownloadProgress + AssetsDownloadProgress + LibrariesDownloadProgress + JavaDownloadProgress) /
+                4.0;
+            var overallProgress = downloadPhaseProgress * 0.9 + ModLoaderInstallProgress * 0.1;
+            return (uint)Math.Round(overallProgress, MidpointRounding.AwayFromZero);
+        }
+    }
 
     private enum UpdateTarget : byte
     {

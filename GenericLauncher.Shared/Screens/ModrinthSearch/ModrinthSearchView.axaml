@@ -68,13 +68,19 @@
 
             <TextBlock Text="Sort:" VerticalAlignment="Center" Margin="16 0 0 0" />
             <ComboBox
-                SelectedValue="{Binding SelectedSortOrder}"
+                ItemsSource="{Binding SortOrderOptions}"
+                SelectedItem="{Binding SelectedSortOrderOption}"
                 MinWidth="120">
-                <ComboBoxItem Content="Relevance" Tag="relevance" />
-                <ComboBoxItem Content="Downloads" Tag="downloads" />
-                <ComboBoxItem Content="Follows" Tag="follows" />
-                <ComboBoxItem Content="Newest" Tag="newest" />
-                <ComboBoxItem Content="Updated" Tag="updated" />
+                <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="modrinthSearch:ModrinthSortOrderOption">
+                        <TextBlock Text="{Binding DisplayName}" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+                <ComboBox.SelectionBoxItemTemplate>
+                    <DataTemplate x:DataType="modrinthSearch:ModrinthSortOrderOption">
+                        <TextBlock Text="{Binding DisplayName}" />
+                    </DataTemplate>
+                </ComboBox.SelectionBoxItemTemplate>
             </ComboBox>
         </StackPanel>
 
@@ -99,7 +105,8 @@
                     IsVisible="{Binding HasError}"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
-                    Spacing="8">
+                    Spacing="8"
+                    ZIndex="5">
                     <TextBlock
                         Text="⚠️ Error"
                         FontSize="20"
@@ -111,12 +118,12 @@
                         HorizontalAlignment="Center" />
                     <Button
                         Content="Retry"
-                        Command="{Binding SearchCommand}"
+                        Command="{Binding RetrySearchCommand}"
                         HorizontalAlignment="Center" />
                 </StackPanel>
 
                 <!-- Results -->
-                <ScrollViewer IsVisible="{Binding !IsLoading}">
+                <ScrollViewer IsVisible="{Binding ShowResults}">
                     <ItemsControl ItemsSource="{Binding SearchResults}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="modrinthSearch:ModrinthSearchResultItemViewModel">

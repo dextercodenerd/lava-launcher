@@ -30,7 +30,7 @@ public class LauncherRepository
         {
             DataSource = dbPath,
             Mode = SqliteOpenMode.ReadWriteCreate,
-            Cache = SqliteCacheMode.Shared,
+            Cache = SqliteCacheMode.Private, // shared cache is obsolete and replaced by WAL
             ForeignKeys = true,
             Pooling = true,
         };
@@ -99,9 +99,21 @@ public class LauncherRepository
         await _db.InsertMinecraftInstanceAsync(instance);
     }
 
-    public async Task SetMinecraftInstanceAsReadyAsync(string name)
+    public async Task SetMinecraftInstanceStateAsync(string instanceId, MinecraftInstanceState state)
     {
         await _initTask;
-        await _db.SetMinecraftInstanceAsReadyAsync(name);
+        await _db.SetMinecraftInstanceStateAsync(instanceId, state);
+    }
+
+    public async Task SetMinecraftInstanceClassPathAsync(string instanceId, List<string> classPath)
+    {
+        await _initTask;
+        await _db.SetMinecraftInstanceClassPathAsync(instanceId, classPath);
+    }
+
+    public async Task<bool> RemoveMinecraftInstanceAsync(string instanceId)
+    {
+        await _initTask;
+        return await _db.DeleteMinecraftInstanceAsync(instanceId);
     }
 }

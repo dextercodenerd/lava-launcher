@@ -63,8 +63,6 @@ public sealed partial class Authenticator : IDisposable
     {
         // With a Microsoft access token we can start the Minecraft authorization dance
         var microsoftAccessToken = msTokenResponse.AccessToken;
-        var expiresAt = UtcInstant.Now.Add(TimeSpan.FromSeconds(msTokenResponse.ExpiresIn));
-
         var (tid, sub) = await _jwtVerifier.VerifyMicrosoftTokenAsync(msTokenResponse.IdToken);
         // Hash 'tid' and 'sub' to create a privacy-focused unique id
         var uniqueUserId = Base58.Encode(SHA256.HashData(Encoding.UTF8.GetBytes($"{tid}_{sub}")));
@@ -97,7 +95,7 @@ public sealed partial class Authenticator : IDisposable
 
         // Minecraft token
         progress?.Report(LoginStep.MinecraftAuth);
-        var minecraftToken = await GetMinecraftTokenAsync(xstsToken, userHash);
+        var (minecraftToken, minecraftExpiresAt) = await GetMinecraftTokenAsync(xstsToken, userHash);
 
         // Now we can get the player's Minecraft profile
         progress?.Report(LoginStep.MinecraftProfile);
@@ -148,7 +146,7 @@ public sealed partial class Authenticator : IDisposable
             minecraftToken,
             msTokenResponse.RefreshToken,
             xuid,
-            expiresAt
+            minecraftExpiresAt
         );
     }
 

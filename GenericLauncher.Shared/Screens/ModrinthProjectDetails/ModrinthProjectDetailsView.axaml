@@ -78,6 +78,8 @@
                             <Button
                                 Content="Install"
                                 IsVisible="{Binding ShowInstallAction}"
+                                IsEnabled="{Binding CanRunInstallAction}"
+                                ToolTip.Tip="{Binding InstallActionDisabledReason}"
                                 Command="{Binding InstallCommand}"
                                 HorizontalAlignment="Left" />
                             <Button

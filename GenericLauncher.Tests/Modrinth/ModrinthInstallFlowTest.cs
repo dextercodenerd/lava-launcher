@@ -1,9 +1,14 @@
 using System;
 using System.IO;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
 using System.Text.Json;
+using System.Threading.Tasks;
 using GenericLauncher.Database.Model;
 using GenericLauncher.InstanceMods;
 using GenericLauncher.InstanceMods.Json;
+using GenericLauncher.Misc;
 using GenericLauncher.Modrinth;
 using GenericLauncher.Modrinth.Json;
 using GenericLauncher.Screens.ModrinthSearch;
@@ -33,13 +38,90 @@ public class ModrinthInstallFlowTest
     }
 
     [Fact]
+    public void ModrinthSearchViewModel_SelectedSortOrder_ComesFromSelectedOptionValue()
+    {
+        var viewModel = new ModrinthSearchViewModel();
+        var downloads = viewModel.SortOrderOptions.Single(option => option.DisplayName == "Downloads");
+
+        viewModel.SelectedSortOrderOption = downloads;
+
+        Assert.Equal("downloads", viewModel.SelectedSortOrder);
+    }
+
+    [Fact]
+    public async Task ModrinthApiClient_SearchProjectsAsync_UsesSelectedSortOrderValueForIndex()
+    {
+        Uri? requestedUri = null;
+        using var handler = new RefreshGateTestSupport.RoutingHttpMessageHandler((request, _) =>
+        {
+            requestedUri = request.RequestUri;
+            return Task.FromResult(
+                RefreshGateTestSupport.JsonResponse(
+                    new ModrinthSearchResponse([], 0, 20, 0),
+                    ModrinthJsonContext.Default.ModrinthSearchResponse));
+        });
+        using var httpClient = new HttpClient(handler);
+        var apiClient = new ModrinthApiClient(httpClient);
+
+        var response = await apiClient.SearchProjectsAsync(
+            new ModrinthSearchQuery(
+                Query: "lava",
+                SortOrder: "downloads"),
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(response);
+        Assert.NotNull(requestedUri);
+        Assert.Equal("/v2/search", requestedUri!.AbsolutePath);
+        Assert.Contains("query=lava", requestedUri.Query, StringComparison.Ordinal);
+        Assert.Contains("index=downloads", requestedUri.Query, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ModrinthSearchViewModel_RetrySearchAsync_RerunsFailedSearch()
+    {
+        var requestCount = 0;
+        using var handler = new RefreshGateTestSupport.RoutingHttpMessageHandler((request, _) =>
+        {
+            requestCount++;
+            return Task.FromResult(
+                requestCount == 1
+                    ? new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+                    : RefreshGateTestSupport.JsonResponse(
+                        new ModrinthSearchResponse(
+                            [RefreshGateTestSupport.CreateSearchResult("alpha", "Alpha")],
+                            1,
+                            20,
+                            1),
+                        ModrinthJsonContext.Default.ModrinthSearchResponse));
+        });
+        using var httpClient = new HttpClient(handler);
+        var viewModel = new ModrinthSearchViewModel(
+            new ModrinthApiClient(httpClient),
+            null,
+            ModrinthSearchContext.CreateRoot(),
+            null);
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        Assert.True(viewModel.HasError);
+        Assert.Equal(1, requestCount);
+        Assert.Empty(viewModel.SearchResults);
+
+        await viewModel.RetrySearchCommand.ExecuteAsync(null);
+
+        Assert.False(viewModel.HasError);
+        Assert.Equal(2, requestCount);
+        Assert.Single(viewModel.SearchResults);
+    }
+
+    [Fact]
     public void InstanceModsManager_SelectBestVersion_PrefersReleaseBeforeNewerBeta()
     {
         var versions = new[]
         {
-            new ModrinthVersion("beta", "project", "Beta", "2.0.0-beta", "beta", "2026-03-20T00:00:00Z", ["fabric"], ["1.21.1"], [], []),
-            new ModrinthVersion("release", "project", "Release", "1.9.0", "release", "2026-03-18T00:00:00Z", ["fabric"], ["1.21.1"], [], []),
-            new ModrinthVersion("older-release", "project", "Older", "1.8.0", "release", "2026-03-10T00:00:00Z", ["fabric"], ["1.21.1"], [], []),
+            new ModrinthVersion("beta", "project", "Beta", "2.0.0-beta", "beta", UtcInstant.Parse("2026-03-20T00:00:00Z"), ["fabric"], ["1.21.1"], [], []),
+            new ModrinthVersion("release", "project", "Release", "1.9.0", "release", UtcInstant.Parse("2026-03-18T00:00:00Z"), ["fabric"], ["1.21.1"], [], []),
+            new ModrinthVersion("older-release", "project", "Older", "1.8.0", "release", UtcInstant.Parse("2026-03-10T00:00:00Z"), ["fabric"], ["1.21.1"], [], []),
         };
 
         var selected = InstanceModsManager.SelectBestVersion(versions);
@@ -56,7 +138,7 @@ public class ModrinthInstallFlowTest
             "Test",
             "1.0.0",
             "release",
-            "2026-03-20T00:00:00Z",
+            UtcInstant.Parse("2026-03-20T00:00:00Z"),
             ["fabric"],
             ["1.21.1"],
             [],
@@ -111,7 +193,7 @@ public class ModrinthInstallFlowTest
     public void ModrinthSearchResultItemViewModel_ApplyInstallState_ShowsInstallWhenMissing()
     {
         var item = new ModrinthSearchResultItemViewModel(
-            new ModrinthSearchResult("project", "slug", "Title", "Desc", [], "mod", 0, null, "", "", ""),
+            new ModrinthSearchResult("project", "slug", "Title", "Desc", [], "mod", 0, null, "", UtcInstant.UnixEpoch, UtcInstant.UnixEpoch),
             canInstall: true);
 
         item.ApplyInstallState(isInstanceScopedSearch: true, state: null, latestCompatibleVersion: null);
@@ -125,7 +207,7 @@ public class ModrinthInstallFlowTest
     public void ModrinthSearchResultItemViewModel_ApplyInstallState_ShowsUpdateForOutdatedDirectMod()
     {
         var item = new ModrinthSearchResultItemViewModel(
-            new ModrinthSearchResult("project", "slug", "Title", "Desc", [], "mod", 0, null, "", "", ""),
+            new ModrinthSearchResult("project", "slug", "Title", "Desc", [], "mod", 0, null, "", UtcInstant.UnixEpoch, UtcInstant.UnixEpoch),
             canInstall: true);
 
         item.ApplyInstallState(
@@ -148,7 +230,7 @@ public class ModrinthInstallFlowTest
     public void ModrinthSearchResultItemViewModel_ApplyInstallState_HidesUpdateForCurrentDirectMod()
     {
         var item = new ModrinthSearchResultItemViewModel(
-            new ModrinthSearchResult("project", "slug", "Title", "Desc", [], "mod", 0, null, "", "", ""),
+            new ModrinthSearchResult("project", "slug", "Title", "Desc", [], "mod", 0, null, "", UtcInstant.UnixEpoch, UtcInstant.UnixEpoch),
             canInstall: true);
 
         item.ApplyInstallState(
@@ -171,7 +253,7 @@ public class ModrinthInstallFlowTest
     public void ModrinthSearchResultItemViewModel_ApplyInstallState_HidesManualActionsForDependency()
     {
         var item = new ModrinthSearchResultItemViewModel(
-            new ModrinthSearchResult("project", "slug", "Title", "Desc", [], "mod", 0, null, "", "", ""),
+            new ModrinthSearchResult("project", "slug", "Title", "Desc", [], "mod", 0, null, "", UtcInstant.UnixEpoch, UtcInstant.UnixEpoch),
             canInstall: true);
 
         item.ApplyInstallState(

@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using GenericLauncher.Misc;
 
 namespace GenericLauncher.Modrinth.Json;
 
@@ -33,9 +34,9 @@ public record ModrinthSearchResult(
     string? IconUrl,
     [property: JsonPropertyName("author")] string Author,
     [property: JsonPropertyName("date_created")]
-    string DateCreated,
+    UtcInstant DateCreated,
     [property: JsonPropertyName("date_modified")]
-    string DateModified
+    UtcInstant DateModified
 );
 
 /// <summary>
@@ -63,9 +64,9 @@ public record ModrinthProject(
     [property: JsonPropertyName("icon_url")]
     string? IconUrl,
     [property: JsonPropertyName("published")]
-    string Published,
+    UtcInstant Published,
     [property: JsonPropertyName("updated")]
-    string Updated,
+    UtcInstant Updated,
     [property: JsonPropertyName("license")]
     ModrinthLicense? License,
     [property: JsonPropertyName("source_url")]
@@ -110,7 +111,7 @@ public record ModrinthVersion(
     [property: JsonPropertyName("version_type")]
     string VersionType,
     [property: JsonPropertyName("date_published")]
-    string DatePublished,
+    UtcInstant DatePublished,
     [property: JsonPropertyName("loaders")]
     string[] Loaders,
     [property: JsonPropertyName("game_versions")]

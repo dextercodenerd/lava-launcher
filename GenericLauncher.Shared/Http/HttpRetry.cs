@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
 using GenericLauncher.Misc;
@@ -26,6 +27,7 @@ public static class HttpRetry
 
         var retryPolicy = HttpPolicyExtensions
             .HandleTransientHttpError()
+            .OrResult(response => response.StatusCode == HttpStatusCode.TooManyRequests)
             .Or<TaskCanceledException>() // .NET Core and .NET 5 and later only: The request failed due to timeout.
             .WaitAndRetryAsync(delay);
 

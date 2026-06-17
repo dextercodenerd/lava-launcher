@@ -10,6 +10,7 @@ using GenericLauncher.Database.Model;
 using GenericLauncher.Minecraft;
 using GenericLauncher.Minecraft.Json;
 using GenericLauncher.Minecraft.ModLoaders;
+using GenericLauncher.Misc;
 using Microsoft.Extensions.Logging;
 
 namespace GenericLauncher.Screens.NewInstanceDialog;
@@ -18,22 +19,25 @@ public partial class NewInstanceDialogViewModel : ViewModelBase
 {
     private readonly ILogger? _logger;
     private readonly IMinecraftLauncherFacade? _minecraftLauncher;
+    private readonly LauncherPlatform _platform;
     private int _modLoaderVersionsRequestId;
 
-    [ObservableProperty] private bool _showNewMinecraftInstanceDialog = false;
+    [ObservableProperty] private bool _showNewMinecraftInstanceDialog;
     [ObservableProperty] private bool _canCloseOnClickAway = true;
 
     [ObservableProperty] private ImmutableList<VersionInfo> _availableMinecraftVersions = [];
-    [ObservableProperty] private VersionInfo? _selectedMinecraftVersion = null;
+    [ObservableProperty] private VersionInfo? _selectedMinecraftVersion;
     [ObservableProperty] private ImmutableList<MinecraftInstanceModLoader> _availableModLoaders = [];
     [ObservableProperty] private MinecraftInstanceModLoader _selectedModLoader = MinecraftInstanceModLoader.Vanilla;
     [ObservableProperty] private ImmutableList<ModLoaderVersionInfo> _availableModLoaderVersions = [];
-    [ObservableProperty] private ModLoaderVersionInfo? _selectedModLoaderVersion = null;
-    [ObservableProperty] private string? _newInstanceName = null;
-    [ObservableProperty] private bool _preparingInstance = false;
-    [ObservableProperty] private bool _loadingModLoaderVersions = false;
+    [ObservableProperty] private ModLoaderVersionInfo? _selectedModLoaderVersion;
+    [ObservableProperty] private string? _newInstanceName;
+    [ObservableProperty] private bool _preparingInstance;
+    [ObservableProperty] private bool _loadingModLoaderVersions;
     [ObservableProperty] private string _modLoaderVersionStatusText = "";
     [ObservableProperty] private string _instanceNameWatermark = "Vanilla";
+
+    public string MinimumVersionMessage { get; }
 
     public bool CanInstall =>
         !PreparingInstance
@@ -49,11 +53,15 @@ public partial class NewInstanceDialogViewModel : ViewModelBase
     }
 
     public NewInstanceDialogViewModel(
+        LauncherPlatform? platform = null,
         IMinecraftLauncherFacade? minecraftLauncher = null,
-        ILogger? logger = null)
+        ILogger? logger = null
+    )
     {
-        _logger = logger;
+        _platform = platform ?? LauncherPlatform.CreateCurrent();
         _minecraftLauncher = minecraftLauncher;
+        _logger = logger;
+        MinimumVersionMessage = MinecraftPlatformSupportPolicy.GetNewInstanceDialogMessage(_platform) ?? "";
 
         // This is the way, how we can bind DialogHost's DialogOpenedCallback and DialogClosingCallback,
         // which are not ICommand types, but event handlers.
@@ -229,6 +237,20 @@ public partial class NewInstanceDialogViewModel : ViewModelBase
                 ModLoaderVersionStatusText = "";
                 LoadingModLoaderVersions = false;
             });
+            return;
+        }
+
+        var support = MinecraftPlatformSupportPolicy.EvaluateForNewInstance(_platform, SelectedMinecraftVersion);
+        if (!support.IsSupported)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                AvailableModLoaderVersions = [];
+                SelectedModLoaderVersion = null;
+                ModLoaderVersionStatusText = support.Reason ?? "";
+                LoadingModLoaderVersions = false;
+            });
+
             return;
         }
 

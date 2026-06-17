@@ -29,6 +29,13 @@ public sealed class InstanceModsManager
     private const string InstallKindDirect = "Direct";
     private const string InstallKindDependency = "Dependency";
 
+    // Compatible-versions cache: bounded by entry count and TTL on successful entries.
+    // Failed fetches never overwrite a prior successful entry; instead they mark the entry
+    // as stale so callers can show a quiet refresh-failure indicator.
+    private const int CompatibleVersionsCacheMaxSize = 512;
+    private static readonly TimeSpan CompatibleVersionsCacheTtl = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan CompatibleVersionsRefreshRetryDelay = TimeSpan.FromSeconds(60);
+
     private readonly LauncherPlatform _platform;
     private readonly ModrinthApiClient _modrinthApiClient;
     private readonly FileDownloader _fileDownloader;
@@ -36,7 +43,6 @@ public sealed class InstanceModsManager
     private readonly ILogger? _logger;
     private readonly string _instancesRoot;
     private readonly Lock _snapshotLock = new();
-    private readonly Lock _latestCompatibleVersionCacheLock = new();
 
     private readonly ConcurrentDictionary<string, AsyncRwLock> _instanceStateLocks =
         new(StringComparer.OrdinalIgnoreCase);
@@ -44,9 +50,10 @@ public sealed class InstanceModsManager
     private readonly Dictionary<string, InstanceModsSnapshot> _snapshots =
         new(StringComparer.OrdinalIgnoreCase);
 
-    // TODO: Add cache eviction (size cap or TTL) to prevent unbounded growth across sessions.
-    private readonly Dictionary<string, LatestCompatibleVersionInfo?> _latestCompatibleVersionCache =
+    private readonly Dictionary<string, CompatibleVersionsCacheEntry> _compatibleVersionsCache =
         new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly Lock _compatibleVersionsCacheLock = new();
 
     public event EventHandler<InstanceModsSnapshotChangedEventArgs>? InstanceModsChanged;
 
@@ -121,7 +128,7 @@ public sealed class InstanceModsManager
         return snapshot;
     }
 
-    public async Task<ImmutableDictionary<string, LatestCompatibleVersionInfo>> GetLatestCompatibleVersionsAsync(
+    public async Task<LatestCompatibleVersionsResult> GetLatestCompatibleVersionsAsync(
         MinecraftInstance instance,
         IEnumerable<string> projectIds,
         bool forceRefresh = false,
@@ -133,11 +140,12 @@ public sealed class InstanceModsManager
             .ToArray();
         if (distinctProjectIds.Length == 0)
         {
-            return ImmutableDictionary<string, LatestCompatibleVersionInfo>.Empty
-                .WithComparers(StringComparer.OrdinalIgnoreCase);
+            return new LatestCompatibleVersionsResult(
+                ImmutableDictionary<string, ProjectCompatibilityStatus>.Empty
+                    .WithComparers(StringComparer.OrdinalIgnoreCase));
         }
 
-        var latestVersions = new LatestCompatibleVersionInfo?[distinctProjectIds.Length];
+        var fetchResults = new CompatibleVersionFetchResult[distinctProjectIds.Length];
         var parallelOptions = new ParallelOptions
         {
             MaxDegreeOfParallelism = MaxLatestVersionResolutionConcurrency,
@@ -149,20 +157,31 @@ public sealed class InstanceModsManager
             parallelOptions,
             async (index, token) =>
             {
-                var latestVersion = await GetLatestCompatibleVersionAsync(
+                fetchResults[index] = await GetCompatibleVersionsInternalAsync(
                     instance,
                     distinctProjectIds[index],
                     forceRefresh,
                     token);
-                if (latestVersion is not null)
-                {
-                    latestVersions[index] = latestVersion;
-                }
             });
 
-        return latestVersions
-            .OfType<LatestCompatibleVersionInfo>()
-            .ToImmutableDictionary(version => version.ProjectId, StringComparer.OrdinalIgnoreCase);
+        var projects = ImmutableDictionary.CreateBuilder<string, ProjectCompatibilityStatus>(
+            StringComparer.OrdinalIgnoreCase);
+
+        for (var i = 0; i < distinctProjectIds.Length; i++)
+        {
+            var projectId = distinctProjectIds[i];
+            var result = fetchResults[i];
+            LatestCompatibleVersionInfo? latestVersion = null;
+            if (!result.Versions.IsDefaultOrEmpty)
+            {
+                var best = result.Versions[0];
+                latestVersion = new LatestCompatibleVersionInfo(projectId, best.VersionId, best.VersionNumber);
+            }
+
+            projects[projectId] = new ProjectCompatibilityStatus(projectId, latestVersion, result.RefreshState);
+        }
+
+        return new LatestCompatibleVersionsResult(projects.ToImmutable());
     }
 
     public async Task<ImmutableList<PortableInstanceCandidate>> DiscoverPortableInstancesAsync(
@@ -203,10 +222,8 @@ public sealed class InstanceModsManager
 
     public async Task<ImmutableList<InstanceModListItem>> ListModsAsync(
         MinecraftInstance instance,
-        CancellationToken cancellationToken = default)
-    {
-        return (await GetSnapshotAsync(instance, cancellationToken: cancellationToken)).AllItems;
-    }
+        CancellationToken cancellationToken = default) =>
+        (await GetSnapshotAsync(instance, cancellationToken: cancellationToken)).AllItems;
 
     public async Task InstallProjectAsync(
         MinecraftInstance instance,
@@ -300,7 +317,7 @@ public sealed class InstanceModsManager
                         File.Delete(manualPath);
                         var localState = await ReadLocalStateUnlockedAsync(folderPath, token);
                         var snapshot = BuildSnapshot(localState.Meta, localState.ScannedFiles);
-                        StoreSnapshot(instance.Id, snapshot, raiseEvent: false);
+                        StoreSnapshot(instance.Id, snapshot, false);
                         return snapshot;
                     },
                     cancellationToken);
@@ -350,14 +367,14 @@ public sealed class InstanceModsManager
             async (index, token) =>
             {
                 var instance = instances[index];
-                var latestVersion =
-                    await GetLatestCompatibleVersionAsync(instance, projectId, forceRefresh: false, token);
-                if (latestVersion is null)
+                var result = await GetCompatibleVersionsInternalAsync(instance, projectId, false, token);
+                if (result.IsUnavailable || result.Versions.IsDefaultOrEmpty)
                 {
                     return;
                 }
 
-                targets[index] = new CompatibleInstanceInstallTarget(instance, latestVersion.VersionNumber);
+                var best = result.Versions[0];
+                targets[index] = new CompatibleInstanceInstallTarget(instance, best.VersionNumber);
             });
 
         return targets
@@ -366,7 +383,11 @@ public sealed class InstanceModsManager
             .ToImmutableList();
     }
 
-    internal async Task<ModrinthVersion?> TryResolveLatestCompatibleVersionAsync(
+    // Returns sorted compatible versions for a project/instance combination.
+    // Returns an empty array when the query succeeds, but no versions are compatible.
+    // Throws when the Modrinth API call fails, so callers can distinguish failure from
+    // a genuine empty-compatible-versions result.
+    internal async Task<ImmutableArray<CompatibleVersionInfo>> ResolveCompatibleVersionsAsync(
         MinecraftInstance instance,
         string projectId,
         CancellationToken cancellationToken = default)
@@ -376,17 +397,28 @@ public sealed class InstanceModsManager
             instance.VersionId,
             GetModrinthLoader(instance.ModLoader),
             cancellationToken);
-        if (versions is null || versions.Length == 0)
+        if (versions is null)
         {
-            return null;
+            throw new InvalidOperationException(
+                $"Modrinth returned no response for project '{projectId}' versions query.");
         }
 
-        return SelectBestVersion(versions);
+        if (versions.Length == 0)
+        {
+            return [];
+        }
+
+        return versions
+            .OrderBy(v => GetVersionTypeRank(v.VersionType))
+            .ThenByDescending(v => v.DatePublished)
+            .Select(v => new CompatibleVersionInfo(
+                v.Id, v.VersionNumber, v.VersionType, v.DatePublished))
+            .ToImmutableArray();
     }
 
     internal static ModrinthVersion SelectBestVersion(IEnumerable<ModrinthVersion> versions) => versions
         .OrderBy(version => GetVersionTypeRank(version.VersionType))
-        .ThenByDescending(version => ParseDate(version.DatePublished))
+        .ThenByDescending(version => version.DatePublished)
         .First();
 
     internal static ModrinthVersionFile SelectInstallFile(ModrinthVersion version)
@@ -450,27 +482,49 @@ public sealed class InstanceModsManager
 
         try
         {
-            return await ExecuteWithInstanceWriteLockAsync(
+            var snapshot = await ExecuteWithInstanceWriteLockAsync(
                 folderPath,
                 async token =>
                 {
                     var currentLocalState = await ReadLocalStateUnlockedAsync(folderPath, token);
                     EnsureExpectedMeta(observedLocalState.Meta, currentLocalState.Meta);
-                    var snapshot = await CommitPreparedResolutionUnlockedAsync(
+                    var s = await CommitPreparedResolutionUnlockedAsync(
                         instance,
                         folderPath,
                         currentLocalState.Meta,
                         resolution,
                         preparedDownloads,
                         token);
-                    StoreSnapshot(instance.Id, snapshot, raiseEvent: false);
-                    return snapshot;
+                    StoreSnapshot(instance.Id, s, false);
+                    return s;
                 },
                 cancellationToken);
+
+            // Expire the compatible-versions cache for every project that was just installed or
+            // updated. This ensures that the event-triggered background refresh after an
+            // install/update fetches fresh data from Modrinth rather than reusing the version
+            // data that was selected during resolution.
+            InvalidateCompatibleVersionsForProjects(instance, resolution.Projects.Keys);
+
+            return snapshot;
         }
         finally
         {
             preparedDownloads.Dispose();
+        }
+    }
+
+    private void InvalidateCompatibleVersionsForProjects(
+        MinecraftInstance instance,
+        IEnumerable<string> projectIds)
+    {
+        lock (_compatibleVersionsCacheLock)
+        {
+            foreach (var projectId in projectIds)
+            {
+                var key = GetCompatibleVersionsCacheKey(instance, projectId);
+                _compatibleVersionsCache.Remove(key);
+            }
         }
     }
 
@@ -499,9 +553,9 @@ public sealed class InstanceModsManager
                 await ResolveProjectAsync(
                     instance,
                     desiredDirectMod.Key,
-                    isDirectInstall: true,
-                    requiredByProjectId: null,
-                    requestedVersionId: desiredDirectMod.Value,
+                    true,
+                    null,
+                    desiredDirectMod.Value,
                     directModResolution,
                     token);
                 resolvedDirectMods[index] = directModResolution;
@@ -679,16 +733,17 @@ public sealed class InstanceModsManager
                 .ToArray();
 
             var item = new InstanceModListItem(
-                Key: managed.ProjectId,
-                DisplayName: managed.ProjectTitle,
-                SecondaryText: $"{managed.InstalledVersionNumber} ({managed.InstalledVersionType})",
-                FileName: managed.InstalledFileName,
-                ProjectId: managed.ProjectId,
-                Kind: displayKind,
-                RequiredByDisplay: parentTitles.Length == 0 ? null : string.Join(", ", parentTitles),
-                CanDelete: installKind == InstanceModItemKind.Direct,
-                HasUpdate: false,
-                LatestVersionNumber: null);
+                managed.ProjectId,
+                managed.ProjectTitle,
+                $"{managed.InstalledVersionNumber} ({managed.InstalledVersionType})",
+                managed.InstalledFileName,
+                managed.ProjectId,
+                displayKind,
+                parentTitles.Length == 0 ? null : string.Join(", ", parentTitles),
+                installKind == InstanceModItemKind.Direct,
+                false,
+                null,
+                null);
 
             switch (displayKind)
             {
@@ -720,16 +775,17 @@ public sealed class InstanceModsManager
             }
 
             manual.Add(new InstanceModListItem(
-                Key: scannedFile,
-                DisplayName: Path.GetFileNameWithoutExtension(scannedFile),
-                SecondaryText: "Manual mod",
-                FileName: scannedFile,
-                ProjectId: null,
-                Kind: InstanceModItemKind.Manual,
-                RequiredByDisplay: null,
-                CanDelete: true,
-                HasUpdate: false,
-                LatestVersionNumber: null));
+                scannedFile,
+                Path.GetFileNameWithoutExtension(scannedFile),
+                "Manual mod",
+                scannedFile,
+                null,
+                InstanceModItemKind.Manual,
+                null,
+                true,
+                false,
+                null,
+                null));
         }
 
         return new InstanceModsSnapshot(
@@ -766,9 +822,20 @@ public sealed class InstanceModsManager
         }
         else
         {
-            selectedVersion = await TryResolveLatestCompatibleVersionAsync(instance, projectId, cancellationToken)
+            // Use the cache-backed compatible-version path so that install and update actions
+            // derive the best version from the same source as the UI update-badge display.
+            var compatibleResult =
+                await GetCompatibleVersionsInternalAsync(instance, projectId, false, cancellationToken);
+            if (compatibleResult.IsUnavailable || compatibleResult.Versions.IsDefaultOrEmpty)
+            {
+                throw new InvalidOperationException(
+                    $"No compatible Modrinth version found for project '{projectId}' and {instance.VersionId}/{instance.ModLoader}.");
+            }
+
+            var latestVersionId = compatibleResult.Versions[0].VersionId;
+            selectedVersion = await _modrinthApiClient.GetVersionAsync(latestVersionId, cancellationToken)
                               ?? throw new InvalidOperationException(
-                                  $"No compatible Modrinth version found for project '{projectId}' and {instance.VersionId}/{instance.ModLoader}.");
+                                  $"Missing Modrinth version '{latestVersionId}'");
         }
 
         if (resolution.Projects.TryGetValue(projectId, out var existing))
@@ -817,9 +884,9 @@ public sealed class InstanceModsManager
             await ResolveProjectAsync(
                 instance,
                 dependency.ProjectId,
-                isDirectInstall: false,
-                requiredByProjectId: projectId,
-                requestedVersionId: dependency.VersionId,
+                false,
+                projectId,
+                dependency.VersionId,
                 resolution,
                 cancellationToken);
         }
@@ -862,33 +929,166 @@ public sealed class InstanceModsManager
         }
     }
 
-    private async Task<LatestCompatibleVersionInfo?> GetLatestCompatibleVersionAsync(
+    // Returns the cached-or-fresh compatible-version result for a single project/instance combo.
+    //
+    // Four outcomes are possible:
+    //   1. Fresh success   – TTL-valid cache hit, or a fresh successful fetch.
+    //   2. Fresh success with empty versions – fetch succeeded, zero compatible versions.
+    //   3. Stale success   – fresh fetch failed, but a prior successful result is available;
+    //                        callers must surface a refresh-failure indicator to the user.
+    //   4. Unavailable     – fresh fetch failed and no prior successful result exists;
+    //                        callers must show a neutral "status unavailable" state.
+    private async Task<CompatibleVersionFetchResult> GetCompatibleVersionsInternalAsync(
         MinecraftInstance instance,
         string projectId,
         bool forceRefresh,
         CancellationToken cancellationToken)
     {
-        var cacheKey = GetLatestCompatibleVersionCacheKey(instance, projectId);
-        if (!forceRefresh && TryGetLatestCompatibleVersionFromCache(cacheKey, out var cachedVersion))
+        var cacheKey = GetCompatibleVersionsCacheKey(instance, projectId);
+
+        if (!forceRefresh)
         {
-            return cachedVersion;
+            lock (_compatibleVersionsCacheLock)
+            {
+                if (_compatibleVersionsCache.TryGetValue(cacheKey, out var hit)
+                    && TryUseCachedCompatibleVersionsEntry(cacheKey, hit, DateTime.UtcNow, out var cachedResult))
+                {
+                    return cachedResult;
+                }
+            }
         }
 
         try
         {
-            var latestVersion = await TryResolveLatestCompatibleVersionAsync(instance, projectId, cancellationToken);
-            var latestCompatibleVersion = latestVersion is null
-                ? null
-                : new LatestCompatibleVersionInfo(projectId, latestVersion.Id, latestVersion.VersionNumber);
-            StoreLatestCompatibleVersionInCache(cacheKey, latestCompatibleVersion);
-            return latestCompatibleVersion;
+            var versions = await ResolveCompatibleVersionsAsync(instance, projectId, cancellationToken);
+            lock (_compatibleVersionsCacheLock)
+            {
+                var utcNow = DateTime.UtcNow;
+                UpsertCompatibleVersionsCacheEntry(
+                    cacheKey,
+                    new CompatibleVersionsCacheEntry(
+                        versions,
+                        utcNow,
+                        utcNow,
+                        utcNow,
+                        CompatibilityRefreshState.Fresh));
+            }
+
+            return CompatibleVersionFetchResult.Fresh(versions);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
-            _logger?.LogWarning(ex, "Failed to resolve latest compatible version for {ProjectId}", projectId);
-            return null;
+            _logger?.LogWarning(ex, "Failed to resolve compatible versions for {ProjectId}", projectId);
+            lock (_compatibleVersionsCacheLock)
+            {
+                var nowUtc = DateTime.UtcNow;
+                if (_compatibleVersionsCache.TryGetValue(cacheKey, out var stale))
+                {
+                    if (HasSuccessfulCompatibleVersions(stale))
+                    {
+                        var staleEntry = stale with
+                        {
+                            LastAccessedAtUtc = nowUtc,
+                            LastRefreshAttemptAtUtc = nowUtc,
+                            RefreshState = CompatibilityRefreshState.Stale,
+                        };
+                        UpsertCompatibleVersionsCacheEntry(cacheKey, staleEntry);
+                        return CompatibleVersionFetchResult.Stale(staleEntry.Versions);
+                    }
+                }
+
+                UpsertCompatibleVersionsCacheEntry(
+                    cacheKey,
+                    new CompatibleVersionsCacheEntry(
+                        [],
+                        DateTime.MinValue,
+                        nowUtc,
+                        nowUtc,
+                        CompatibilityRefreshState.Unavailable));
+            }
+
+            return CompatibleVersionFetchResult.Unavailable;
         }
     }
+
+    // Must be called with _compatibleVersionsCacheLock held.
+    private void UpsertCompatibleVersionsCacheEntry(string cacheKey, CompatibleVersionsCacheEntry entry)
+    {
+        _compatibleVersionsCache[cacheKey] = entry;
+        PruneCompatibleVersionsCache(entry.LastAccessedAtUtc);
+    }
+
+    // Must be called with _compatibleVersionsCacheLock held.
+    private bool TryUseCachedCompatibleVersionsEntry(
+        string cacheKey,
+        CompatibleVersionsCacheEntry entry,
+        DateTime nowUtc,
+        out CompatibleVersionFetchResult result)
+    {
+        if (entry.RefreshState == CompatibilityRefreshState.Fresh)
+        {
+            if (nowUtc - entry.LastSuccessfulFetchAtUtc < CompatibleVersionsCacheTtl)
+            {
+                _compatibleVersionsCache[cacheKey] = entry with { LastAccessedAtUtc = nowUtc };
+                result = CompatibleVersionFetchResult.Fresh(entry.Versions);
+                return true;
+            }
+
+            result = default;
+            return false;
+        }
+
+        if (nowUtc - entry.LastRefreshAttemptAtUtc < CompatibleVersionsRefreshRetryDelay)
+        {
+            var touchedEntry = entry with { LastAccessedAtUtc = nowUtc };
+            _compatibleVersionsCache[cacheKey] = touchedEntry;
+            result = entry.RefreshState == CompatibilityRefreshState.Stale
+                ? CompatibleVersionFetchResult.Stale(entry.Versions)
+                : CompatibleVersionFetchResult.Unavailable;
+            return true;
+        }
+
+        result = default;
+        return false;
+    }
+
+    // Must be called with _compatibleVersionsCacheLock held.
+    private void PruneCompatibleVersionsCache(DateTime nowUtc)
+    {
+        foreach (var key in _compatibleVersionsCache.Keys.ToArray())
+        {
+            if (!IsCompatibleVersionsCacheEntryUseful(_compatibleVersionsCache[key], nowUtc))
+            {
+                _compatibleVersionsCache.Remove(key);
+            }
+        }
+
+        while (_compatibleVersionsCache.Count > CompatibleVersionsCacheMaxSize)
+        {
+            var leastRecentlyAccessed = _compatibleVersionsCache.MinBy(pair => pair.Value.LastAccessedAtUtc);
+            _compatibleVersionsCache.Remove(leastRecentlyAccessed.Key);
+        }
+    }
+
+    private static bool IsCompatibleVersionsCacheEntryUseful(CompatibleVersionsCacheEntry entry, DateTime nowUtc)
+    {
+        return entry.RefreshState switch
+        {
+            CompatibilityRefreshState.Fresh => nowUtc - entry.LastSuccessfulFetchAtUtc < CompatibleVersionsCacheTtl,
+            CompatibilityRefreshState.Stale => HasSuccessfulCompatibleVersions(entry),
+            CompatibilityRefreshState.Unavailable =>
+                nowUtc - entry.LastRefreshAttemptAtUtc < CompatibleVersionsRefreshRetryDelay,
+            _ => false,
+        };
+    }
+
+    private static bool HasSuccessfulCompatibleVersions(CompatibleVersionsCacheEntry entry) =>
+        entry.RefreshState != CompatibilityRefreshState.Unavailable
+        && entry.LastSuccessfulFetchAtUtc != DateTime.MinValue;
 
     private static InstanceMeta BuildMetaFromResolution(MinecraftInstance instance, ResolutionState resolution) => new(
         CurrentSchemaVersion,
@@ -922,6 +1122,30 @@ public sealed class InstanceModsManager
         && !string.IsNullOrWhiteSpace(meta.ModLoader)
         && !string.IsNullOrWhiteSpace(meta.LaunchVersionId);
 
+    public async Task OnInstanceDeletingAsync(MinecraftInstance instance)
+    {
+        var folderPath = GetInstanceFolder(instance.Folder);
+
+        // Acquire the write lock to block in-flight mod operations,
+        // then delete the folder while holding it.
+        await ExecuteWithInstanceWriteLockAsync(
+            folderPath,
+            _ =>
+            {
+                if (Directory.Exists(folderPath))
+                {
+                    Directory.Delete(folderPath, true);
+                }
+
+                return Task.CompletedTask;
+            },
+            CancellationToken.None);
+
+        // Instance-scoped state cleanup (folder is already gone).
+        InvalidateSnapshot(instance.Id);
+        _instanceStateLocks.TryRemove(folderPath, out _);
+    }
+
     private string GetInstanceFolder(string folderName) => Path.Combine(_instancesRoot, folderName);
 
     private static int GetVersionTypeRank(string versionType) => versionType.ToLowerInvariant() switch
@@ -932,8 +1156,6 @@ public sealed class InstanceModsManager
         _ => 3,
     };
 
-    private static DateTime ParseDate(string raw) =>
-        DateTime.TryParse(raw, out var parsed) ? parsed : DateTime.MinValue;
 
     private static string? GetModrinthLoader(MinecraftInstanceModLoader modLoader) => modLoader switch
     {
@@ -1029,9 +1251,7 @@ public sealed class InstanceModsManager
 
     private static string GetMetaPath(string instanceFolder) => Path.Combine(instanceFolder, MetaFileName);
 
-    private static string GetLatestCompatibleVersionCacheKey(
-        MinecraftInstance instance,
-        string projectId) =>
+    private static string GetCompatibleVersionsCacheKey(MinecraftInstance instance, string projectId) =>
         $"{instance.VersionId}|{instance.ModLoader}|{projectId}";
 
     private AsyncRwLock GetInstanceStateLock(string instanceFolder) =>
@@ -1147,27 +1367,8 @@ public sealed class InstanceModsManager
     }
 
     private void PublishSnapshot(string instanceId, InstanceModsSnapshot snapshot) =>
-        StoreSnapshot(instanceId, snapshot, raiseEvent: true);
+        StoreSnapshot(instanceId, snapshot, true);
 
-    private bool TryGetLatestCompatibleVersionFromCache(
-        string cacheKey,
-        out LatestCompatibleVersionInfo? latestCompatibleVersion)
-    {
-        lock (_latestCompatibleVersionCacheLock)
-        {
-            return _latestCompatibleVersionCache.TryGetValue(cacheKey, out latestCompatibleVersion);
-        }
-    }
-
-    private void StoreLatestCompatibleVersionInCache(
-        string cacheKey,
-        LatestCompatibleVersionInfo? latestCompatibleVersion)
-    {
-        lock (_latestCompatibleVersionCacheLock)
-        {
-            _latestCompatibleVersionCache[cacheKey] = latestCompatibleVersion;
-        }
-    }
 
     private static async Task<bool> IsCurrentFileValidAsync(
         string destinationPath,
@@ -1177,6 +1378,33 @@ public sealed class InstanceModsManager
         var expectedHash = file.Hashes.Sha512 ?? file.Hashes.Sha1;
         return !string.IsNullOrWhiteSpace(expectedHash)
                && await FileDownloader.VerifyFileHashAsync(destinationPath, expectedHash, cancellationToken);
+    }
+
+    // Stores the result of one compatible-version lookup in the private cache.
+    private sealed record CompatibleVersionsCacheEntry(
+        ImmutableArray<CompatibleVersionInfo> Versions,
+        DateTime LastSuccessfulFetchAtUtc,
+        DateTime LastAccessedAtUtc,
+        DateTime LastRefreshAttemptAtUtc,
+        CompatibilityRefreshState RefreshState
+    );
+
+    // Discriminated result returned by GetCompatibleVersionsInternalAsync.
+    private readonly record struct CompatibleVersionFetchResult(
+        ImmutableArray<CompatibleVersionInfo> Versions,
+        CompatibilityRefreshState RefreshState)
+    {
+        public static CompatibleVersionFetchResult Fresh(ImmutableArray<CompatibleVersionInfo> v)
+            => new(v, CompatibilityRefreshState.Fresh);
+
+        public static CompatibleVersionFetchResult Stale(ImmutableArray<CompatibleVersionInfo> v)
+            => new(v, CompatibilityRefreshState.Stale);
+
+        public static readonly CompatibleVersionFetchResult Unavailable
+            = new([], CompatibilityRefreshState.Unavailable);
+
+        public bool IsUnavailable => RefreshState == CompatibilityRefreshState.Unavailable;
+        public bool IsStale => RefreshState == CompatibilityRefreshState.Stale;
     }
 
     private sealed class ResolutionState
@@ -1276,7 +1504,8 @@ public sealed record InstanceModListItem(
     string? RequiredByDisplay,
     bool CanDelete,
     bool HasUpdate,
-    string? LatestVersionNumber
+    string? LatestVersionNumber,
+    string? UpdateStatusText
 )
 {
     public bool CanUpdate => Kind == InstanceModItemKind.Direct;

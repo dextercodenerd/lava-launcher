@@ -5,6 +5,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Threading.Tasks;
 using GenericLauncher.Auth.Json;
+using GenericLauncher.Misc;
 using Microsoft.Extensions.Logging;
 using MicrosoftJsonContext = GenericLauncher.Auth.Json.MicrosoftJsonContext;
 
@@ -12,7 +13,7 @@ namespace GenericLauncher.Auth;
 
 public sealed partial class Authenticator
 {
-    private async Task<string> GetMinecraftTokenAsync(string xstsToken, string userHash)
+    private async Task<(string AccessToken, UtcInstant ExpiresAt)> GetMinecraftTokenAsync(string xstsToken, string userHash)
     {
         var requestBody = new MinecraftAuthRequest($"XBL3.0 x={userHash};{xstsToken}");
         var response = await _httpClient.PostAsJsonAsync(
@@ -32,7 +33,10 @@ public sealed partial class Authenticator
             await response.Content.ReadFromJsonAsync(MicrosoftJsonContext.Default.MinecraftAuthResponse) ??
             throw new InvalidOperationException("Problem parsing Minecraft auth response");
 
-        return responseData.AccessToken ?? throw new InvalidOperationException("Missing Minecraft access token");
+        var accessToken = responseData.AccessToken ??
+                          throw new InvalidOperationException("Missing Minecraft access token");
+
+        return (accessToken, UtcInstant.Now.Add(TimeSpan.FromSeconds(responseData.ExpiresIn)));
     }
 
     private async Task<MinecraftProfile?> GetMinecraftProfileAsync(string minecraftToken)

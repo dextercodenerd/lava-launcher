@@ -27,6 +27,8 @@ public enum MinecraftInstanceState
     Unknown,
     Installing,
     Ready,
+    Deleting,
+    DeleteFailed,
 }
 
 public enum MinecraftInstanceModLoader
@@ -199,6 +201,8 @@ public record MinecraftInstance(
     {
         "INSTALLING" => MinecraftInstanceState.Installing,
         "READY" => MinecraftInstanceState.Ready,
+        "DELETING" => MinecraftInstanceState.Deleting,
+        "DELETE_FAILED" => MinecraftInstanceState.DeleteFailed,
         _ => MinecraftInstanceState.Unknown,
     };
 
@@ -207,6 +211,8 @@ public record MinecraftInstance(
     {
         MinecraftInstanceState.Installing => "INSTALLING",
         MinecraftInstanceState.Ready => "READY",
+        MinecraftInstanceState.Deleting => "DELETING",
+        MinecraftInstanceState.DeleteFailed => "DELETE_FAILED",
         _ => "UNKNOWN",
     };
 

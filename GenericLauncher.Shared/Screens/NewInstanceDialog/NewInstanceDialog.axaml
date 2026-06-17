@@ -140,6 +140,12 @@
                                 Opacity="0.8"
                                 TextWrapping="Wrap"
                                 Text="{Binding ModLoaderVersionStatusText}" />
+                            <TextBlock
+                                FontSize="12"
+                                Opacity="0.8"
+                                TextWrapping="Wrap"
+                                IsVisible="{Binding MinimumVersionMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                Text="{Binding MinimumVersionMessage}" />
                             <Separator Margin="0 16"></Separator>
                             <StackPanel
                                 Orientation="Horizontal"

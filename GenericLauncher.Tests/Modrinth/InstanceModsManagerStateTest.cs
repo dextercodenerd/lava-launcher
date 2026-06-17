@@ -170,6 +170,10 @@ public sealed class InstanceModsManagerStateTest
                         remoteEntered.TrySetResult();
                         await allowRemoteToContinue.Task.WaitAsync(token);
                         return JsonResponse([bravoVersion], ModrinthJsonContext.Default.ModrinthVersionArray);
+                    // GetVersionAsync is now called by the converged install path after
+                    // obtaining the version ID from the compatible-versions cache.
+                    case "/v2/version/bravo-1":
+                        return JsonResponse(bravoVersion, ModrinthJsonContext.Default.ModrinthVersion);
                     case "/v2/project/bravo":
                         return JsonResponse(CreateProject("bravo", "Bravo"), ModrinthJsonContext.Default.ModrinthProject);
                     default:
@@ -320,8 +324,8 @@ public sealed class InstanceModsManagerStateTest
             0,
             0,
             null,
-            "2026-03-24T00:00:00Z",
-            "2026-03-24T00:00:00Z",
+            UtcInstant.Parse("2026-03-24T00:00:00Z"),
+            UtcInstant.Parse("2026-03-24T00:00:00Z"),
             null,
             null,
             null,
@@ -348,7 +352,7 @@ public sealed class InstanceModsManagerStateTest
             versionNumber,
             versionNumber,
             "release",
-            "2026-03-24T00:00:00Z",
+            UtcInstant.Parse("2026-03-24T00:00:00Z"),
             ["fabric"],
             ["1.21.1"],
             dependencies,

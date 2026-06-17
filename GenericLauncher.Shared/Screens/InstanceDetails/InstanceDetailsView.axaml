@@ -37,6 +37,52 @@
                         HorizontalAlignment="Left"
                         IsEnabled="{Binding RunningState, Converter={StaticResource IsStoppedConverter}}"
                         IsVisible="{Binding !IsInstalling}" />
+
+                <!-- Deleting status -->
+                <TextBlock Text="Deleting instance..."
+                           IsVisible="{Binding IsDeleting}"
+                           Margin="0,16,0,0" />
+
+                <!-- Delete failed + retry -->
+                <StackPanel IsVisible="{Binding IsDeleteFailed}"
+                            Spacing="8" Margin="0,16,0,0">
+                    <TextBlock Text="{Binding DeleteErrorMessage}" />
+                    <Button Content="Force Delete"
+                            Command="{Binding RetryForceDeleteCommand}" />
+                </StackPanel>
+
+                <!-- Delete section -->
+                <StackPanel Spacing="8" Margin="0,32,0,0"
+                            IsVisible="{Binding CanDelete}">
+                    <Button Content="Delete Instance"
+                            Command="{Binding ShowDeleteConfirmationCommand}"
+                            IsVisible="{Binding !IsDeleteConfirmationVisible}" />
+                    <StackPanel IsVisible="{Binding IsDeleteConfirmationVisible}"
+                                Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="Are you sure? This will permanently delete this instance and all its files."
+                                   VerticalAlignment="Center" />
+                        <Button Content="Yes, Delete"
+                                Command="{Binding ConfirmDeleteCommand}" />
+                        <Button Content="Cancel"
+                                Command="{Binding CancelDeleteCommand}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Spacing="8" Margin="0,32,0,0"
+                            IsVisible="{Binding CanForceDelete}">
+                    <Button Content="Force Delete"
+                            Command="{Binding ShowForceDeleteConfirmationCommand}"
+                            IsVisible="{Binding !IsDeleteConfirmationVisible}" />
+                    <StackPanel IsVisible="{Binding IsDeleteConfirmationVisible}"
+                                Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="Force delete this instance? This is intended for cleanup of stuck or partially installed instances."
+                                   VerticalAlignment="Center" />
+                        <Button Content="Yes, Force Delete"
+                                Command="{Binding ConfirmForceDeleteCommand}" />
+                        <Button Content="Cancel"
+                                Command="{Binding CancelForceDeleteCommand}" />
+                    </StackPanel>
+                </StackPanel>
             </StackPanel>
 
             <ScrollViewer Margin="16" IsVisible="{Binding IsModsTab}">
@@ -101,14 +147,15 @@
                                                                        FontSize="12"
                                                                        Foreground="{DynamicResource ThemeForegroundBrush}"
                                                                        Opacity="0.72" />
-                                                            <TextBlock Text="{Binding LatestVersionNumber, StringFormat='{}Update available: {0}'}"
-                                                                       IsVisible="{Binding HasUpdate}"
+                                                            <TextBlock Text="{Binding UpdateStatusText}"
+                                                                       IsVisible="{Binding UpdateStatusText, Converter={x:Static ObjectConverters.IsNotNull}}"
                                                                        FontSize="12"
-                                                                       Foreground="{DynamicResource ThemeAccentBrush}" />
+                                                                       Foreground="{DynamicResource ThemeForegroundBrush}"
+                                                                       Opacity="0.72" />
                                                         </StackPanel>
                                                         <StackPanel Grid.Column="1" Spacing="8">
                                                             <Button Content="Update"
-                                                                    IsVisible="{Binding CanUpdate}"
+                                                                    IsVisible="{Binding HasUpdate}"
                                                                     Command="{Binding $parent[ItemsControl].((instanceDetails:InstanceDetailsViewModel)DataContext).UpdateModItemCommand}"
                                                                     CommandParameter="{Binding}" />
                                                             <Button Content="Delete"
