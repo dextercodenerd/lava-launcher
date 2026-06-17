@@ -326,6 +326,56 @@ public sealed class InstanceModsManagerCompatibleVersionsCacheTest
         Assert.Equal("bravo-v1", repeated.Projects["bravo"].LatestVersion?.VersionId);
     }
 
+    [Fact]
+    public async Task GetLatestCompatibleVersionsAsync_StaleSuccessSurvivesUnrelatedCachePrune()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var fixture = await RefreshGateTestSupport.CreateFixtureAsync();
+        var alphaV1 = RefreshGateTestSupport.CreateVersion("alpha-v1", "alpha", "1.0.0", "alpha.jar", [4, 5, 6]);
+        var bravoV1 = RefreshGateTestSupport.CreateVersion("bravo-v1", "bravo", "1.0.0", "bravo.jar", [1, 2, 3]);
+
+        var shouldFailBravo = false;
+        var manager = RefreshGateTestSupport.CreateManager(fixture.RootPath,
+            new RefreshGateTestSupport.RoutingHttpMessageHandler((request, _) =>
+            {
+                return request.RequestUri?.AbsolutePath switch
+                {
+                    "/v2/project/alpha/version" => Task.FromResult(
+                        JsonResponse([alphaV1], ModrinthJsonContext.Default.ModrinthVersionArray)),
+                    "/v2/project/bravo/version" => Task.FromResult(
+                        shouldFailBravo
+                            ? new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+                            : JsonResponse([bravoV1], ModrinthJsonContext.Default.ModrinthVersionArray)),
+                    _ => throw new InvalidOperationException($"Unexpected: {request.RequestUri}"),
+                };
+            }));
+
+        await manager.GetLatestCompatibleVersionsAsync(fixture.Instance, ["bravo"],
+            cancellationToken: cancellationToken);
+        ExpireCacheEntry(manager, fixture.Instance, "bravo");
+        shouldFailBravo = true;
+
+        var stale = await manager.GetLatestCompatibleVersionsAsync(fixture.Instance, ["bravo"],
+            cancellationToken: cancellationToken);
+        Assert.Equal(CompatibilityRefreshState.Stale, stale.Projects["bravo"].RefreshState);
+        Assert.Equal("bravo-v1", stale.Projects["bravo"].LatestVersion?.VersionId);
+
+        BackdateCacheEntry(
+            manager,
+            fixture.Instance,
+            "bravo",
+            DateTime.UtcNow - TimeSpan.FromHours(1),
+            DateTime.UtcNow - TimeSpan.FromMinutes(2));
+
+        await manager.GetLatestCompatibleVersionsAsync(fixture.Instance, ["alpha"],
+            cancellationToken: cancellationToken);
+
+        var stillStale = await manager.GetLatestCompatibleVersionsAsync(fixture.Instance, ["bravo"],
+            cancellationToken: cancellationToken);
+        Assert.Equal(CompatibilityRefreshState.Stale, stillStale.Projects["bravo"].RefreshState);
+        Assert.Equal("bravo-v1", stillStale.Projects["bravo"].LatestVersion?.VersionId);
+    }
+
     // 7. Install convergence: UpdateModAsync uses shared cache path
 
     [Fact]
@@ -417,6 +467,43 @@ public sealed class InstanceModsManagerCompatibleVersionsCacheTest
             expiredAt,
             expiredAt,
             entryType.GetProperty("LastRefreshAttemptAtUtc", BindingFlags.Public | BindingFlags.Instance)!.GetValue(entry),
+            entryType.GetProperty("RefreshState", BindingFlags.Public | BindingFlags.Instance)!.GetValue(entry))!;
+        cache.GetType()
+            .GetProperty("Item")!
+            .SetValue(cache, updatedEntry, [cacheKey]);
+    }
+
+    private static void BackdateCacheEntry(
+        InstanceModsManager manager,
+        MinecraftInstance instance,
+        string projectId,
+        DateTime lastSuccessfulFetchAtUtc,
+        DateTime lastRefreshAttemptAtUtc)
+    {
+        var cacheKey = (string)typeof(InstanceModsManager)
+            .GetMethod("GetCompatibleVersionsCacheKey",
+                BindingFlags.NonPublic | BindingFlags.Static)!
+            .Invoke(null, [instance, projectId])!;
+
+        var cacheField = typeof(InstanceModsManager)
+            .GetField("_compatibleVersionsCache", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var cache = cacheField.GetValue(manager)!;
+
+        var tryGetValueMethod = cache.GetType().GetMethod("TryGetValue")!;
+        var args = new object?[] { cacheKey, null };
+        if (!(bool)tryGetValueMethod.Invoke(cache, args)!)
+        {
+            return;
+        }
+
+        var entry = args[1]!;
+        var entryType = entry.GetType();
+        var updatedEntry = Activator.CreateInstance(
+            entryType,
+            entryType.GetProperty("Versions", BindingFlags.Public | BindingFlags.Instance)!.GetValue(entry),
+            lastSuccessfulFetchAtUtc,
+            lastRefreshAttemptAtUtc,
+            lastRefreshAttemptAtUtc,
             entryType.GetProperty("RefreshState", BindingFlags.Public | BindingFlags.Instance)!.GetValue(entry))!;
         cache.GetType()
             .GetProperty("Item")!

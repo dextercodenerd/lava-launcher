@@ -1079,7 +1079,8 @@ public sealed class InstanceModsManager
         return entry.RefreshState switch
         {
             CompatibilityRefreshState.Fresh => nowUtc - entry.LastSuccessfulFetchAtUtc < CompatibleVersionsCacheTtl,
-            CompatibilityRefreshState.Stale or CompatibilityRefreshState.Unavailable =>
+            CompatibilityRefreshState.Stale => HasSuccessfulCompatibleVersions(entry),
+            CompatibilityRefreshState.Unavailable =>
                 nowUtc - entry.LastRefreshAttemptAtUtc < CompatibleVersionsRefreshRetryDelay,
             _ => false,
         };

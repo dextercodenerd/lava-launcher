@@ -364,6 +364,49 @@ public sealed class ModrinthProjectDetailsRefreshGateTest
     }
 
     [Fact]
+    public async Task RefreshTargetLatestCompatibleVersionAsync_UnavailableResultDisablesInstallAction()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var fixture = await RefreshGateTestSupport.CreateFixtureAsync();
+        var requestCount = 0;
+
+        using var handler = new RefreshGateTestSupport.RoutingHttpMessageHandler((request, _) =>
+        {
+            if (request.RequestUri?.AbsolutePath != "/v2/project/alpha/version")
+            {
+                throw new InvalidOperationException($"Unexpected request: {request.RequestUri}");
+            }
+
+            Interlocked.Increment(ref requestCount);
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+        });
+        var manager = RefreshGateTestSupport.CreateManager(fixture.RootPath, handler);
+        var viewModel = new ModrinthProjectDetailsViewModel(
+            RefreshGateTestSupport.CreateSearchResult("alpha", "Alpha"),
+            null,
+            manager,
+            ModrinthSearchContext.CreateForInstance(fixture.Instance));
+
+        await RefreshGateTestSupport.WaitUntilAsync(
+            () => viewModel.TargetStateText == "Compatibility status unavailable.",
+            cancellationToken);
+
+        Assert.Equal("Compatibility status unavailable.", viewModel.TargetStateText);
+        Assert.True(viewModel.ShowInstallAction);
+        Assert.False(viewModel.CanRunInstallAction);
+        Assert.Equal(
+            "Compatibility status unavailable. Refresh and try again.",
+            viewModel.InstallActionDisabledReason);
+        Assert.True(viewModel.HasInstallActionDisabledReason);
+        Assert.False(viewModel.ShowUpdateAction);
+
+        await RefreshGateTestSupport.InvokeNonPublicTaskAsync(viewModel, "InstallAsync");
+
+        Assert.Equal(1, requestCount);
+        Assert.Equal("", viewModel.InstallMessage);
+    }
+
+    [Fact]
     public async Task RefreshTargetLatestCompatibleVersionAsync_StaleResultMentionsCachedData()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

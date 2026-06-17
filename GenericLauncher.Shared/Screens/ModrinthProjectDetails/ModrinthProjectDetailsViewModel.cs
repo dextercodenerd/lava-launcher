@@ -16,6 +16,9 @@ namespace GenericLauncher.Screens.ModrinthProjectDetails;
 
 public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewModel, IDisposable
 {
+    private const string UnavailableInstallActionDisabledReason =
+        "Compatibility status unavailable. Refresh and try again.";
+
     private readonly ModrinthApiClient? _apiClient;
     private readonly InstanceModsManager? _instanceModsManager;
     private readonly string _projectId;
@@ -35,15 +38,34 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
 
     public ModrinthInstallTargetPickerViewModel InstallTargetPicker { get; } = new();
     public bool CanInstall => string.Equals(Project?.ProjectType, "mod", StringComparison.OrdinalIgnoreCase);
-    public bool ShowInstallAction => CanInstall && (_searchContext.TargetInstance is null || TargetProjectState is null);
+
+    public bool ShowInstallAction =>
+        CanInstall && (_searchContext.TargetInstance is null || TargetProjectState is null);
+
+    public bool CanRunInstallAction => ShowInstallAction
+                                       && (_searchContext.TargetInstance is null
+                                           || TargetCompatibilityRefreshState != CompatibilityRefreshState.Unavailable)
+                                       && !IsInstalling;
+
+    public string InstallActionDisabledReason => ShowInstallAction
+                                                 && _searchContext.TargetInstance is not null
+                                                 && TargetCompatibilityRefreshState ==
+                                                 CompatibilityRefreshState.Unavailable
+        ? UnavailableInstallActionDisabledReason
+        : "";
+
+    public bool HasInstallActionDisabledReason => !string.IsNullOrWhiteSpace(InstallActionDisabledReason);
+
     public bool ShowUpdateAction => CanInstall
                                     && _searchContext.TargetInstance is not null
-                                    && TargetProjectState is { InstallKind: InstanceModItemKind.Direct, IsBroken: false }
+                                    && TargetProjectState is
+                                        { InstallKind: InstanceModItemKind.Direct, IsBroken: false }
                                     && TargetLatestCompatibleVersion is not null
                                     && !string.Equals(
                                         TargetLatestCompatibleVersion.VersionId,
                                         TargetProjectState.InstalledVersionId,
                                         StringComparison.Ordinal);
+
     public bool HasTargetStateText => !string.IsNullOrWhiteSpace(TargetStateText);
 
     public string TargetStateText
@@ -96,7 +118,8 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
 
     // Design-time constructor
     public ModrinthProjectDetailsViewModel() : this(
-        new ModrinthSearchResult("", "", "Project Title", "Description", [], "mod", 0, null, "", UtcInstant.UnixEpoch, UtcInstant.UnixEpoch),
+        new ModrinthSearchResult("", "", "Project Title", "Description", [], "mod", 0, null, "", UtcInstant.UnixEpoch,
+            UtcInstant.UnixEpoch),
         null,
         null,
         ModrinthSearchContext.CreateRoot())
@@ -170,7 +193,8 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
 
     private void OnInstanceModsChanged(object? sender, InstanceModsSnapshotChangedEventArgs e)
     {
-        if (_searchContext.TargetInstance is null || !string.Equals(e.InstanceId, _searchContext.TargetInstance.Id, StringComparison.Ordinal))
+        if (_searchContext.TargetInstance is null ||
+            !string.Equals(e.InstanceId, _searchContext.TargetInstance.Id, StringComparison.Ordinal))
         {
             return;
         }
@@ -185,7 +209,8 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
 
             ApplySnapshot(e.Snapshot);
         });
-        _ = RefreshTargetLatestCompatibleVersionAsync(forceRefresh: false, generation);
+
+        _ = RefreshTargetLatestCompatibleVersionAsync(false, generation);
     }
 
     private async Task LoadTargetProjectStateAsync()
@@ -214,7 +239,8 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
 
                 ApplySnapshot(snapshot);
             });
-            await RefreshTargetLatestCompatibleVersionAsync(forceRefresh: false, generation);
+
+            await RefreshTargetLatestCompatibleVersionAsync(false, generation);
         }
         catch (Exception ex)
         {
@@ -323,7 +349,7 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
     [RelayCommand]
     private async Task InstallAsync()
     {
-        if (_instanceModsManager is null || !CanInstall)
+        if (_instanceModsManager is null || !CanInstall || !CanRunInstallAction)
         {
             return;
         }
@@ -412,7 +438,8 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Failed to install project {ProjectId} to {InstanceId}", _projectId, target.Instance.Id);
+            _logger?.LogError(ex, "Failed to install project {ProjectId} to {InstanceId}", _projectId,
+                target.Instance.Id);
             InstallTargetPicker.Message = ex.Message;
         }
         finally
@@ -433,12 +460,23 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(CanInstall));
         OnPropertyChanged(nameof(ShowInstallAction));
+        OnPropertyChanged(nameof(CanRunInstallAction));
+        OnPropertyChanged(nameof(InstallActionDisabledReason));
+        OnPropertyChanged(nameof(HasInstallActionDisabledReason));
         OnPropertyChanged(nameof(ShowUpdateAction));
+    }
+
+    partial void OnIsInstallingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanRunInstallAction));
     }
 
     partial void OnTargetProjectStateChanged(InstanceInstalledProjectState? value)
     {
         OnPropertyChanged(nameof(ShowInstallAction));
+        OnPropertyChanged(nameof(CanRunInstallAction));
+        OnPropertyChanged(nameof(InstallActionDisabledReason));
+        OnPropertyChanged(nameof(HasInstallActionDisabledReason));
         OnPropertyChanged(nameof(ShowUpdateAction));
         OnPropertyChanged(nameof(TargetStateText));
         OnPropertyChanged(nameof(HasTargetStateText));
@@ -453,6 +491,9 @@ public partial class ModrinthProjectDetailsViewModel : ViewModelBase, IPageViewM
 
     partial void OnTargetCompatibilityRefreshStateChanged(CompatibilityRefreshState? value)
     {
+        OnPropertyChanged(nameof(CanRunInstallAction));
+        OnPropertyChanged(nameof(InstallActionDisabledReason));
+        OnPropertyChanged(nameof(HasInstallActionDisabledReason));
         OnPropertyChanged(nameof(TargetStateText));
         OnPropertyChanged(nameof(HasTargetStateText));
     }

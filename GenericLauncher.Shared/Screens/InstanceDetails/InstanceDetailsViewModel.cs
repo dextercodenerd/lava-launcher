@@ -60,7 +60,6 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
     [ObservableProperty] private bool _isModsLoading;
     [ObservableProperty] private string _modsStatusMessage = "";
     [ObservableProperty] private string _modsErrorMessage = "";
-    [ObservableProperty] private bool _modsUpdateCheckFailed;
     [ObservableProperty] private bool _isSearchVisible;
     [ObservableProperty] private ModrinthSearchViewModel? _inlineSearchViewModel;
     [ObservableProperty] private ObservableCollection<InstanceModListItem> _installedMods = [];
@@ -552,7 +551,6 @@ public partial class InstanceDetailsViewModel : ViewModelBase, IPageViewModel, I
     private void ApplyLatestCompatibleVersions(LatestCompatibleVersionsResult result)
     {
         _projectCompatibilityStatuses = result.Projects;
-        ModsUpdateCheckFailed = result.HasRefreshFailure;
         RenderModLists();
     }
 
