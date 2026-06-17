@@ -857,7 +857,7 @@ public class ModLoaderServicesTest
                 }),
         };
 
-        var vm = new NewInstanceDialogViewModel(fakeLauncher, null);
+        var vm = new NewInstanceDialogViewModel(minecraftLauncher: fakeLauncher);
         await DrainUiAsync();
 
         Assert.Equal("60.1.8", vm.SelectedModLoaderVersion?.VersionId);
@@ -880,7 +880,7 @@ public class ModLoaderServicesTest
             LoaderVersions = (_, _) => Task.FromResult(ImmutableList<ModLoaderVersionInfo>.Empty),
         };
 
-        var vm = new NewInstanceDialogViewModel(fakeLauncher, null);
+        var vm = new NewInstanceDialogViewModel(minecraftLauncher: fakeLauncher);
         await DrainUiAsync();
 
         Assert.False(vm.CanInstall);

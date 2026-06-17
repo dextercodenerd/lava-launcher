@@ -89,8 +89,8 @@ public partial class MainWindowViewModel : ViewModelBase
             App.LoggerFactory?.CreateLogger(nameof(ProfileViewModel)));
 
         NewInstanceDialogViewModel = new NewInstanceDialogViewModel(
-            minecraftLauncher,
-            App.LoggerFactory?.CreateLogger(nameof(NewInstanceDialogViewModel)));
+            minecraftLauncher: minecraftLauncher,
+            logger: App.LoggerFactory?.CreateLogger(nameof(NewInstanceDialogViewModel)));
 
         ModrinthSearchViewModel = new ModrinthSearchViewModel(
             modrinthApiClient,

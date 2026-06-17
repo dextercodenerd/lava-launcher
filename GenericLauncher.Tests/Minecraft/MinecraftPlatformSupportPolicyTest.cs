@@ -67,7 +67,9 @@ public class MinecraftPlatformSupportPolicyTest
             },
         };
 
-        var vm = new NewInstanceDialogViewModel(fakeLauncher, null, CreatePlatform("osx", "arm64"));
+        var vm = new NewInstanceDialogViewModel(
+            platform: CreatePlatform("osx", "arm64"),
+            minecraftLauncher: fakeLauncher);
         await DrainUiAsync();
 
         Assert.False(loaderLookupCalled);
